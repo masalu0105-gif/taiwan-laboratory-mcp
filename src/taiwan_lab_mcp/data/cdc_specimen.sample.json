@@ -1,0 +1,61 @@
+[
+  {
+    "disease": "麻疹",
+    "aliases": [
+      "measles",
+      "麻疹病毒"
+    ],
+    "specimens": [],
+    "collection": null,
+    "container": null,
+    "storage_transport": null,
+    "submission_rule": null,
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_specimen.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：cdc_specimen",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_specimen.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "cdc_specimen.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    },
+    "note": "合成示範資料：只演示疾病查詢；採檢與運送欄位尚未匯入官方資料。"
+  },
+  {
+    "disease": "登革熱",
+    "aliases": [
+      "dengue",
+      "dengue fever",
+      "登革病毒"
+    ],
+    "specimens": [],
+    "collection": null,
+    "container": null,
+    "storage_transport": null,
+    "submission_rule": null,
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_specimen.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：cdc_specimen",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_specimen.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "cdc_specimen.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    },
+    "note": "合成示範資料：只演示疾病查詢；採檢與運送欄位尚未匯入官方資料。"
+  }
+]

@@ -1,0 +1,28 @@
+[
+  {
+    "code": "SAMPLE001",
+    "name_zh": "糖化血色素（示範資料）",
+    "name_en": "HbA1c (sample)",
+    "points": null,
+    "effective_from": null,
+    "effective_to": null,
+    "note": "合成示範資料；正式支付點數與規範尚未匯入。",
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/nhi_fee.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：nhi_fee",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/nhi_fee.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "nhi_fee.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    },
+    "unit": "points"
+  }
+]

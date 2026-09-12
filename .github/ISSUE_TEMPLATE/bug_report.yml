@@ -1,0 +1,26 @@
+name: 錯誤或資料問題
+description: 回報工具行為、資料內容或來源問題
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: 請勿貼病人資料、院內機密、帳密或未授權內容。安全漏洞請先閱讀 SECURITY.md。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 發生什麼問題？
+      description: 請寫實際結果、預期結果及重現步驟。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 使用環境
+      description: 作業系統、Python 版本、MCP host、專案版本或 commit。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 資料來源與證據
+      description: 資料問題請附官方網址、版本、頁碼或欄位及 sample_only 狀態；程式問題請附已遮蔽的最小紀錄。

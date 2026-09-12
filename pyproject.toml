@@ -1,0 +1,37 @@
+[project]
+name = "taiwan-laboratory-mcp"
+version = "0.1.1"
+description = "MCP server exposing Taiwan laboratory medicine public data as AI-agent tools."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Masalu Lab"}]
+dependencies = ["mcp>=2.2.0,<3", "pydantic>=2.7,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "build>=1.2,<2", "ruff>=0.16,<0.17"]
+
+[project.urls]
+Repository = "https://github.com/masalu0105-gif/taiwan-laboratory-mcp"
+Issues = "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues"
+
+[project.scripts]
+taiwan-lab-mcp = "taiwan_lab_mcp.server:main"
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/taiwan_lab_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

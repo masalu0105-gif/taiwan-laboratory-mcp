@@ -1,0 +1,26 @@
+[
+  {
+    "name": "示範資料－疾管署認可實驗室",
+    "city": "台北市",
+    "scope": [
+      "麻疹（示範）"
+    ],
+    "status": "sample",
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_labs.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：cdc_labs",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_labs.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "cdc_labs.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    }
+  }
+]

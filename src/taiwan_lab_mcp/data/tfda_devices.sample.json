@@ -1,0 +1,30 @@
+[
+  {
+    "license_no": "SAMPLE-IVD-001",
+    "name_zh": "示範用糖化血色素檢測系統",
+    "name_en": "Sample HbA1c Test System",
+    "manufacturer": "Sample Manufacturer",
+    "applicant": "Sample Taiwan Applicant",
+    "effect": "供示範 search_ivd 與 compare_products 資料結構使用",
+    "status": "sample",
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/tfda_devices.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：tfda_devices",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/tfda_devices.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "tfda_devices.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    },
+    "valid_until": null,
+    "cancelled_at": null,
+    "cancellation_status": null
+  }
+]

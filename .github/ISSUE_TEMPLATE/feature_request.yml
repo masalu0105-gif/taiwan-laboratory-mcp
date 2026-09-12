@@ -1,0 +1,26 @@
+name: 使用需求或教學合作
+description: 提出實際查詢需求、使用回饋或 Workshop 情境
+title: "[需求] "
+body:
+  - type: markdown
+    attributes:
+      value: 此處內容公開。請只提供可公開的情境，不需留下私人電話、email 或院內資料。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 你現在需要完成什麼事？
+      description: 寫一個真實工作情境，以及目前要用哪些步驟查資料。
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: 怎樣才算好用？
+      description: 期待看到的結果；教學合作可描述對象、主題和公開可說明的需求。
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: 可參考的公開來源
+      description: 有官方資料或授權說明時請附連結。沒有也可以先提出情境。
