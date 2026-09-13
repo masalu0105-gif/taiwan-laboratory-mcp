@@ -1,5 +1,7 @@
 # 架構與資料契約
 
+> 本文件描述 v0.1.1 sample-only 現況。P1.1 的目標契約已由 `docs/product-requirements.md`、`docs/software-design.md` 與 `docs/test-driven-development.md` 取代；下列 legacy keys 不得用於 P1.1 public JSON。
+
 目前為以原 V0.1 ZIP 整合的 0.1.1 開發／教學示範版。MCP 與 samples 已實作；正式資料同步與領域內容複核仍待完成。
 
 ## 最小架構
