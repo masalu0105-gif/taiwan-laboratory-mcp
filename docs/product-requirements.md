@@ -68,7 +68,7 @@ P1.1 的核心價值是「縮短找到官方資料並核對原文的時間」。
 
 ### 5.3 Canonical operation matrix
 
-本表是 P1.1 public MCP contract 的封閉 operation registry；公開集合必須與表中 22 個 exact names 完全相等。Machine-readable 真源預定放在 package resource `src/taiwan_lab_mcp/contracts/public-contract-v1.json`，內容同時包含 operation、request／response schemas、source payload／locator schemas、public enum、freshness、TFDA warning 與 safety registries；實作完成前狀態為 `PLANNED`。SDD 可使用不同內部物件，但必須一對一 mapping，TDD 以 package resource 對 MCP `list_tools` 做集合、signature 與 response-schema equality，禁止 repo-relative fallback。
+本表是 P1.1 public MCP contract 的封閉 operation registry；公開集合必須與表中 22 個 exact names 完全相等。Machine-readable 真源目前已建立於 package resource `src/taiwan_lab_mcp/contracts/public-contract-v1.json`，內容同時包含 operation、request／response schemas、source payload／locator schemas、public enum、freshness、TFDA warning 與 safety registries；source／installed-wheel equality verification 已完成。SDD 可使用不同內部物件，但必須一對一 mapping，TDD 以 package resource 對 MCP `list_tools` 做集合、signature 與 response-schema equality，禁止 repo-relative fallback。
 
 共同型別規則：`string` 必須是 trim 後非空字串；nullable string 只接受 `null` 或非空字串；`limit` 是 1–100 的 integer；`offset` 是大於等於 0 的 integer。所有 data query operations 同時存在於 `sample` 與 `official_snapshot` mode；sample 只讀 synthetic fixtures 且固定警示，official 只讀該 source 的 serving build，source unavailable 不影響其他 source。所有可回多筆的 operation 都受 bounded-result contract 約束：有 `limit`／`offset` 參數者依 request；未公開分頁參數者固定 `limit=20, offset=0`。回應一律含 `total_matches`、`returned_count`、`limit`、`offset`、`truncated`，不得無界回傳或靜默截斷；compatibility alias 使用其 canonical operation 的 default page。
 

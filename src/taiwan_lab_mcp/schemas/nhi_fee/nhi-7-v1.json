@@ -1,0 +1,8 @@
+{
+  "schema_version": "nhi-7-v1",
+  "source_id": "nhi_fee",
+  "columns": ["診療項目代碼", "健保支付點數", "生效起日", "生效迄日", "英文項目名稱", "中文項目名稱", "備註"],
+  "encoding": "utf-8-sig",
+  "date_format": "YYYYMMDD",
+  "points": {"type": "non_negative_base10_integer", "zero_is_valid": true}
+}

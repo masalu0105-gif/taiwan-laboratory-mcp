@@ -11,6 +11,15 @@ def norm(text: str | None) -> str:
     return re.sub(r"[\s\-_/、,，()（）]+", "", text)
 
 
+def search_normalize(text: str | None) -> str:
+    """Public search normalization: preserve punctuation, collapse whitespace."""
+
+    if text is None:
+        return ""
+    text = unicodedata.normalize("NFKC", text).casefold().strip()
+    return re.sub(r"\s+", " ", text)
+
+
 def checked_query(query: str) -> str:
     if not isinstance(query, str) or len(query) > 200 or not norm(query):
         raise ValueError("Query must contain searchable text and be at most 200 characters")

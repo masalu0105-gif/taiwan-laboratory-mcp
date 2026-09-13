@@ -1,6 +1,6 @@
 # Taiwan Laboratory MCP P1.1 Software Design Document
 
-文件狀態：**PLANNED**；目前可執行版本仍為 `0.1.1` sample-only，本文所述 official importer、snapshot、publisher、qualification 與 official MCP contract 均尚未實作或驗證
+文件狀態：**Planning complete；第一輪共用信任邊界＋NHI vertical slice 已實作**；目前可執行版本仍為 `0.1.1`，worktree 已包含共用 official snapshot runtime、publisher、NHI importer 與 packaged official MCP contract 的可重跑工程切片，但正式來源 qualification、owner／scope gate、CDC／TFDA importer 與整體 release gates 尚未完成或驗證
 
 設計日期：2026-09-13（Asia/Taipei）
 
@@ -19,7 +19,7 @@
 
 此版本不讀取病人資料、不串接 LIS/HIS、不提供診斷、申報、採購或產品等效建議。LOINC、FHIR、SNOMED、EQA、CAP 繼續維持未啟用介面。文件中的 `MUST` 是發布阻擋條件，`SHOULD` 是預設做法；標為 `OWNER GATE` 或 `UNVERIFIED` 的事項不可由實作者自行假設已核准。
 
-所有未特別標為「現有程式」的元件、schema、路徑、CLI、測試與 gate 都是 **PLANNED**。本文不能作為 official data 已下載、內容已複核、production-ready 或任何來源已可服務的證據。
+除第 3.1 節明確列出的目前 worktree checkpoint 外，未特別標示已確認的元件、schema、路徑、CLI、測試與 gate 仍是 **PLANNED**。本文不能作為 official data 已下載、內容已複核、production-ready 或任何來源已可服務的證據。
 
 ## 2. 設計需求與可追蹤 ID
 
@@ -42,7 +42,7 @@
 
 ### 2.1 SDD verification interfaces
 
-下表是14個SDD ID的一對一 primary verification interface；全部目前都是 **PLANNED**。每個node通過後仍須由acceptance reporter寫`reports/acceptance/<release-id>/<SDD-ID>.json`，包含node ID、exit code、stdout/stderr hash、application build inventory hash與其引用的evidence hashes；不存在的node/report不得標passed。PRD acceptance nodes可補充覆蓋，但不得取代這14個架構契約的primary node。
+下表是14個SDD ID的一對一 primary verification interface；`SDD-ISO-01`、`SDD-PUB-01`、`SDD-FAIL-01`、`SDD-FRESH-01`、`SDD-PROV-01`、`SDD-SEC-01`、`SDD-OBS-01`、`SDD-AUDIT-01`、`SDD-NHI-01`、`SDD-API-01` 的 canonical node 已建立並可執行，其餘仍為 **PLANNED**。每個node通過後仍須由acceptance reporter寫`reports/acceptance/<release-id>/<SDD-ID>.json`，包含node ID、exit code、stdout/stderr hash、application build inventory hash與其引用的evidence hashes；不存在的node/report不得標passed。PRD acceptance nodes可補充覆蓋，但不得取代這14個架構契約的primary node。
 
 | SDD ID | Canonical planned verification node | 必要證據／gate |
 | --- | --- | --- |
@@ -65,13 +65,15 @@
 
 ### 3.1 現有程式
 
+以下四點是文件撰寫時的 v0.1.1 sample-only baseline，不代表目前 worktree：
+
 - `src/taiwan_lab_mcp/server.py` 在 import 時建立 CDC、NHI、TFDA adapter，提供 18 個 MCP tools。
 - `src/taiwan_lab_mcp/adapters/base.py` 只接受 `TAIWAN_LAB_DATA_MODE=sample`，由 package resources 載入四份合成 JSON。
 - `src/taiwan_lab_mcp/models.py` 的 `ToolResult.data_mode` 與 `sample_only` 目前分別固定為 `sample` 與 `true`。
 - `DataRecord` 已驗證 official record 必須有 retrieval、license 與非 synthetic provenance，這個安全邊界應保留。
 - 現有測試已鎖定 sample warning、Unicode 查詢、角色不混淆、無結果語意、stdio transport 與禁止未實作 mode 靜默降級。
 
-目前唯一可驗證狀態是 sample-only baseline。`src/` 與已建 wheel 尚未包含本文規劃的 official importers、data CLI、manifest/current descriptor、SQLite store、package rule/schema/review/qualifier resources或 official stdio 路徑；因此四個 official source 現階段全部是 **PLANNED / data_unavailable**，所有 source review、release gate、official golden、pilot 與 production qualification 都是未完成。
+文件撰寫時唯一可驗證狀態是 sample-only baseline。現在 worktree 已包含第一輪共用 official_snapshot runtime、data CLI、manifest/current descriptor、SQLite store、package contract／rule／schema resources、NHI importer 與 official-mode stdio path；NHI 目前可由 synthetic／offline snapshot 驗證，但正式 source review、scope／owner gate、official golden、pilot 與 production qualification 仍未完成。TFDA、CDC PDF／ODS 仍維持 **PLANNED / data_unavailable**，不可把第一輪 NHI evidence 擴張成四個來源已完成。
 
 ### 3.2 已確認的上游限制
 
@@ -696,7 +698,7 @@ SQLite 每個方法子列各存一筆。證號只作 group key，不把約 3,584
 
 ### 11.1 Public contract 引用與 internal mapping（`SDD-API-01`）
 
-Public MCP contract 不在 SDD 重複定義。唯一人類可讀真源是PRD §5.3完整22-operation registry、§6.3.1 TFDA truth table、§7.1 enum、§7.2 allowed-combination/provenance、§7.3 status/freshness與§7.4 exact safety-field registry；唯一machine-readable真源是 **PLANNED** package resource `src/taiwan_lab_mcp/contracts/public-contract-v1.json`。實作必須以 `importlib.resources` 讀取該resource，MCP `list_tools`與response model都由其驗證；不得由本節、adapter常數或repo-relative JSON另生第二份public contract。
+Public MCP contract 不在 SDD 重複定義。唯一人類可讀真源是PRD §5.3完整22-operation registry、§6.3.1 TFDA truth table、§7.1 enum、§7.2 allowed-combination/provenance、§7.3 status/freshness與§7.4 exact safety-field registry；目前唯一machine-readable真源是已建立的 package resource `src/taiwan_lab_mcp/contracts/public-contract-v1.json`。實作必須以 `importlib.resources` 讀取該resource，MCP `list_tools`與response model都由其驗證；不得由本節、adapter常數或repo-relative JSON另生第二份public contract。acceptance reporter 已建立，部分 canonical verification node 已執行，其餘 node 與正式 release evidence 仍待拆分／驗證。
 
 Internal pipeline可使用較細狀態，但對PRD欄位的deterministic mapping固定為：
 
@@ -728,23 +730,20 @@ Contract verifier比較resource與MCP discovery的operation集合、classificati
 
 ## 12. CLI 設計
 
-**PLANNED：** 新增 console script `taiwan-lab-data = taiwan_lab_mcp.data_cli:main`，以 standard library `argparse` 實作：
+目前已建立 console script `taiwan-lab-data = taiwan_lab_mcp.data_cli:main`，以 standard library `argparse` 實作以下 executable slice：
 
 ```powershell
-taiwan-lab-data sync nhi_fee --data-dir <path>
-taiwan-lab-data sync tfda_devices --data-dir <path>
-taiwan-lab-data sync cdc_specimen_manual --data-dir <path>
-taiwan-lab-data sync cdc_authorized_labs --data-dir <path>
-taiwan-lab-data validate <source-id> <build-attempt-id> --data-dir <path>
-taiwan-lab-data qualify cdc_specimen_manual --raw-revision-id <id> --extractor liteparse --extractor-version 2.0.0 --no-ocr --data-dir <path> --json
-taiwan-lab-data review <source-id> <curated-build-id> --review-file <path> --data-dir <path>
-taiwan-lab-data publish <source-id> <curated-build-id> --expected-generation <n> --expected-parent-snapshot <id-or-none> --actor <id> --data-dir <path>
+taiwan-lab-data sync nhi_fee --input <csv> --data-dir <path>
+taiwan-lab-data sync nhi_fee --publisher-oid <oid> --data-dir <path>
+taiwan-lab-data validate nhi_fee --input <csv> --json
 taiwan-lab-data rollback <source-id> <target-curated-build-id> --expected-generation <n> --reason <text> --actor <id> --data-dir <path>
 taiwan-lab-data recover-current <source-id> --publish-event <id> --actor <id> --data-dir <path>
 taiwan-lab-data status --data-dir <path> --json
 ```
 
 `sync`執行discover到validate；P1.1不提供隱式auto-publish。`review`驗`ReviewRecordV1`、subject/evidence hashes，不能從互動文字捏造reviewer。`publish`重跑全部preconditions、取得lock、CAS並readback；`rollback`與`recover-current`不能由一般publish參數觸發。
+
+`qualify`、`review`、`publish` 與 TFDA／CDC／ODS subcommands 仍是 planned，尚未宣稱可執行。
 
 Exit code：0 成功；2 使用/config；3 discovery/fetch；4 parse/validation；5 review gate；6 publish/integrity。Stdout 在 `--json` 時只輸出單一 JSON document，human log 寫 stderr，避免破壞自動化。
 

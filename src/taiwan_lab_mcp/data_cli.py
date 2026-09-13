@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from .models import DataStatusResult
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="taiwan-lab-data")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    status_parser = subparsers.add_parser("status")
+    status_parser.add_argument("--data-dir", type=Path)
+    status_parser.add_argument("--json", action="store_true")
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("source_id", choices=["nhi_fee"])
+    validate_parser.add_argument("--input", required=True, type=Path)
+    validate_parser.add_argument("--json", action="store_true")
+    sync_parser = subparsers.add_parser("sync")
+    sync_parser.add_argument("source_id", choices=["nhi_fee"])
+    sync_parser.add_argument("--input", type=Path)
+    sync_parser.add_argument(
+        "--publisher-oid",
+        help="Explicitly enable upstream NHI discovery/fetch; never implied by the default.",
+    )
+    sync_parser.add_argument("--metadata-url")
+    sync_parser.add_argument("--data-dir", required=True, type=Path)
+    sync_parser.add_argument(
+        "--fail-stage",
+        choices=["discover", "fetch", "parse", "normalize", "validate"],
+    )
+    sync_parser.add_argument("--json", action="store_true")
+    rollback_parser = subparsers.add_parser("rollback")
+    rollback_parser.add_argument("source_id", choices=["nhi_fee"])
+    rollback_parser.add_argument("target_curated_build_id")
+    rollback_parser.add_argument("--expected-generation", required=True, type=int)
+    rollback_parser.add_argument("--reason", required=True)
+    rollback_parser.add_argument("--actor", required=True)
+    rollback_parser.add_argument("--data-dir", required=True, type=Path)
+    rollback_parser.add_argument("--json", action="store_true")
+    recovery_parser = subparsers.add_parser("recover-current")
+    recovery_parser.add_argument("source_id", choices=["nhi_fee"])
+    recovery_parser.add_argument("--publish-event", required=True)
+    recovery_parser.add_argument("--actor", required=True)
+    recovery_parser.add_argument("--data-dir", required=True, type=Path)
+    recovery_parser.add_argument("--json", action="store_true")
+    args = parser.parse_args(argv)
+    if args.command == "status":
+        if args.data_dir is not None:
+            # The CLI status command is read-only; callers choose the process mode.
+            import os
+
+            os.environ["TAIWAN_LAB_DATA_DIR"] = str(args.data_dir)
+            os.environ["TAIWAN_LAB_DATA_MODE"] = "official_snapshot"
+        from .server import get_data_status
+
+        result: DataStatusResult = get_data_status()
+        print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")))
+        return 0
+    if args.command == "sync":
+        if args.publisher_oid is not None:
+            if args.input is not None:
+                parser.error("sync --input and --publisher-oid are mutually exclusive")
+            if args.fail_stage is not None:
+                parser.error("sync --fail-stage is only available with --input")
+            from .sync import run_nhi_upstream_sync
+
+            report = run_nhi_upstream_sync(
+                args.data_dir,
+                expected_publisher_oid=args.publisher_oid,
+                metadata_url=args.metadata_url,
+            )
+        else:
+            if args.metadata_url is not None:
+                parser.error("sync --metadata-url requires --publisher-oid")
+            from .sync import run_nhi_sync
+
+            initial_error = None
+            payload = None
+            if args.input is not None:
+                try:
+                    payload = args.input.read_bytes()
+                except OSError:
+                    initial_error = "FETCH_INPUT_UNAVAILABLE"
+            report = run_nhi_sync(
+                payload,
+                args.data_dir,
+                fail_stage=args.fail_stage,
+                initial_error=initial_error,
+            )
+        print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+        if report["status"] == "passed":
+            return 0
+        if report["stage"] in {"discover", "fetch"}:
+            return 3
+        return 4
+    if args.command == "validate":
+        from .importers.nhi import NHIImportError, parse_nhi_csv
+
+        try:
+            payload = args.input.read_bytes()
+        except OSError:
+            print(
+                json.dumps(
+                    {
+                        "source_id": args.source_id,
+                        "validation_status": "failed",
+                        "error_code": "INPUT_UNAVAILABLE",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 4
+        try:
+            parsed = parse_nhi_csv(payload)
+        except NHIImportError as exc:
+            print(
+                json.dumps(
+                    {
+                        "source_id": args.source_id,
+                        "validation_status": "failed",
+                        "error_code": exc.code,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 4
+        print(
+            json.dumps(
+                {
+                    "source_id": args.source_id,
+                    "validation_status": "passed",
+                    "rows": len(parsed.rows),
+                    "warnings": list(parsed.warnings),
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        return 0
+    if args.command in {"rollback", "recover-current"}:
+        from .publish import PublishError, recover_current, rollback_current_descriptor
+
+        try:
+            if args.command == "rollback":
+                event = rollback_current_descriptor(
+                    args.data_dir,
+                    args.source_id,
+                    args.target_curated_build_id,
+                    expected_generation=args.expected_generation,
+                    reason=args.reason,
+                    actor=args.actor,
+                )
+            else:
+                event = recover_current(
+                    args.data_dir,
+                    args.source_id,
+                    args.publish_event,
+                    actor=args.actor,
+                )
+        except PublishError as exc:
+            print(
+                json.dumps(
+                    {
+                        "operation": args.command,
+                        "status": "failed",
+                        "error_code": exc.code,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 6
+        print(
+            json.dumps(
+                {
+                    "operation": args.command,
+                    "status": "success",
+                    "event_id": event["event_id"],
+                    "generation": event["generation"],
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
+        return 0
+    parser.error("unsupported command")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

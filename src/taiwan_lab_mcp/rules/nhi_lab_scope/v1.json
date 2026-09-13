@@ -1,0 +1,7 @@
+{
+  "rule_version": "nhi-lab-scope-v1",
+  "source_id": "nhi_fee",
+  "status": "review_incomplete",
+  "entries": [],
+  "note": "No laboratory allowlist is approved in P1.1. Full-table search remains available."
+}

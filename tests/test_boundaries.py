@@ -24,8 +24,8 @@ from taiwan_lab_mcp.models import DataRecord
     ],
 )
 def test_empty_or_oversized_queries_are_rejected(adapter, method, query):
-    with pytest.raises(ValueError):
-        getattr(adapter(), method)(query)
+    result = getattr(adapter(), method)(query)
+    assert result.result_status == "invalid_request"
 
 
 @pytest.mark.parametrize(
@@ -39,12 +39,17 @@ def test_empty_or_oversized_queries_are_rejected(adapter, method, query):
 )
 def test_no_match_retains_sample_warning(adapter, method):
     result = getattr(adapter(), method)("SAMPLE-NO-MATCH-123").model_dump(mode="json")
-    assert result["count"] == 0
-    assert result["status"] == "not_found"
+    assert result["returned_count"] == 0
+    assert result["result_status"] == "not_found"
     assert result["sample_only"] is True
     assert result["data_mode"] == "sample"
     assert "sample_only" in result["notes"][0]
-    assert result["provenance"][0]["method"] == "synthetic"
+    assert result["provenance"]["source_id"] in {
+        "cdc_manual",
+        "cdc_recognized_labs",
+        "nhi_fee",
+        "tfda_device",
+    }
 
 
 def test_filters_preserve_roles_and_normalize_unicode():
@@ -55,28 +60,27 @@ def test_filters_preserve_roles_and_normalize_unicode():
     tfda = TFDAAdapter()
     assert tfda.find_manufacturer("Sample Manufacturer").count == 1
     assert tfda.find_manufacturer("Sample Taiwan Applicant").count == 0
-    assert NHIAdapter().get_points("sample001").items[0]["points"] is None
+    assert NHIAdapter().get_points("sample001").items[0].record.points is None
 
 
-@pytest.mark.parametrize("limit", [0, -1, 51, True, 1.5])
+@pytest.mark.parametrize("limit", [0, -1, 101, True, 1.5])
 def test_compare_rejects_invalid_limits(limit):
-    with pytest.raises(ValueError):
-        TFDAAdapter().compare_products("HbA1c", limit)
+    assert TFDAAdapter().compare_products("HbA1c", limit).result_status == "invalid_request"
 
 
 def test_compare_count_and_provenance_survive_truncation():
     tfda = TFDAAdapter()
     tfda.devices.append(copy.deepcopy(tfda.devices[0]))
-    result = tfda.compare_products("HbA1c", 1).model_dump(mode="json")
-    assert result["count"] == len(result["items"]) == 1
-    assert result["items"][0]["provenance"]["version"] == "sample-v0.1"
-    assert "1 / 2" in result["notes"][-1]
+    result = tfda.list_matching_license_records("HbA1c", 1).model_dump(mode="json")
+    assert result["returned_count"] == len(result["items"]) == 1
+    assert result["provenance"]["parser_version"] == "sample-fixture-v1"
+    assert result["truncated"] is True
 
 
 @pytest.mark.parametrize("mode", ["official", "live", "", "sampl"])
 def test_unimplemented_modes_cannot_fall_back_to_samples(monkeypatch, mode):
     monkeypatch.setenv("TAIWAN_LAB_DATA_MODE", mode)
-    with pytest.raises(ValueError, match="Only sample mode"):
+    with pytest.raises(ValueError, match="must be sample or official_snapshot"):
         CDCAdapter()
 
 
@@ -181,7 +185,7 @@ def test_official_record_cannot_enter_bundled_sample_loader(tmp_path, monkeypatc
 
 
 def test_no_catalog_files_and_eqa_has_no_active_provider():
-    assert eqa_status()["catalog_access_enabled"] is False
+    assert eqa_status().configured is False
     assert not any(
         "cap" in p.name.lower() for p in files("taiwan_lab_mcp").joinpath("data").iterdir()
     )

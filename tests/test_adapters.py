@@ -7,9 +7,9 @@ from taiwan_lab_mcp.adapters.tfda import TFDAAdapter
 def test_cdc_measles_alias():
     r = CDCAdapter().search_disease("measles")
     assert r.count == 1
-    assert r.items[0]["disease"] == "麻疹"
-    assert r.provenance[0].version == "sample-v0.1"
-    assert r.items[0]["sample_only"] is True
+    assert r.items[0].record.disease == "麻疹"
+    assert r.provenance.parser_version == "sample-fixture-v1"
+    assert r.sample_only is True
 
 
 def test_tfda_sample_search():
@@ -24,4 +24,4 @@ def test_nhi_sample_search():
 
 def test_standard_adapters_are_reserved():
     s = standards_status()
-    assert "reserved" in s["loinc"]
+    assert "LOINC" in s.capabilities

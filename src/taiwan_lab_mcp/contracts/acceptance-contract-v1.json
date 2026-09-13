@@ -1,0 +1,100 @@
+{
+  "acceptance_contract_version": "acceptance-contract-v1",
+  "nodes": [
+    {
+      "requirement_id": "SDD-ISO-01",
+      "node_id": "tests/test_mcp_stdio.py::test_sdd_iso_01_official_never_falls_back_to_sample",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-PUB-01",
+      "node_id": "tests/test_snapshot_publish.py::test_sdd_pub_01_availability_descriptor_is_atomic_under_concurrency",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-FAIL-01",
+      "node_id": "tests/test_freshness.py::test_sdd_fail_01_operational_integrity_is_data_unavailable",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-PROV-01",
+      "node_id": "tests/test_models.py::test_sdd_prov_01_every_item_and_child_has_typed_row_evidence",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-FRESH-01",
+      "node_id": "tests/test_freshness.py::test_sdd_fresh_01_internal_states_map_to_prd_freshness",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-NHI-01",
+      "node_id": "tests/test_nhi_importer.py::test_sdd_nhi_01_contract_bundle",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-TFDA-01",
+      "node_id": "tests/test_tfda_importer.py::test_sdd_tfda_01_contract_bundle",
+      "implementation_status": "planned"
+    },
+    {
+      "requirement_id": "SDD-CDC-01",
+      "node_id": "tests/test_cdc_pdf_importer.py::test_sdd_cdc_01_contract_bundle",
+      "implementation_status": "planned"
+    },
+    {
+      "requirement_id": "SDD-ODS-01",
+      "node_id": "tests/test_cdc_ods_importer.py::test_sdd_ods_01_contract_bundle",
+      "implementation_status": "planned"
+    },
+    {
+      "requirement_id": "SDD-SEC-01",
+      "node_id": "tests/test_security_boundaries.py::test_sdd_sec_01_trust_boundary_matrix",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-OBS-01",
+      "node_id": "tests/test_models.py::test_sdd_obs_01_status_and_logs_exclude_query_content",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-AUDIT-01",
+      "node_id": "tests/test_snapshot_publish.py::test_sdd_audit_01_subject_digest_binds_all_evidence",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-API-01",
+      "node_id": "tests/test_mcp_stdio.py::test_sdd_api_01_public_contract_resource_matches_discovery",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "SDD-QUAL-01",
+      "node_id": "tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution",
+      "implementation_status": "planned"
+    },
+    {
+      "requirement_id": "NHI-01",
+      "node_id": "tests/test_nhi_importer.py::test_nhi_01_exact_code_preserves_raw_fields_and_locator",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "NHI-02",
+      "node_id": "tests/test_official_adapters.py::test_nhi_02_name_and_reviewed_alias_search_returns_scoped_candidates",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "NHI-03",
+      "node_id": "tests/test_nhi_importer.py::test_nhi_03_zero_points_and_full_note_are_preserved",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "NHI-04",
+      "node_id": "tests/test_mcp_stdio.py::test_nhi_04_as_of_is_explicitly_unsupported_in_p1_1",
+      "implementation_status": "executable"
+    },
+    {
+      "requirement_id": "NHI-05",
+      "node_id": "tests/test_nhi_importer.py::test_nhi_05_sentinel_stays_raw_inference_and_not_permanent",
+      "implementation_status": "executable"
+    }
+  ]
+}

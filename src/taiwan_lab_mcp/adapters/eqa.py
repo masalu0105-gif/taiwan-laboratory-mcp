@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..models import DataRecord
+from ..models import DataRecord, ReservedStatusResult
 
 
 class EQAAdapter(Protocol):
@@ -11,9 +11,10 @@ class EQAAdapter(Protocol):
     def search_programs(self, analyte: str, year: int) -> list[DataRecord]: ...
 
 
-def eqa_status() -> dict:
-    return {
-        "status": "not_configured",
-        "catalog_access_enabled": False,
-        "note": "EQA/CAP adapter reserved; catalog retrieval requires confirmed provider permission.",
-    }
+def eqa_status() -> ReservedStatusResult:
+    return ReservedStatusResult(
+        operation="eqa_status",
+        capabilities=["EQA", "CAP"],
+        warnings=["reserved_capability_unconfigured"],
+        notes=["EQA/CAP 僅保留介面，未設定資料或授權；不提供 catalog。"],
+    )

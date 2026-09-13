@@ -2,7 +2,7 @@
 
 文件狀態：Round 2 revised draft；official publish 仍受 `REL-G1`～`REL-G5` 約束
 
-核對日期：2026-09-13（Asia/Taipei）
+核對日期：2026-09-14（Asia/Taipei）
 
 適用範圍：三個領域、四個資料集／查詢任務（NHI、TFDA、CDC PDF、CDC ODS）、共用 snapshot 與 MCP stdio
 
@@ -20,7 +20,7 @@ P1.1 的五項測試承諾如下：
 
 ## 2. 現況基線與刻意不測的範圍
 
-目前 `src/taiwan_lab_mcp` 只實作 sample mode；`ToolResult.data_mode` 與 `sample_only` 仍是固定值。現有測試已涵蓋 sample 查詢、輸入界線、provenance 基本契約、未實作模式不得退回 sample，以及真實 subprocess 的 MCP stdio discovery。這些測試的安全意圖保留為回歸基線，但因 22-operation registry、closed schema、deprecated compare 與 status enum 改版，衝突 assertion 必須明示 migration，不能宣稱 53 個舊 assertion 原封不動也是新契約測試。現有 `53 passed` 只代表 v0.1.1 sample baseline，不是 P1.1 contract 或 official mode 證據。
+文件撰寫時的 `src/taiwan_lab_mcp` 只實作 sample mode；那段 `53 passed` 是 v0.1.1 baseline。現在 worktree 已完成第一輪雙模式共用層與 NHI vertical slice，canonical NHI／MCP boundary tests 與 migrated baseline 共同回歸；最新完整 suite 為 155 passed。這不代表 canonical matrix 的所有 planned nodes、正式 source qualification 或整體 P1.1 release gates 已關閉。
 
 本階段不測病人資料、LIS／HIS、申報送出、診斷建議、採購建議、LOINC／FHIR／SNOMED 實作或 EQA／CAP catalog。也不為單純 getter、薄 wrapper、常數或標準函式庫已保證的行為逐一寫測試；只有當它們承載資料信任邊界或曾發生回歸，才補案例。
 
@@ -57,6 +57,8 @@ Official suite 最多證明「適合本機離線公開資料查詢」，不構�
 
 以下 node IDs 是 P1.1 的 canonical planned layout。尚未建立的檔案標為 **PLANNED**，必須在對應 Red 切片先建立後才可執行；不能把不存在的 node 或 `53 deselected` 當通過。每次跑完由 acceptance reporter 寫入 `reports/acceptance/<release-id>/<PRD-ID>.json`，包含 node ID、exit code、測試輸出 hash、golden qualification hash 與 source review evidence hash。
 
+目前已將第一輪可執行 slice 拆到 `tests/test_nhi_importer.py`、`tests/test_official_adapters.py`、`tests/test_mcp_stdio.py`、`tests/test_snapshot_publish.py`、`tests/test_freshness.py`、`tests/test_security_boundaries.py` 與 `tests/test_models.py`；其中 `SDD-API-01`、`SDD-ISO-01`、`SDD-PUB-01`、`SDD-FAIL-01`、`SDD-FRESH-01`、`SDD-PROV-01`、`SDD-SEC-01`、`SDD-OBS-01`、`SDD-AUDIT-01`、`SDD-NHI-01` 與 `NHI-01..05` 已登錄為 executable，其餘 canonical node 仍為 PLANNED。Acceptance registry 與 reporter 只承認實際登錄且可執行的 node，不把相近測試名稱或集中式 suite 映射成已關閉的 canonical node。
+
 | PRD ID | SDD | Canonical pytest node ID | 必要證據／gate |
 | --- | --- | --- | --- |
 | `CDC-01` | `SDD-CDC-01` | `tests/test_cdc_pdf_importer.py::test_cdc_01_methods_and_specimens_do_not_cross_join` | `CDC-G-001..010`；`CDC-R1-LAYOUT`、`CDC-R1-CONTENT` |
@@ -87,7 +89,7 @@ Official suite 最多證明「適合本機離線公開資料查詢」，不構�
 
 ### 5.1 SDD verification matrix（14／14）
 
-下列同樣是 canonical **PLANNED** nodes；每個 SDD ID 只能由表內 node 與 evidence 關閉，不能因相關章節已寫完就視為通過。
+下列是 14 個 SDD ID 的 canonical verification interfaces；目前已執行的 node 由 acceptance registry 標為 executable，其餘仍為 **PLANNED**。每個 SDD ID 只能由表內 node 與 evidence 關閉，不能因相關章節已寫完就視為通過。
 
 | SDD ID | Canonical verification node／command | 必要 evidence／gate |
 | --- | --- | --- |
@@ -455,7 +457,7 @@ test_cdc_same_disease_methods_do_not_cross_join_specimens
 test_publish_validation_failure_keeps_current_manifest_unchanged
 ```
 
-目前 tree 可執行的 baseline 命令只有：
+目前 tree 可執行的回歸命令為：
 
 ```powershell
 $env:PYTHONIOENCODING = 'utf-8'
@@ -465,20 +467,18 @@ $env:PYTHONIOENCODING = 'utf-8'
 .\.venv\Scripts\python.exe -m build
 ```
 
-目前不要執行 `tests/test_nhi_importer.py` 或 `-k 'publish or stale or fail_closed'`：檔案／nodes 尚未建立，pytest 會 exit 1。第一輪 Red 建立對應檔案後，canonical focused commands 才成為：
+`tests/test_nhi_importer.py`、`tests/test_official_adapters.py`、`tests/test_snapshot_publish.py`、`tests/test_freshness.py` 與 `tests/test_models.py` 已建立部分 canonical nodes；其他 domain 拆分檔仍尚未建立，保持 PLANNED，不把現有集中式測試冒充成那些 node。`tests/test_package_contents.py` 已建立，現階段第一輪 focused commands 是：
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q tests\test_snapshot_publish.py
-.\.venv\Scripts\python.exe -m pytest -q tests\test_nhi_importer.py
-.\.venv\Scripts\python.exe -m pytest -q `
-  tests\test_mcp_stdio.py::test_nhi_04_as_of_is_explicitly_unsupported_in_p1_1
+uv run pytest -q tests\test_p1_1_red.py tests\test_fetch.py
+uv run pytest -q tests\test_mcp_stdio.py
 ```
 
 MCP transport release check 必須另外從 repo 外的暫存 cwd、對安裝後 wheel 執行；延續 `TAIWAN_LAB_TEST_PYTHON` 指向該隔離環境的 Python。official stdio fixture 路徑使用測試專用環境變數，不能讀開發者電腦上的真實 `current`。
 
 正式 contract／schema／rule／review protocol／qualifier resources 固定放在 `src/taiwan_lab_mcp/contracts/**`、`src/taiwan_lab_mcp/schemas/**`、`src/taiwan_lab_mcp/rules/**`、`src/taiwan_lab_mcp/review_protocols/**` 與 `src/taiwan_lab_mcp/qualifier_specs/**`，以 `importlib.resources` 載入。Out-of-tree wheel test 必須在沒有 repository cwd 的暫存目錄執行 data CLI、解析一份 NHI synthetic fixture，並讀到 `contracts/public-contract-v1.json`、hash-bound schema／rule 與 exact `qualifier_specs/liteparse-2.0.0.json`；找不到 package resource 即失敗，不可 fallback 到 repo-relative 路徑。另有 CDC qualifier preflight case 驗證 LiteParse 缺失時只讓新 qualification exit `4`，舊 CDC serving 與其他來源仍可查詢。
 
-`tests/test_package_contents.py` 建立後，build 後的 canonical audit command 為：
+`tests/test_package_contents.py` 的 build 後 canonical audit command 為：
 
 ```powershell
 $env:TAIWAN_LAB_ARTIFACT_DIR = (Resolve-Path -LiteralPath 'dist').Path
@@ -491,7 +491,7 @@ Live source probe 不屬於一般 `pytest -q`。若日後加入 `live` marker，
 
 ## 13. MCP discovery、相容性與誤用測試
 
-`src/taiwan_lab_mcp/contracts/public-contract-v1.json` 預定是 operations、public enums、freshness 與 safety registries 的單一 machine-readable 真源。該 resource 與下述 node 目前都是 **PLANNED**；實體檔、package inventory 與 collected test 完成前不得記為 passed。`tests/test_mcp_stdio.py::test_sdd_api_01_public_contract_resource_matches_discovery` 不手寫另一份 expected subset；它必須在 repo 外安裝 wheel，只以 `importlib.resources.files("taiwan_lab_mcp").joinpath("contracts", "public-contract-v1.json")` 讀同一 fixture，禁止 repo-relative fallback，再對真實 stdio `list_tools` 比對：
+`src/taiwan_lab_mcp/contracts/public-contract-v1.json` 現已存在並是 operations、public enums、freshness 與 safety registries 的單一 machine-readable 真源；canonical `SDD-API-01` node、source contract equality test、freshness mapping、security matrix、audit／observability boundary 與 installed-wheel stdio 已通過。acceptance reporter 已建立，但五項 release evidence 仍未全部拆出／關閉。測試只以 `importlib.resources.files("taiwan_lab_mcp").joinpath("contracts", "public-contract-v1.json")` 讀 package resource，禁止 repo-relative fallback，再對真實 stdio `list_tools` 比對：
 
 1. exact name 集合相等，剛好 22 個，多一個、少一個或舊名漏出都失敗；
 2. 每個 parameter name、JSON type、required／nullable、default、順序、classification 與 deprecated metadata 完全相等；

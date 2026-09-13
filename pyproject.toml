@@ -18,6 +18,7 @@ Issues = "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues"
 
 [project.scripts]
 taiwan-lab-mcp = "taiwan_lab_mcp.server:main"
+taiwan-lab-data = "taiwan_lab_mcp.data_cli:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

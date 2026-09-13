@@ -1,8 +1,20 @@
 # Taiwan Laboratory MCP P1.1 實作計畫書
 
-文件狀態：Planning complete；implementation 尚未開始，public contract 以 PRD／SDD 為準
-核對日期：2026-09-13（Asia/Taipei）
+文件狀態：Planning complete；第一輪共用信任邊界＋NHI vertical slice 已在 worktree 實作，official qualification 仍未完成
+核對日期：2026-09-14（Asia/Taipei）
 適用範圍：CDC 採檢送驗、NHI 檢驗支付、TFDA IVD 許可證公開資料
+
+## 0. 目前實作 checkpoint
+
+本計畫原先記錄的是 v0.1.1 sample-only baseline。依目前 worktree 的可重跑證據，第一輪已完成以下工程切片：
+
+- packaged `public-contract-v1.json` 已成為 22 個 operation、request／response schema、enum、safety、payload 與 locator 的 machine-readable source of truth；實際 `list_tools` 與 response schema equality 已在 source 與 installed wheel 驗證。
+- 共用 snapshot／manifest／provenance、sample／`official_snapshot` 隔離、SQLite read-only、audit subject digest、lock／CAS／rollback／recover-current 與 fail-closed runtime 已實作。
+- NHI 7 欄 CSV importer、current exact lookup、搜尋／分頁、duplicate-code block、`as_of` historical rejection 及 `coverage_status=review_incomplete` 已實作。
+- NHI offline candidate 與明確 opt-in 的 metadata→CSV discovery／fetch path 已實作；兩者都停在 candidate／validation report，不自動 publish。正式 source、scope、owner 與 qualification 仍不得由這些 synthetic／offline evidence 推定。
+- strict v1 acceptance report writer 已實作：release evidence 只能由 caller 提供實際 node／hash／evidence 後寫入，並對 pass gate、path containment、內容雜湊與 immutable bytes 做 fail-closed 驗證；canonical domain nodes 與正式 release evidence 仍未全部建立。
+
+目前最新工作區回歸為 155 個測試通過；完整建置、archive inventory、repo 外 wheel 安裝與 MCP stdio 證據記在 `docs/implementation-notes.md`。這些是 worktree implementation evidence，不是整體 P1.1 release approval。
 
 詳細來源調查：
 
@@ -194,13 +206,11 @@ CDC 每次新版本至少需完成：
 
 ## 7. MCP 查詢層調整
 
-現有程式與 wheel 仍是 `0.1.1` sample-only；下列能力全部為 **PLANNED**，沒有 executable official-mode evidence。Public operation、status、freshness 與 safety fields 的唯一真源是 `docs/product-requirements.md`，實作後的 machine-readable 真源為規劃中的 `src/taiwan_lab_mcp/contracts/public-contract-v1.json`：
+package version 仍是 `0.1.1`，但目前 worktree 已有可執行的雙模式 runtime 與第一輪 NHI slice。Public operation、status、freshness 與 safety fields 的唯一真源是 `docs/product-requirements.md`，machine-readable 真源是 `src/taiwan_lab_mcp/contracts/public-contract-v1.json`；目前狀態如下：
 
-- `data_mode` 支援 `sample` 與 `official_snapshot`。
-- `sample_only` 依資料來源為 `true` 或 `false`，維持 strict boolean。
-- 增加 PRD 定義的 `snapshot_id`、`retrieved_at`、`serving_validation_status`、`serving_review_status`、`latest_candidate_status`、`stale` 與 `stale_reason_codes[]`；禁止另建同義 public keys。
-- `get_data_status` 回報每個來源最後成功同步、官方更新時間、目前 snapshot、驗證結果及同步錯誤。
-- 查詢不得混合 sample 與 official records；若使用者明確進入 sample mode，所有結果繼續顯示示範警示。
+- 已完成：`data_mode` 的 `sample`／`official_snapshot`、strict `sample_only`、PRD status fields、`get_data_status`、sample／official 不混查及 official unavailable 不 fallback。
+- 已完成：NHI current serving、stale／candidate status、provenance、read-only SQLite 與 CLI validation／sync／rollback／recovery 的 executable slice。
+- 尚未完成：CDC／TFDA official importer、CDC PDF／ODS、10 個正式 golden cases／source qualification、NHI `NHI-R1-SOURCE`／`NHI-R1-SCOPE`／`PUB-R1-OWNER` 的正式 evidence，以及整體 release gates。
 
 若沒有通過驗證的 official snapshot，正式模式應明確失敗或回報 unavailable。下載失敗時可以繼續提供上一個已驗證 snapshot，但必須標記 stale，並顯示最後成功同步時間與失敗原因。
 

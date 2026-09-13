@@ -1,0 +1,3901 @@
+{
+  "contract_version": "public-contract-v1",
+  "status": "active",
+  "operations": [
+    {
+      "name": "get_data_status",
+      "classification": "status",
+      "source": "all_sources",
+      "parameters": [],
+      "response_schema": "DataStatusResult",
+      "safety": [],
+      "fixture": "status",
+      "request_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_disease",
+      "classification": "active",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_specimen",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_specimen_requirement",
+      "classification": "active",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "disease",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_specimen",
+      "request_schema": {
+        "properties": {
+          "disease": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disease"
+        ]
+      }
+    },
+    {
+      "name": "get_collection_method",
+      "classification": "compatibility_alias",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "disease",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_specimen",
+      "request_schema": {
+        "properties": {
+          "disease": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disease"
+        ]
+      }
+    },
+    {
+      "name": "get_container",
+      "classification": "compatibility_alias",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "disease",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_specimen",
+      "request_schema": {
+        "properties": {
+          "disease": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disease"
+        ]
+      }
+    },
+    {
+      "name": "get_transport_requirement",
+      "classification": "compatibility_alias",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "disease",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_specimen",
+      "request_schema": {
+        "properties": {
+          "disease": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disease"
+        ]
+      }
+    },
+    {
+      "name": "get_submission_rule",
+      "classification": "compatibility_alias",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "disease",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_specimen",
+      "request_schema": {
+        "properties": {
+          "disease": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disease"
+        ]
+      }
+    },
+    {
+      "name": "find_authorized_lab",
+      "classification": "active",
+      "source": "cdc_recognized_labs",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "does_not_confirm_current_acceptance"
+      ],
+      "fixture": "cdc_lab",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_lab_scope",
+      "classification": "compatibility_alias",
+      "source": "cdc_recognized_labs",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "does_not_confirm_current_acceptance"
+      ],
+      "fixture": "cdc_lab",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "search_payment_items",
+      "classification": "active",
+      "source": "nhi_fee",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 20
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 0
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_claim_determination"
+      ],
+      "fixture": "nhi_fee",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "search_lab_code",
+      "classification": "compatibility_alias",
+      "source": "nhi_fee",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_claim_determination"
+      ],
+      "fixture": "nhi_fee",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_points",
+      "classification": "active",
+      "source": "nhi_fee",
+      "parameters": [
+        {
+          "name": "code",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "as_of",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_claim_determination"
+      ],
+      "fixture": "nhi_fee",
+      "request_schema": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ]
+      }
+    },
+    {
+      "name": "get_payment_rule",
+      "classification": "active",
+      "source": "nhi_fee",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_claim_determination"
+      ],
+      "fixture": "nhi_fee",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "search_reviewed_ivd",
+      "classification": "active",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "manufacturer",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 20
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 0
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "search_ivd_candidates",
+      "classification": "active",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "manufacturer",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 20
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 0
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "limit": {
+            "type": "integer",
+            "default": 20
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "search_ivd",
+      "classification": "compatibility_alias",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "manufacturer",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "get_license",
+      "classification": "active",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "license_no",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "request_schema": {
+        "properties": {
+          "license_no": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "license_no"
+        ]
+      }
+    },
+    {
+      "name": "find_manufacturer",
+      "classification": "active",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "request_schema": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "list_matching_license_records",
+      "classification": "active",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 10
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "compare_products",
+      "classification": "deprecated",
+      "source": "tfda_device",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 10
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_for_procurement_or_equivalence"
+      ],
+      "fixture": "tfda_device",
+      "replacement_operation": "list_matching_license_records",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 10
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "standards_status",
+      "classification": "reserved_status",
+      "source": "reserved_standards",
+      "parameters": [],
+      "response_schema": "ReservedStatusResult",
+      "safety": [],
+      "fixture": "reserved",
+      "request_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    },
+    {
+      "name": "eqa_status",
+      "classification": "reserved_status",
+      "source": "reserved_eqa",
+      "parameters": [],
+      "response_schema": "ReservedStatusResult",
+      "safety": [],
+      "fixture": "reserved",
+      "request_schema": {
+        "properties": {},
+        "type": "object"
+      }
+    }
+  ],
+  "public_enums": {
+    "data_mode": [
+      "sample",
+      "official_snapshot"
+    ],
+    "availability": [
+      "available",
+      "data_unavailable"
+    ],
+    "serving_validation_status": [
+      "not_applicable",
+      "passed"
+    ],
+    "serving_review_status": [
+      "not_applicable",
+      "approved"
+    ],
+    "latest_candidate_status": [
+      "none",
+      "validating",
+      "review_pending",
+      "rejected",
+      "publishable"
+    ],
+    "coverage_status": [
+      "complete",
+      "review_incomplete",
+      "unknown"
+    ],
+    "result_status": [
+      "ok",
+      "not_found",
+      "data_unavailable",
+      "invalid_request",
+      "historical_query_unsupported",
+      "candidate_matches_available",
+      "deprecated_unsupported"
+    ],
+    "stale_reason_codes": [
+      "upstream_check_overdue",
+      "upstream_verification_failed",
+      "newer_candidate_pending_review",
+      "newer_candidate_rejected",
+      "newer_candidate_awaiting_publish"
+    ],
+    "scope_status": [
+      "in_scope",
+      "out_of_scope",
+      "review_pending"
+    ],
+    "ivd_scope": [
+      "included",
+      "excluded",
+      "ambiguous",
+      "unknown"
+    ]
+  },
+  "freshness_registry": {
+    "content_age_status": [
+      "not_applicable",
+      "within_threshold",
+      "warning",
+      "critical",
+      "unknown"
+    ],
+    "availability_reason_code": [
+      "no_serving_snapshot",
+      "serving_integrity_failure",
+      "operational_status_integrity_failure"
+    ]
+  },
+  "safety_registry": {
+    "decision_support_only": {
+      "type": "boolean",
+      "operations": [
+        "search_disease",
+        "get_specimen_requirement",
+        "get_collection_method",
+        "get_container",
+        "get_transport_requirement",
+        "get_submission_rule",
+        "find_authorized_lab",
+        "get_lab_scope",
+        "search_payment_items",
+        "search_lab_code",
+        "get_points",
+        "get_payment_rule",
+        "search_reviewed_ivd",
+        "search_ivd_candidates",
+        "search_ivd",
+        "get_license",
+        "find_manufacturer",
+        "list_matching_license_records",
+        "compare_products"
+      ]
+    },
+    "verify_current_official_source": {
+      "type": "boolean",
+      "operations": [
+        "search_disease",
+        "get_specimen_requirement",
+        "get_collection_method",
+        "get_container",
+        "get_transport_requirement",
+        "get_submission_rule",
+        "find_authorized_lab",
+        "get_lab_scope",
+        "search_payment_items",
+        "search_lab_code",
+        "get_points",
+        "get_payment_rule",
+        "search_reviewed_ivd",
+        "search_ivd_candidates",
+        "search_ivd",
+        "get_license",
+        "find_manufacturer",
+        "list_matching_license_records",
+        "compare_products"
+      ]
+    },
+    "not_validated_for_hospital_deployment": {
+      "type": "boolean",
+      "operations": [
+        "search_disease",
+        "get_specimen_requirement",
+        "get_collection_method",
+        "get_container",
+        "get_transport_requirement",
+        "get_submission_rule",
+        "find_authorized_lab",
+        "get_lab_scope",
+        "search_payment_items",
+        "search_lab_code",
+        "get_points",
+        "get_payment_rule",
+        "search_reviewed_ivd",
+        "search_ivd_candidates",
+        "search_ivd",
+        "get_license",
+        "find_manufacturer",
+        "list_matching_license_records",
+        "compare_products"
+      ]
+    },
+    "not_for_claim_determination": {
+      "type": "boolean",
+      "operations": [
+        "search_payment_items",
+        "search_lab_code",
+        "get_points",
+        "get_payment_rule"
+      ]
+    },
+    "not_for_procurement_or_equivalence": {
+      "type": "boolean",
+      "operations": [
+        "search_reviewed_ivd",
+        "search_ivd_candidates",
+        "search_ivd",
+        "get_license",
+        "find_manufacturer",
+        "list_matching_license_records",
+        "compare_products"
+      ]
+    },
+    "not_pre_submission_storage": {
+      "type": "boolean",
+      "operations": [
+        "search_disease",
+        "get_specimen_requirement",
+        "get_collection_method",
+        "get_container",
+        "get_transport_requirement",
+        "get_submission_rule"
+      ]
+    },
+    "does_not_confirm_current_acceptance": {
+      "type": "boolean",
+      "operations": [
+        "find_authorized_lab",
+        "get_lab_scope"
+      ]
+    }
+  },
+  "warning_registry": {
+    "sample_only": "Synthetic package fixture; not official source data.",
+    "coverage_review_incomplete": "NHI laboratory scope review is incomplete.",
+    "historical_query_unsupported": "The serving NHI snapshot is current-only and cannot answer historical points.",
+    "deprecated_unsupported": "Use list_matching_license_records; comparison and equivalence are not supported."
+  },
+  "source_payload_schemas": {
+    "nhi_fee": {
+      "required": [
+        "record_type",
+        "matched_by",
+        "code_raw",
+        "code_normalized",
+        "points_raw",
+        "points",
+        "effective_start_raw",
+        "effective_start",
+        "effective_end_raw",
+        "effective_end",
+        "possible_open_end_sentinel",
+        "name_zh_raw",
+        "name_zh_search",
+        "name_en_raw",
+        "name_en_search",
+        "note_raw",
+        "note_search",
+        "scope_status",
+        "scope_rule_version",
+        "scope_basis_locator"
+      ],
+      "model": "taiwan_lab_mcp.models.NHIRecord",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "record_type": {
+            "const": "nhi_fee",
+            "default": "nhi_fee",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "code",
+                "name_zh",
+                "name_en",
+                "alias",
+                "note"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Matched By",
+            "type": "array"
+          },
+          "code_raw": {
+            "title": "Code Raw",
+            "type": "string"
+          },
+          "code_normalized": {
+            "title": "Code Normalized",
+            "type": "string"
+          },
+          "points_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Raw"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points"
+          },
+          "effective_start_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Start Raw"
+          },
+          "effective_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Start"
+          },
+          "effective_end_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective End Raw"
+          },
+          "effective_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective End"
+          },
+          "possible_open_end_sentinel": {
+            "title": "Possible Open End Sentinel",
+            "type": "boolean"
+          },
+          "name_zh_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Zh Raw"
+          },
+          "name_zh_search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Zh Search"
+          },
+          "name_en_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En Raw"
+          },
+          "name_en_search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En Search"
+          },
+          "note_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Raw"
+          },
+          "note_search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Search"
+          },
+          "scope_status": {
+            "enum": [
+              "in_scope",
+              "out_of_scope",
+              "review_pending"
+            ],
+            "title": "Scope Status",
+            "type": "string"
+          },
+          "scope_rule_version": {
+            "minLength": 1,
+            "title": "Scope Rule Version",
+            "type": "string"
+          },
+          "scope_basis_locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Basis Locator"
+          }
+        },
+        "required": [
+          "matched_by",
+          "code_raw",
+          "code_normalized",
+          "points_raw",
+          "points",
+          "effective_start_raw",
+          "effective_start",
+          "effective_end_raw",
+          "effective_end",
+          "possible_open_end_sentinel",
+          "name_zh_raw",
+          "name_zh_search",
+          "name_en_raw",
+          "name_en_search",
+          "note_raw",
+          "note_search",
+          "scope_status",
+          "scope_rule_version",
+          "scope_basis_locator"
+        ],
+        "title": "NHIRecord",
+        "type": "object"
+      }
+    },
+    "cdc_specimen": {
+      "required": [
+        "record_type",
+        "disease",
+        "specimen",
+        "purpose",
+        "collection_time",
+        "volume_requirement",
+        "transport_method",
+        "retention_raw",
+        "notes"
+      ],
+      "model": "taiwan_lab_mcp.models.CDCSpecimenRecord",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "record_type": {
+            "const": "cdc_specimen",
+            "default": "cdc_specimen",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "disease": {
+            "title": "Disease",
+            "type": "string"
+          },
+          "specimen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "collection_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Time"
+          },
+          "volume_requirement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Requirement"
+          },
+          "transport_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transport Method"
+          },
+          "retention_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Raw"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "disease",
+          "specimen",
+          "purpose",
+          "collection_time",
+          "volume_requirement",
+          "transport_method",
+          "retention_raw",
+          "notes"
+        ],
+        "title": "CDCSpecimenRecord",
+        "type": "object"
+      }
+    },
+    "cdc_recognized_lab": {
+      "required": [
+        "record_type",
+        "certificate_no",
+        "city",
+        "institution",
+        "department",
+        "disease_code",
+        "disease_name",
+        "purpose",
+        "method",
+        "address",
+        "phone",
+        "end_time",
+        "latest_annual_pt_review_raw"
+      ],
+      "model": "taiwan_lab_mcp.models.CDCLabRecord",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "record_type": {
+            "const": "cdc_recognized_lab",
+            "default": "cdc_recognized_lab",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "certificate_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Certificate No"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "institution": {
+            "title": "Institution",
+            "type": "string"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "disease_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disease Code"
+          },
+          "disease_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disease Name"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "end_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Time"
+          },
+          "latest_annual_pt_review_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Annual Pt Review Raw"
+          }
+        },
+        "required": [
+          "certificate_no",
+          "city",
+          "institution",
+          "department",
+          "disease_code",
+          "disease_name",
+          "purpose",
+          "method",
+          "address",
+          "phone",
+          "end_time",
+          "latest_annual_pt_review_raw"
+        ],
+        "title": "CDCLabRecord",
+        "type": "object"
+      }
+    },
+    "tfda_device": {
+      "required": [
+        "record_type",
+        "license_no",
+        "name_zh",
+        "name_en",
+        "effect",
+        "applicant",
+        "manufacturer",
+        "factory_address",
+        "country",
+        "process",
+        "source_cancellation_status_raw",
+        "source_cancellation_date_raw",
+        "valid_through_raw",
+        "ivd_scope",
+        "classification_code"
+      ],
+      "model": "taiwan_lab_mcp.models.TFDARecord",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "record_type": {
+            "const": "tfda_device",
+            "default": "tfda_device",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "license_no": {
+            "title": "License No",
+            "type": "string"
+          },
+          "name_zh": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Zh"
+          },
+          "name_en": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En"
+          },
+          "effect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect"
+          },
+          "applicant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicant"
+          },
+          "manufacturer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer"
+          },
+          "factory_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factory Address"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "process": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process"
+          },
+          "source_cancellation_status_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Cancellation Status Raw"
+          },
+          "source_cancellation_date_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Cancellation Date Raw"
+          },
+          "valid_through_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Through Raw"
+          },
+          "ivd_scope": {
+            "enum": [
+              "included",
+              "excluded",
+              "ambiguous",
+              "unknown"
+            ],
+            "title": "Ivd Scope",
+            "type": "string"
+          },
+          "classification_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Code"
+          }
+        },
+        "required": [
+          "license_no",
+          "name_zh",
+          "name_en",
+          "effect",
+          "applicant",
+          "manufacturer",
+          "factory_address",
+          "country",
+          "process",
+          "source_cancellation_status_raw",
+          "source_cancellation_date_raw",
+          "valid_through_raw",
+          "ivd_scope",
+          "classification_code"
+        ],
+        "title": "TFDARecord",
+        "type": "object"
+      }
+    }
+  },
+  "locator_schemas": {
+    "nhi_row": {
+      "required": [
+        "locator_type",
+        "source_row_number"
+      ],
+      "model": "taiwan_lab_mcp.models.NhiLocator",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "locator_type": {
+            "const": "nhi_row",
+            "default": "nhi_row",
+            "title": "Locator Type",
+            "type": "string"
+          },
+          "source_row_number": {
+            "minimum": 1,
+            "title": "Source Row Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_row_number"
+        ],
+        "title": "NhiLocator",
+        "type": "object"
+      }
+    },
+    "tfda_row": {
+      "required": [
+        "locator_type",
+        "source_row_number"
+      ],
+      "model": "taiwan_lab_mcp.models.TfdaLocator",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "locator_type": {
+            "const": "tfda_row",
+            "default": "tfda_row",
+            "title": "Locator Type",
+            "type": "string"
+          },
+          "source_row_number": {
+            "minimum": 1,
+            "title": "Source Row Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_row_number"
+        ],
+        "title": "TfdaLocator",
+        "type": "object"
+      }
+    },
+    "cdc_pdf_row": {
+      "required": [
+        "locator_type",
+        "pdf_page",
+        "printed_page",
+        "table_section",
+        "row_bbox"
+      ],
+      "model": "taiwan_lab_mcp.models.CdcLocator",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "locator_type": {
+            "const": "cdc_pdf_row",
+            "default": "cdc_pdf_row",
+            "title": "Locator Type",
+            "type": "string"
+          },
+          "pdf_page": {
+            "minimum": 1,
+            "title": "Pdf Page",
+            "type": "integer"
+          },
+          "printed_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed Page"
+          },
+          "table_section": {
+            "minLength": 1,
+            "title": "Table Section",
+            "type": "string"
+          },
+          "row_bbox": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Row Bbox",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pdf_page",
+          "printed_page",
+          "table_section",
+          "row_bbox"
+        ],
+        "title": "CdcLocator",
+        "type": "object"
+      }
+    },
+    "ods_row": {
+      "required": [
+        "locator_type",
+        "sheet_name",
+        "expanded_row_number"
+      ],
+      "model": "taiwan_lab_mcp.models.OdsLocator",
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "locator_type": {
+            "const": "ods_row",
+            "default": "ods_row",
+            "title": "Locator Type",
+            "type": "string"
+          },
+          "sheet_name": {
+            "minLength": 1,
+            "title": "Sheet Name",
+            "type": "string"
+          },
+          "expanded_row_number": {
+            "minimum": 1,
+            "title": "Expanded Row Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sheet_name",
+          "expanded_row_number"
+        ],
+        "title": "OdsLocator",
+        "type": "object"
+      }
+    }
+  },
+  "response_schemas": {
+    "QueryResultV1": {
+      "model": "taiwan_lab_mcp.models.ToolResult",
+      "closed": true,
+      "exact_top_level_keys": [
+        "contract_version",
+        "operation",
+        "query",
+        "result_status",
+        "data_mode",
+        "sample_only",
+        "availability",
+        "availability_reason_code",
+        "source_status",
+        "coverage_status",
+        "coverage_detail",
+        "items",
+        "total_matches",
+        "returned_count",
+        "limit",
+        "offset",
+        "truncated",
+        "historical_truth_supported",
+        "evaluated_as_of",
+        "evaluated_timezone",
+        "replacement_operation",
+        "provenance",
+        "snapshot_traceable",
+        "currently_reproducible_from_upstream",
+        "warnings",
+        "notes",
+        "safety"
+      ],
+      "schema": {
+        "$defs": {
+          "ArtifactReference": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact_id": {
+                "minLength": 1,
+                "title": "Artifact Id",
+                "type": "string"
+              },
+              "role": {
+                "minLength": 1,
+                "title": "Role",
+                "type": "string"
+              },
+              "storage_scope": {
+                "enum": [
+                  "package_resource",
+                  "data_root"
+                ],
+                "title": "Storage Scope",
+                "type": "string"
+              },
+              "data_root_relative_path": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Data Root Relative Path"
+              },
+              "official_url": {
+                "minLength": 1,
+                "title": "Official Url",
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Sha256",
+                "type": "string"
+              },
+              "local_artifact_available": {
+                "title": "Local Artifact Available",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "artifact_id",
+              "role",
+              "storage_scope",
+              "data_root_relative_path",
+              "official_url",
+              "sha256",
+              "local_artifact_available"
+            ],
+            "title": "ArtifactReference",
+            "type": "object"
+          },
+          "CDCLabRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "record_type": {
+                "const": "cdc_recognized_lab",
+                "default": "cdc_recognized_lab",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "certificate_no": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Certificate No"
+              },
+              "city": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "City"
+              },
+              "institution": {
+                "title": "Institution",
+                "type": "string"
+              },
+              "department": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Department"
+              },
+              "disease_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Disease Code"
+              },
+              "disease_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Disease Name"
+              },
+              "purpose": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Purpose"
+              },
+              "method": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Method"
+              },
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "phone": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Phone"
+              },
+              "end_time": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "End Time"
+              },
+              "latest_annual_pt_review_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Latest Annual Pt Review Raw"
+              }
+            },
+            "required": [
+              "certificate_no",
+              "city",
+              "institution",
+              "department",
+              "disease_code",
+              "disease_name",
+              "purpose",
+              "method",
+              "address",
+              "phone",
+              "end_time",
+              "latest_annual_pt_review_raw"
+            ],
+            "title": "CDCLabRecord",
+            "type": "object"
+          },
+          "CDCSpecimenRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "record_type": {
+                "const": "cdc_specimen",
+                "default": "cdc_specimen",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "disease": {
+                "title": "Disease",
+                "type": "string"
+              },
+              "specimen": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Specimen"
+              },
+              "purpose": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Purpose"
+              },
+              "collection_time": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Collection Time"
+              },
+              "volume_requirement": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Volume Requirement"
+              },
+              "transport_method": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Transport Method"
+              },
+              "retention_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Retention Raw"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              }
+            },
+            "required": [
+              "disease",
+              "specimen",
+              "purpose",
+              "collection_time",
+              "volume_requirement",
+              "transport_method",
+              "retention_raw",
+              "notes"
+            ],
+            "title": "CDCSpecimenRecord",
+            "type": "object"
+          },
+          "CdcLocator": {
+            "additionalProperties": false,
+            "properties": {
+              "locator_type": {
+                "const": "cdc_pdf_row",
+                "default": "cdc_pdf_row",
+                "title": "Locator Type",
+                "type": "string"
+              },
+              "pdf_page": {
+                "minimum": 1,
+                "title": "Pdf Page",
+                "type": "integer"
+              },
+              "printed_page": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Printed Page"
+              },
+              "table_section": {
+                "minLength": 1,
+                "title": "Table Section",
+                "type": "string"
+              },
+              "row_bbox": {
+                "items": {
+                  "type": "integer"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "title": "Row Bbox",
+                "type": "array"
+              }
+            },
+            "required": [
+              "pdf_page",
+              "printed_page",
+              "table_section",
+              "row_bbox"
+            ],
+            "title": "CdcLocator",
+            "type": "object"
+          },
+          "Evidence": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact_id": {
+                "minLength": 1,
+                "title": "Artifact Id",
+                "type": "string"
+              },
+              "source_row_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Source Row Sha256",
+                "type": "string"
+              },
+              "locator": {
+                "discriminator": {
+                  "mapping": {
+                    "cdc_pdf_row": "#/$defs/CdcLocator",
+                    "nhi_row": "#/$defs/NhiLocator",
+                    "ods_row": "#/$defs/OdsLocator",
+                    "tfda_row": "#/$defs/TfdaLocator"
+                  },
+                  "propertyName": "locator_type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/NhiLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/TfdaLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/CdcLocator"
+                  },
+                  {
+                    "$ref": "#/$defs/OdsLocator"
+                  }
+                ],
+                "title": "Locator"
+              },
+              "raw_value_available": {
+                "title": "Raw Value Available",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "artifact_id",
+              "source_row_sha256",
+              "locator",
+              "raw_value_available"
+            ],
+            "title": "Evidence",
+            "type": "object"
+          },
+          "ItemEnvelope": {
+            "additionalProperties": false,
+            "properties": {
+              "record": {
+                "discriminator": {
+                  "mapping": {
+                    "cdc_recognized_lab": "#/$defs/CDCLabRecord",
+                    "cdc_specimen": "#/$defs/CDCSpecimenRecord",
+                    "nhi_fee": "#/$defs/NHIRecord",
+                    "tfda_device": "#/$defs/TFDARecord"
+                  },
+                  "propertyName": "record_type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/NHIRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/CDCSpecimenRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/CDCLabRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/TFDARecord"
+                  }
+                ],
+                "title": "Record"
+              },
+              "evidence": {
+                "items": {
+                  "$ref": "#/$defs/Evidence"
+                },
+                "minItems": 1,
+                "title": "Evidence",
+                "type": "array"
+              },
+              "item_warnings": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Item Warnings",
+                "type": "array"
+              },
+              "safety": {
+                "additionalProperties": {
+                  "type": "boolean"
+                },
+                "title": "Safety",
+                "type": "object"
+              }
+            },
+            "required": [
+              "record",
+              "evidence",
+              "item_warnings",
+              "safety"
+            ],
+            "title": "ItemEnvelope",
+            "type": "object"
+          },
+          "NHIRecord": {
+            "additionalProperties": false,
+            "properties": {
+              "record_type": {
+                "const": "nhi_fee",
+                "default": "nhi_fee",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "matched_by": {
+                "items": {
+                  "enum": [
+                    "code",
+                    "name_zh",
+                    "name_en",
+                    "alias",
+                    "note"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "title": "Matched By",
+                "type": "array"
+              },
+              "code_raw": {
+                "title": "Code Raw",
+                "type": "string"
+              },
+              "code_normalized": {
+                "title": "Code Normalized",
+                "type": "string"
+              },
+              "points_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Points Raw"
+              },
+              "points": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Points"
+              },
+              "effective_start_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effective Start Raw"
+              },
+              "effective_start": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effective Start"
+              },
+              "effective_end_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effective End Raw"
+              },
+              "effective_end": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effective End"
+              },
+              "possible_open_end_sentinel": {
+                "title": "Possible Open End Sentinel",
+                "type": "boolean"
+              },
+              "name_zh_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name Zh Raw"
+              },
+              "name_zh_search": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name Zh Search"
+              },
+              "name_en_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name En Raw"
+              },
+              "name_en_search": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name En Search"
+              },
+              "note_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Note Raw"
+              },
+              "note_search": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Note Search"
+              },
+              "scope_status": {
+                "enum": [
+                  "in_scope",
+                  "out_of_scope",
+                  "review_pending"
+                ],
+                "title": "Scope Status",
+                "type": "string"
+              },
+              "scope_rule_version": {
+                "minLength": 1,
+                "title": "Scope Rule Version",
+                "type": "string"
+              },
+              "scope_basis_locator": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Scope Basis Locator"
+              }
+            },
+            "required": [
+              "matched_by",
+              "code_raw",
+              "code_normalized",
+              "points_raw",
+              "points",
+              "effective_start_raw",
+              "effective_start",
+              "effective_end_raw",
+              "effective_end",
+              "possible_open_end_sentinel",
+              "name_zh_raw",
+              "name_zh_search",
+              "name_en_raw",
+              "name_en_search",
+              "note_raw",
+              "note_search",
+              "scope_status",
+              "scope_rule_version",
+              "scope_basis_locator"
+            ],
+            "title": "NHIRecord",
+            "type": "object"
+          },
+          "NhiLocator": {
+            "additionalProperties": false,
+            "properties": {
+              "locator_type": {
+                "const": "nhi_row",
+                "default": "nhi_row",
+                "title": "Locator Type",
+                "type": "string"
+              },
+              "source_row_number": {
+                "minimum": 1,
+                "title": "Source Row Number",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "source_row_number"
+            ],
+            "title": "NhiLocator",
+            "type": "object"
+          },
+          "OdsLocator": {
+            "additionalProperties": false,
+            "properties": {
+              "locator_type": {
+                "const": "ods_row",
+                "default": "ods_row",
+                "title": "Locator Type",
+                "type": "string"
+              },
+              "sheet_name": {
+                "minLength": 1,
+                "title": "Sheet Name",
+                "type": "string"
+              },
+              "expanded_row_number": {
+                "minimum": 1,
+                "title": "Expanded Row Number",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "sheet_name",
+              "expanded_row_number"
+            ],
+            "title": "OdsLocator",
+            "type": "object"
+          },
+          "OfficialContentDate": {
+            "additionalProperties": false,
+            "properties": {
+              "value_raw": {
+                "minLength": 1,
+                "title": "Value Raw",
+                "type": "string"
+              },
+              "precision": {
+                "enum": [
+                  "day",
+                  "month",
+                  "year",
+                  "unknown"
+                ],
+                "title": "Precision",
+                "type": "string"
+              },
+              "timezone_known": {
+                "title": "Timezone Known",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "value_raw",
+              "precision",
+              "timezone_known"
+            ],
+            "title": "OfficialContentDate",
+            "type": "object"
+          },
+          "Provenance": {
+            "additionalProperties": false,
+            "description": "Strict public provenance contract shared by every query result.",
+            "properties": {
+              "source_id": {
+                "enum": [
+                  "cdc_manual",
+                  "cdc_recognized_labs",
+                  "nhi_fee",
+                  "tfda_device"
+                ],
+                "title": "Source Id",
+                "type": "string"
+              },
+              "source_name": {
+                "minLength": 1,
+                "title": "Source Name",
+                "type": "string"
+              },
+              "provider": {
+                "minLength": 1,
+                "title": "Provider",
+                "type": "string"
+              },
+              "landing_url": {
+                "minLength": 1,
+                "title": "Landing Url",
+                "type": "string"
+              },
+              "resource_url": {
+                "minLength": 1,
+                "title": "Resource Url",
+                "type": "string"
+              },
+              "snapshot_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Snapshot Id"
+              },
+              "curated_build_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Curated Build Id"
+              },
+              "official_version_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Official Version Raw"
+              },
+              "official_content_date": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OfficialContentDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "retrieved_at": {
+                "format": "date-time",
+                "title": "Retrieved At",
+                "type": "string"
+              },
+              "artifacts": {
+                "items": {
+                  "$ref": "#/$defs/ArtifactReference"
+                },
+                "title": "Artifacts",
+                "type": "array"
+              },
+              "parser_version": {
+                "minLength": 1,
+                "title": "Parser Version",
+                "type": "string"
+              },
+              "schema_version": {
+                "minLength": 1,
+                "title": "Schema Version",
+                "type": "string"
+              },
+              "rule_bundle_version": {
+                "minLength": 1,
+                "title": "Rule Bundle Version",
+                "type": "string"
+              },
+              "license_name": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "License Name"
+              },
+              "license_url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "License Url"
+              },
+              "attribution": {
+                "minLength": 1,
+                "title": "Attribution",
+                "type": "string"
+              },
+              "coverage_status": {
+                "enum": [
+                  "complete",
+                  "review_incomplete",
+                  "unknown"
+                ],
+                "title": "Coverage Status",
+                "type": "string"
+              },
+              "stale": {
+                "title": "Stale",
+                "type": "boolean"
+              },
+              "stale_reason_codes": {
+                "items": {
+                  "enum": [
+                    "upstream_check_overdue",
+                    "upstream_verification_failed",
+                    "newer_candidate_pending_review",
+                    "newer_candidate_rejected",
+                    "newer_candidate_awaiting_publish"
+                  ],
+                  "type": "string"
+                },
+                "title": "Stale Reason Codes",
+                "type": "array"
+              },
+              "last_check_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Last Check At"
+              },
+              "serving_review_status": {
+                "enum": [
+                  "not_applicable",
+                  "approved"
+                ],
+                "title": "Serving Review Status",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source_id",
+              "source_name",
+              "provider",
+              "landing_url",
+              "resource_url",
+              "snapshot_id",
+              "curated_build_id",
+              "official_version_raw",
+              "official_content_date",
+              "retrieved_at",
+              "artifacts",
+              "parser_version",
+              "schema_version",
+              "rule_bundle_version",
+              "license_name",
+              "license_url",
+              "attribution",
+              "coverage_status",
+              "stale",
+              "stale_reason_codes",
+              "last_check_at",
+              "serving_review_status"
+            ],
+            "title": "Provenance",
+            "type": "object"
+          },
+          "SourceStatus": {
+            "additionalProperties": false,
+            "properties": {
+              "serving_validation_status": {
+                "enum": [
+                  "not_applicable",
+                  "passed"
+                ],
+                "title": "Serving Validation Status",
+                "type": "string"
+              },
+              "serving_review_status": {
+                "enum": [
+                  "not_applicable",
+                  "approved"
+                ],
+                "title": "Serving Review Status",
+                "type": "string"
+              },
+              "latest_candidate_status": {
+                "enum": [
+                  "none",
+                  "validating",
+                  "review_pending",
+                  "rejected",
+                  "publishable"
+                ],
+                "title": "Latest Candidate Status",
+                "type": "string"
+              },
+              "stale": {
+                "title": "Stale",
+                "type": "boolean"
+              },
+              "stale_reason_codes": {
+                "items": {
+                  "enum": [
+                    "upstream_check_overdue",
+                    "upstream_verification_failed",
+                    "newer_candidate_pending_review",
+                    "newer_candidate_rejected",
+                    "newer_candidate_awaiting_publish"
+                  ],
+                  "type": "string"
+                },
+                "title": "Stale Reason Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "serving_validation_status",
+              "serving_review_status",
+              "latest_candidate_status",
+              "stale",
+              "stale_reason_codes"
+            ],
+            "title": "SourceStatus",
+            "type": "object"
+          },
+          "TFDARecord": {
+            "additionalProperties": false,
+            "properties": {
+              "record_type": {
+                "const": "tfda_device",
+                "default": "tfda_device",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "license_no": {
+                "title": "License No",
+                "type": "string"
+              },
+              "name_zh": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name Zh"
+              },
+              "name_en": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name En"
+              },
+              "effect": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effect"
+              },
+              "applicant": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Applicant"
+              },
+              "manufacturer": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturer"
+              },
+              "factory_address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Factory Address"
+              },
+              "country": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Country"
+              },
+              "process": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Process"
+              },
+              "source_cancellation_status_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Source Cancellation Status Raw"
+              },
+              "source_cancellation_date_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Source Cancellation Date Raw"
+              },
+              "valid_through_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Valid Through Raw"
+              },
+              "ivd_scope": {
+                "enum": [
+                  "included",
+                  "excluded",
+                  "ambiguous",
+                  "unknown"
+                ],
+                "title": "Ivd Scope",
+                "type": "string"
+              },
+              "classification_code": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Classification Code"
+              }
+            },
+            "required": [
+              "license_no",
+              "name_zh",
+              "name_en",
+              "effect",
+              "applicant",
+              "manufacturer",
+              "factory_address",
+              "country",
+              "process",
+              "source_cancellation_status_raw",
+              "source_cancellation_date_raw",
+              "valid_through_raw",
+              "ivd_scope",
+              "classification_code"
+            ],
+            "title": "TFDARecord",
+            "type": "object"
+          },
+          "TfdaLocator": {
+            "additionalProperties": false,
+            "properties": {
+              "locator_type": {
+                "const": "tfda_row",
+                "default": "tfda_row",
+                "title": "Locator Type",
+                "type": "string"
+              },
+              "source_row_number": {
+                "minimum": 1,
+                "title": "Source Row Number",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "source_row_number"
+            ],
+            "title": "TfdaLocator",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "public-contract-v1",
+            "default": "public-contract-v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "get_data_status",
+              "search_disease",
+              "get_specimen_requirement",
+              "get_collection_method",
+              "get_container",
+              "get_transport_requirement",
+              "get_submission_rule",
+              "find_authorized_lab",
+              "get_lab_scope",
+              "search_payment_items",
+              "search_lab_code",
+              "get_points",
+              "get_payment_rule",
+              "search_reviewed_ivd",
+              "search_ivd_candidates",
+              "search_ivd",
+              "get_license",
+              "find_manufacturer",
+              "list_matching_license_records",
+              "compare_products",
+              "standards_status",
+              "eqa_status"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "query": {
+            "additionalProperties": true,
+            "title": "Query",
+            "type": "object"
+          },
+          "result_status": {
+            "enum": [
+              "ok",
+              "not_found",
+              "data_unavailable",
+              "invalid_request",
+              "historical_query_unsupported",
+              "candidate_matches_available",
+              "deprecated_unsupported"
+            ],
+            "title": "Result Status",
+            "type": "string"
+          },
+          "data_mode": {
+            "enum": [
+              "sample",
+              "official_snapshot"
+            ],
+            "title": "Data Mode",
+            "type": "string"
+          },
+          "sample_only": {
+            "title": "Sample Only",
+            "type": "boolean"
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "data_unavailable"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "availability_reason_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_serving_snapshot",
+                  "serving_integrity_failure",
+                  "operational_status_integrity_failure"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availability Reason Code"
+          },
+          "source_status": {
+            "$ref": "#/$defs/SourceStatus"
+          },
+          "coverage_status": {
+            "enum": [
+              "complete",
+              "review_incomplete",
+              "unknown"
+            ],
+            "title": "Coverage Status",
+            "type": "string"
+          },
+          "coverage_detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Detail"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ItemEnvelope"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total_matches": {
+            "minimum": 0,
+            "title": "Total Matches",
+            "type": "integer"
+          },
+          "returned_count": {
+            "minimum": 0,
+            "title": "Returned Count",
+            "type": "integer"
+          },
+          "limit": {
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "minimum": 0,
+            "title": "Offset",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "historical_truth_supported": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Historical Truth Supported"
+          },
+          "evaluated_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluated As Of"
+          },
+          "evaluated_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evaluated Timezone"
+          },
+          "replacement_operation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "get_data_status",
+                  "search_disease",
+                  "get_specimen_requirement",
+                  "get_collection_method",
+                  "get_container",
+                  "get_transport_requirement",
+                  "get_submission_rule",
+                  "find_authorized_lab",
+                  "get_lab_scope",
+                  "search_payment_items",
+                  "search_lab_code",
+                  "get_points",
+                  "get_payment_rule",
+                  "search_reviewed_ivd",
+                  "search_ivd_candidates",
+                  "search_ivd",
+                  "get_license",
+                  "find_manufacturer",
+                  "list_matching_license_records",
+                  "compare_products",
+                  "standards_status",
+                  "eqa_status"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Operation"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Provenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "snapshot_traceable": {
+            "title": "Snapshot Traceable",
+            "type": "boolean"
+          },
+          "currently_reproducible_from_upstream": {
+            "title": "Currently Reproducible From Upstream",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "safety": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Safety",
+            "type": "object"
+          }
+        },
+        "required": [
+          "operation",
+          "query",
+          "result_status",
+          "data_mode",
+          "sample_only",
+          "availability",
+          "availability_reason_code",
+          "source_status",
+          "coverage_status",
+          "coverage_detail",
+          "items",
+          "total_matches",
+          "returned_count",
+          "limit",
+          "offset",
+          "truncated",
+          "historical_truth_supported",
+          "evaluated_as_of",
+          "evaluated_timezone",
+          "replacement_operation",
+          "provenance",
+          "snapshot_traceable",
+          "currently_reproducible_from_upstream",
+          "warnings",
+          "notes",
+          "safety"
+        ],
+        "title": "ToolResult",
+        "type": "object"
+      }
+    },
+    "DataStatusResult": {
+      "model": "taiwan_lab_mcp.models.DataStatusResult",
+      "closed": true,
+      "exact_top_level_keys": [
+        "contract_version",
+        "data_mode",
+        "sources"
+      ],
+      "schema": {
+        "$defs": {
+          "ContentAgeEvidence": {
+            "additionalProperties": false,
+            "properties": {
+              "basis_field": {
+                "minLength": 1,
+                "title": "Basis Field",
+                "type": "string"
+              },
+              "basis_value_raw": {
+                "minLength": 1,
+                "title": "Basis Value Raw",
+                "type": "string"
+              },
+              "age_days": {
+                "minimum": 0,
+                "title": "Age Days",
+                "type": "integer"
+              },
+              "threshold_version": {
+                "minLength": 1,
+                "title": "Threshold Version",
+                "type": "string"
+              }
+            },
+            "required": [
+              "basis_field",
+              "basis_value_raw",
+              "age_days",
+              "threshold_version"
+            ],
+            "title": "ContentAgeEvidence",
+            "type": "object"
+          },
+          "OfficialContentDate": {
+            "additionalProperties": false,
+            "properties": {
+              "value_raw": {
+                "minLength": 1,
+                "title": "Value Raw",
+                "type": "string"
+              },
+              "precision": {
+                "enum": [
+                  "day",
+                  "month",
+                  "year",
+                  "unknown"
+                ],
+                "title": "Precision",
+                "type": "string"
+              },
+              "timezone_known": {
+                "title": "Timezone Known",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "value_raw",
+              "precision",
+              "timezone_known"
+            ],
+            "title": "OfficialContentDate",
+            "type": "object"
+          },
+          "SourceDataStatus": {
+            "additionalProperties": false,
+            "properties": {
+              "source_id": {
+                "enum": [
+                  "cdc_manual",
+                  "cdc_recognized_labs",
+                  "nhi_fee",
+                  "tfda_device"
+                ],
+                "title": "Source Id",
+                "type": "string"
+              },
+              "availability": {
+                "enum": [
+                  "available",
+                  "data_unavailable"
+                ],
+                "title": "Availability",
+                "type": "string"
+              },
+              "availability_reason_code": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "no_serving_snapshot",
+                      "serving_integrity_failure",
+                      "operational_status_integrity_failure"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Availability Reason Code"
+              },
+              "serving_snapshot_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Serving Snapshot Id"
+              },
+              "serving_curated_build_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Serving Curated Build Id"
+              },
+              "serving_validation_status": {
+                "enum": [
+                  "not_applicable",
+                  "passed"
+                ],
+                "title": "Serving Validation Status",
+                "type": "string"
+              },
+              "serving_review_status": {
+                "enum": [
+                  "not_applicable",
+                  "approved"
+                ],
+                "title": "Serving Review Status",
+                "type": "string"
+              },
+              "latest_candidate_id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Latest Candidate Id"
+              },
+              "latest_candidate_status": {
+                "enum": [
+                  "none",
+                  "validating",
+                  "review_pending",
+                  "rejected",
+                  "publishable"
+                ],
+                "title": "Latest Candidate Status",
+                "type": "string"
+              },
+              "coverage_status": {
+                "enum": [
+                  "complete",
+                  "review_incomplete",
+                  "unknown"
+                ],
+                "title": "Coverage Status",
+                "type": "string"
+              },
+              "last_check_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Last Check At"
+              },
+              "last_successful_check_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Last Successful Check At"
+              },
+              "last_successful_publish_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Last Successful Publish At"
+              },
+              "official_content_date": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/OfficialContentDate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "latest_seen_version": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Latest Seen Version"
+              },
+              "stale": {
+                "title": "Stale",
+                "type": "boolean"
+              },
+              "stale_reason_codes": {
+                "items": {
+                  "enum": [
+                    "upstream_check_overdue",
+                    "upstream_verification_failed",
+                    "newer_candidate_pending_review",
+                    "newer_candidate_rejected",
+                    "newer_candidate_awaiting_publish"
+                  ],
+                  "type": "string"
+                },
+                "title": "Stale Reason Codes",
+                "type": "array"
+              },
+              "content_age_status": {
+                "enum": [
+                  "not_applicable",
+                  "within_threshold",
+                  "warning",
+                  "critical",
+                  "unknown"
+                ],
+                "title": "Content Age Status",
+                "type": "string"
+              },
+              "freshness_policy_version": {
+                "minLength": 1,
+                "title": "Freshness Policy Version",
+                "type": "string"
+              },
+              "content_age_evidence": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ContentAgeEvidence"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "source_id",
+              "availability",
+              "availability_reason_code",
+              "serving_snapshot_id",
+              "serving_curated_build_id",
+              "serving_validation_status",
+              "serving_review_status",
+              "latest_candidate_id",
+              "latest_candidate_status",
+              "coverage_status",
+              "last_check_at",
+              "last_successful_check_at",
+              "last_successful_publish_at",
+              "official_content_date",
+              "latest_seen_version",
+              "stale",
+              "stale_reason_codes",
+              "content_age_status",
+              "freshness_policy_version",
+              "content_age_evidence"
+            ],
+            "title": "SourceDataStatus",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "public-contract-v1",
+            "default": "public-contract-v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "data_mode": {
+            "enum": [
+              "sample",
+              "official_snapshot"
+            ],
+            "title": "Data Mode",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/$defs/SourceDataStatus"
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data_mode",
+          "sources"
+        ],
+        "title": "DataStatusResult",
+        "type": "object"
+      }
+    },
+    "ReservedStatusResult": {
+      "model": "taiwan_lab_mcp.models.ReservedStatusResult",
+      "closed": true,
+      "exact_top_level_keys": [
+        "contract_version",
+        "operation",
+        "configured",
+        "result_status",
+        "availability_reason_code",
+        "capabilities",
+        "warnings",
+        "notes"
+      ],
+      "schema": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "public-contract-v1",
+            "default": "public-contract-v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "standards_status",
+              "eqa_status"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "configured": {
+            "const": false,
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "result_status": {
+            "const": "data_unavailable",
+            "default": "data_unavailable",
+            "title": "Result Status",
+            "type": "string"
+          },
+          "availability_reason_code": {
+            "const": "no_serving_snapshot",
+            "default": "no_serving_snapshot",
+            "title": "Availability Reason Code",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operation",
+          "capabilities",
+          "warnings",
+          "notes"
+        ],
+        "title": "ReservedStatusResult",
+        "type": "object"
+      }
+    }
+  },
+  "legacy_public_keys_denied": [
+    "status",
+    "validation_status",
+    "review_status",
+    "candidate_status",
+    "stale_reason",
+    "last_publish_at",
+    "official_data_loaded",
+    "content_age_warning",
+    "not_a_specimen_storage_instruction",
+    "not_pre_submission_specimen_storage",
+    "not_a_receiving_guarantee"
+  ]
+}
