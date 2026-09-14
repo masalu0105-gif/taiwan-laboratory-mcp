@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import zipfile
 import zlib
@@ -223,12 +224,19 @@ def _validated_bundle_manifest(payload: bytes) -> dict[str, Any]:
     return manifest
 
 
+# Windows without the LongPathsEnabled policy fails above MAX_PATH (260 including NUL).
+_DEFAULT_MAX_PATH_LENGTH = 259 if os.name == "nt" else None
+# _write_new_file creates ".<name>.<8 random characters>" next to each target first.
+_TEMP_NAME_OVERHEAD = len("..") + 8
+
+
 def install_nhi_snapshot_bundle(
     data_root: Path,
     *,
     bundle_path: Path,
     actor: str,
     expected_sha256: str | None = None,
+    max_path_length: int | None = _DEFAULT_MAX_PATH_LENGTH,
 ) -> dict[str, Any]:
     """Verify a release bundle, copy its files into the data root and serve it."""
 
@@ -313,6 +321,16 @@ def install_nhi_snapshot_bundle(
         raise SnapshotBundleError("BUNDLE_CONTENT_INVALID", "curated manifest") from exc
 
     data_root = Path(data_root)
+    if max_path_length is not None:
+        absolute_root = os.path.abspath(data_root)
+        longest = max(
+            len(os.path.join(absolute_root, *PurePosixPath(path).parts)) + _TEMP_NAME_OVERHEAD
+            for path in contents
+        )
+        if longest > max_path_length:
+            raise SnapshotBundleError(
+                "BUNDLE_PATH_TOO_LONG", f"{longest} characters > {max_path_length}"
+            )
     for path, data in contents.items():
         target = data_root / PurePosixPath(path)
         if target.exists() and (not target.is_file() or target.read_bytes() != data):
@@ -327,11 +345,14 @@ def install_nhi_snapshot_bundle(
             raise SnapshotBundleError("CURRENT_POINTER_INTEGRITY") from exc
 
     written = 0
-    for path in sorted(contents):
-        target = data_root / PurePosixPath(path)
-        if not target.exists():
-            _write_new_file(target, contents[path])
-            written += 1
+    try:
+        for path in sorted(contents):
+            target = data_root / PurePosixPath(path)
+            if not target.exists():
+                _write_new_file(target, contents[path])
+                written += 1
+    except OSError as exc:
+        raise SnapshotBundleError("BUNDLE_WRITE_FAILED", type(exc).__name__) from exc
     try:
         _load_official_raw_revision(data_root, raw_revision_id)
     except NHIImportError as exc:
@@ -378,7 +399,12 @@ def install_nhi_snapshot_bundle(
         "content_age_evidence": None,
     }
     check_path = data_root / PurePosixPath(check_relative)
-    _write_immutable_json(check_path, check)
+    try:
+        _write_immutable_json(check_path, check)
+    except OSError as exc:
+        raise SnapshotBundleError("BUNDLE_WRITE_FAILED", type(exc).__name__) from exc
+    except NHIImportError as exc:
+        raise SnapshotBundleError("BUNDLE_FILE_CONFLICT", check_relative) from exc
     descriptor = {
         "descriptor_schema_version": 1,
         "source_id": "nhi_fee",

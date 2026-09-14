@@ -361,11 +361,15 @@ def _bundle_exit_code(exc: Exception) -> int:
     code = getattr(exc, "code", "")
     if not isinstance(exc, SnapshotBundleError):
         return 6
-    if code in {"BUNDLE_UNREADABLE", "BUNDLE_ACTOR_INVALID"}:
+    if code in {"BUNDLE_UNREADABLE", "BUNDLE_ACTOR_INVALID", "BUNDLE_PATH_TOO_LONG"}:
         return 2
     if code == "EXPORT_SERVING_STALE":
         return 5
-    if code.startswith("EXPORT_") or code in {"BUNDLE_FILE_CONFLICT", "CURRENT_POINTER_INTEGRITY"}:
+    if code.startswith("EXPORT_") or code in {
+        "BUNDLE_FILE_CONFLICT",
+        "BUNDLE_WRITE_FAILED",
+        "CURRENT_POINTER_INTEGRITY",
+    }:
         return 6
     return 4
 

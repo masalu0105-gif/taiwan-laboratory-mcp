@@ -94,6 +94,8 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 | `BUNDLE_SHA256_MISMATCH` | 下載的檔案和發布時不一樣 | 重新下載，確認 `--sha256` 沒有貼錯 |
 | `BUNDLE_MAGIC_MISMATCH` | 下載到的不是 ZIP（常見是下載到網頁） | 回 Release 頁面重新下載 |
 | `BUNDLE_FILE_CONFLICT` | 資料夾裡已經有同名但內容不同的檔案 | 換一個新的空資料夾再裝 |
+| `BUNDLE_PATH_TOO_LONG` | 資料夾路徑太長，超過 Windows 的 260 字元限制（還沒寫入任何檔案） | 改用短一點的資料夾，例如 `C:\Users\<你的使用者名稱>\taiwan-lab-data` |
+| `BUNDLE_WRITE_FAILED` | 寫檔失敗，常見是磁碟滿了或沒有權限 | 確認磁碟空間與資料夾權限後重裝一次；已寫入的相同檔案會自動略過 |
 
 同一份資料重裝一次會回 `"result":"already_installed"`，不會改動任何東西。
 

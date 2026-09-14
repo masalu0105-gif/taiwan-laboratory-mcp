@@ -480,3 +480,57 @@ def test_cli_export_and_install_snapshot(tmp_path, distribution_identity, capsys
     installed = json.loads(capsys.readouterr().out)
     assert installed["result"] == "installed"
     assert installed["snapshot_id"] == exported["snapshot_id"]
+
+
+def test_install_refuses_paths_over_the_limit_before_writing(tmp_path, distribution_identity):
+    from taiwan_lab_mcp.snapshot_bundle import SnapshotBundleError, install_nhi_snapshot_bundle
+
+    source_root = tmp_path / "source"
+    _serve_official(source_root)
+    exported = _export(source_root, tmp_path / "release")
+    user_root = tmp_path / "user-data"
+
+    # Build directory names alone are 78 characters, so a limit this small is always hit.
+    with pytest.raises(SnapshotBundleError) as error:
+        install_nhi_snapshot_bundle(
+            user_root,
+            bundle_path=Path(exported["bundle_path"]),
+            actor="unit-test-installer",
+            max_path_length=len(str(user_root)) + 60,
+        )
+
+    assert error.value.code == "BUNDLE_PATH_TOO_LONG"
+    assert not (user_root / "raw").exists()
+    assert not (user_root / "curated").exists()
+    assert not (user_root / "manifests").exists()
+
+
+def test_install_reports_write_failures_as_a_bundle_error(
+    tmp_path, distribution_identity, monkeypatch
+):
+    import taiwan_lab_mcp.snapshot_bundle as bundle_module
+
+    source_root = tmp_path / "source"
+    _serve_official(source_root)
+    exported = _export(source_root, tmp_path / "release")
+    user_root = tmp_path / "user-data"
+
+    def failing_write(path, payload):
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(bundle_module, "_write_new_file", failing_write)
+    with pytest.raises(bundle_module.SnapshotBundleError) as error:
+        bundle_module.install_nhi_snapshot_bundle(
+            user_root, bundle_path=Path(exported["bundle_path"]), actor="unit-test-installer"
+        )
+
+    assert error.value.code == "BUNDLE_WRITE_FAILED"
+    assert not (user_root / "manifests").exists()
+
+
+def test_bundle_path_and_write_errors_have_cli_exit_codes():
+    from taiwan_lab_mcp.data_cli import _bundle_exit_code
+    from taiwan_lab_mcp.snapshot_bundle import SnapshotBundleError
+
+    assert _bundle_exit_code(SnapshotBundleError("BUNDLE_PATH_TOO_LONG")) == 2
+    assert _bundle_exit_code(SnapshotBundleError("BUNDLE_WRITE_FAILED")) == 6

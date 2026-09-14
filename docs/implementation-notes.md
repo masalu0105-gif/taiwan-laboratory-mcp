@@ -215,7 +215,28 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
   - `taiwan-lab-data install-snapshot nhi_fee --bundle <zip> [--sha256 <hash>] --actor <id> --data-dir <path> [--json]`：寫入前完成全部檢查；同路徑不同內容拒絕覆寫；寫入後驗 raw revision，再經既有 publish CAS 切換。重裝同一包回 `already_installed`。exit code：2 輸入、4 下載包內容、6 衝突或 publish。
 - 規格解讀：規格沒寫使用者端的取得與啟用方式（見 ADR 背景）。安裝時 check record 沿用發布者最後一次成功檢查時間，使用者端 48 小時後會看到 `upstream_check_overdue`。
 - 測試：`tests/test_snapshot_bundle.py` 14 個（匯出內容只含 raw＋curated、清單 hash、stale 時拒絕匯出、空 data root 安裝後可查、重裝不變、較新包切換並保留 parent、5 種竄改在寫入前擋下、非 ZIP 與整包 SHA-256 不符、既有檔案衝突不覆寫、CLI）。
-- 尚未做：以「專案負責人」代號重建本機 NHI snapshot（需 owner 再確認）、實際匯出正式下載包、建立 GitHub Release（需 owner 確認實際檔案）。
+- ~~尚未做：以「專案負責人」代號重建本機 NHI snapshot（需 owner 再確認）、實際匯出正式下載包、建立 GitHub Release（需 owner 確認實際檔案）。~~ 前兩項已完成（見下方「公開版重建與下載包」）；建立 GitHub Release 仍待 owner 確認實際檔案。
+
+### 公開版重建與下載包（2026-09-14）
+
+- owner 在對話中看過 `owner-review\nhi-public-rebuild-confirmation-2026-09-14.md`（改前／改後原文）後回覆「核准重建」，時間記為 `2026-09-14T21:56:03+08:00`。
+- 以修復後的 uv tool 安裝版（`distribution` identity、review protocol 第 2 版）重建：
+  - raw revision 不變 `75b33643…`。
+  - 10 個 golden cases 取自原 build，只改 reviewer 為「專案負責人」、reviewed_at 為確認時間。
+  - 三關 finding counts 不變；SOURCE／SCHEMA 說明不變；PUB 說明改為確認頁上的新文字。
+  - evidence 放三個檔：本名改代號的公開版 approved golden 檔 `nhi-golden-approved-2026-09-14-public.json`、原網站核對報告、確認頁。
+- 結果：build `nhi_fee-build-76a1402a4dab09361252852e6a8ae0fbd9fa85c0d1ea0feb00a70d8e4b6b55ad`、6,173 rows、DB SHA-256 `659d0c03…`（與原 build bytes 相同）、manifest SHA-256 `fec96b40…`、generation 8、publish event `publish-1993a745…`。新 build 目錄所有檔案逐一搜尋本名：0 筆。舊 build `nhi_fee-build-17880b71…` 保留在 data root，可 rollback。
+- 以新的 MCP stdio 行程查詢：`get_points("09006C")` ok、200 點、snapshot 結尾 `0d8e4b6b55ad`、stale false；`get_data_status` nhi_fee available。
+- 匯出下載包：`C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\release\nhi_fee-snapshot-76a1402a4dab.zip`，1,630,389 bytes，SHA-256 `aa29a34f1c8399f2aa5938bf057b2568ed02fd0d9fd1397291ebe600bd6a0ec6`，manifest＋13 個檔案；ZIP 內每個檔案搜尋本名：0 筆。
+- 試裝：
+  - 第一次試裝到 session scratchpad 深層資料夾時，`install-snapshot` 以未處理的 `FileNotFoundError` 當掉。原因是 `audit\evidence\` 暫存檔完整路徑超過 Windows 260 字元上限，已寫入部分檔案，沒有切換 current。
+  - 改試裝到 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\trial-install`：`installed`、generation 1、寫入 13 檔；再裝一次 `already_installed`、寫入 0 檔；查 `09006C` 200 點、stale false、`local_artifact_available=true`。
+- 長路徑修正：
+  - `install_nhi_snapshot_bundle` 新增 `max_path_length`（Windows 預設 259，其他平台不限）。寫入任何檔案前，先計算每個目標連同暫存檔名的絕對路徑長度，超過回 `BUNDLE_PATH_TOO_LONG`（exit 2）。
+  - 寫檔的 `OSError` 改回 `BUNDLE_WRITE_FAILED`（exit 6），不再丟出 traceback。
+  - `docs/install.md` 錯誤表補上這兩個碼。
+  - 新增 3 個測試。
+  - 深層試裝資料夾留在 scratchpad，未刪除（本機擋刪除指令）。
 - review protocol 第 2 版：新增 package resource `src/taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/2.json`，builder 常數 `OWNER_REVIEW_PROTOCOL_VERSION` 改為 `"2"`。與第 1 版的差異只有：`PUB-R1-OWNER` 範圍改為 `local_mcp_serving_and_github_release_bundle`（依 owner 2026-09-14 選 OD-01 B）、移除「再散布需另行核准」、checklist 加入下載包內容限制（ADR 0001）、公開審核紀錄使用「專案負責人」代號、每次建立 Release 前 owner 確認檔名／大小／SHA-256；另加 `supersedes_version` 與 `reviewer_alias`。來源、格式、golden case 與嚴重度規則和第 1 版完全相同（有測試比對）。第 1 版保留在 package，因為現有 build 的審核紀錄引用它。
 
 ### 本機工具重裝失敗與修復（2026-09-14）
