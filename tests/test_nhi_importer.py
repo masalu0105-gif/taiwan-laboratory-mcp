@@ -382,14 +382,19 @@ def test_official_build_publishes_owner_reviewed_raw_revision(tmp_path, monkeypa
     assert result.provenance.snapshot_id == built["snapshot_id"]
 
 
-def test_official_build_refuses_development_install_identity(tmp_path):
-    from taiwan_lab_mcp.importers.nhi import build_official_nhi_snapshot
+def test_official_build_refuses_development_install_identity(tmp_path, monkeypatch):
+    import taiwan_lab_mcp.importers.nhi as nhi_importer
 
     payload = _official_fixture_payload()
     raw_revision_id = _write_official_raw_revision(tmp_path, payload)
+    # Force the identity so the test means the same thing in an editable checkout and
+    # when CI runs the suite against the installed wheel.
+    monkeypatch.setattr(
+        nhi_importer, "_application_build_identity", lambda: ("development", "d" * 64)
+    )
 
     with pytest.raises(NHIImportError, match="APPLICATION_BUILD_IDENTITY_MISSING"):
-        build_official_nhi_snapshot(
+        nhi_importer.build_official_nhi_snapshot(
             tmp_path,
             raw_revision_id=raw_revision_id,
             approved_golden_cases=_approved_official_cases(payload, raw_revision_id),

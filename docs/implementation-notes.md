@@ -207,6 +207,12 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 - 未做：owner 拒絕新版（`decision=rejected`）目前只回 `REVIEW_DECISION_NOT_APPROVED`、不寫任何狀態，候選會維持 `review_pending`；把候選標成 `rejected` 的流程尚未實作。新版找不到的題目需要人工補題，工具不自動挑新題。
 - 測試：`tests/test_nhi_review.py` 16 個（審核包逐題比對與只讀、找不到題目、無候選、發布後 serving 切換並查到新點數、7 種無效 decision 在任何寫入前擋下、審核包被改、審核包產生後又出現更新候選、major finding 由 builder 擋下、CLI 成功與 exit 5）。
 
+### GitHub CI 失敗的更正（2026-09-14）
+
+- 2026-09-14 21:35 查 `gh run list`：從 commit `3238d70` 起，`3238d70`、`17be1f8`、`4353943`、`be5401c` 四次 CI 都是 failure。先前回報「push 成功、local == remote」只驗證了 commit 有推上去，沒有檢查 GitHub CI 結果；本機驗證只在 repo 外跑了 `tests/test_mcp_stdio.py`，沒有照 CI 在 repo 外跑全部測試。
+- 失敗點（run `34846439844`，windows-latest，步驟「Verify installed wheel outside repository」）：`tests/test_nhi_importer.py::test_official_build_refuses_development_install_identity` 預期「開發安裝」會被拒絕，但 CI 這一步是用安裝好的 wheel 跑，程式判定為正式安裝，所以沒有拒絕（`DID NOT RAISE`）。本機照 CI 方式在 repo 外跑全部測試可重現：1 failed、258 passed、2 skipped。
+- 修正：測試改用 monkeypatch 固定回傳 `development` identity，不再依賴目前的安裝方式。之後每次驗證改為照 CI 在 repo 外跑全部測試，並在 push 後查 CI 結果。
+
 ### TFDA 第一個切片：離線 ZIP 驗證（2026-09-14）
 
 依 owner「3B 馬上做」開始 TFDA。範圍依 SDD §10.2、TDD §8.1 與研究文件切片 1，只做不需要 owner 決定的部分；沒有下載官方 TFDA 檔。
