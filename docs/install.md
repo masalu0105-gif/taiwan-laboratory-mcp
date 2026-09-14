@@ -190,7 +190,8 @@ taiwan-lab-data check nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --a
 ## 已知限制
 
 - 目前只有健保支付標準可以查正式資料。CDC 採檢手冊與 TFDA 醫材許可證還沒有正式資料，查詢會回 `data_unavailable`。
-- 「哪些健保項目屬於檢驗」已由 AI 審核，未經人工複核，紀錄見 [審核紀錄](reviews/nhi-lab-scope-ai-review-2026-09-14.md)。目前 Releases 的健保資料包是審核前做的，裝好後每個項目仍標 `scope_status=review_pending`。新資料包發布後才會顯示判定結果。另有 2 個代碼無法判定，所以新資料包的 `coverage_status` 仍會是 `review_incomplete`。
+- 「哪些健保項目屬於檢驗」由 AI 審核，未經人工複核，紀錄見 [審核紀錄](reviews/nhi-lab-scope-ai-review-2026-09-14.md)。判不出來的代碼一律算檢驗，所以「算檢驗」可能多收少數項目。
+- 最早的 `nhi-data-20260914` 資料包是審核前做的，裝好後每個項目都標 `scope_status=review_pending`。之後發布的資料包每個項目都帶判定。要看到判定，程式與資料包都要換成同一個新 Release 的版本。
 - 不支援查歷史點數；查過去日期會明確回「不支援」。
 - macOS 目前由 GitHub 自動測試驗證，還沒有在實體 Mac 上完整走過這份安裝流程。
 

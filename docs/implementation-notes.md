@@ -403,6 +403,53 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 30011B、30505B 待有官方說明或 owner 知道內容後再判。
 - CI：commit `7a298a1` 的 GitHub Actions run `34863292781` 四個 job（ubuntu 3.10／3.13、windows 3.13、macos 3.13）皆 success。
 
+### Owner 決定：判不出來的一律納入，並核准重建（2026-09-14）
+
+- owner 在 Claude Code 對話中回覆（2026-09-14T23:43:38+08:00，transcript timestamp `2026-09-14T15:43:38.595Z`）：
+  - 原話：「核准重建 我覺得說不定喔，那個你找不出來的，或者是你不知道要判到底是不是的，你就給他放進去。我們寧可錯殺一百，也不要放過一個。」
+- 落地：
+  - PRD OD-02／OD-03 與 SDD D-009／D-010 以刪除線保留舊規則，改為「判不出來的一律納入，依據寫明依 owner 決定」。
+  - 規格解讀：這個決定只套用在本次逐碼審核判不出來的代碼（NHI 30011B、30505B；TFDA 附表判不出來 17 碼與附表查無 3 碼）。沒有 A–P 分類代碼或舊制編號的 TFDA 許可證列涵蓋各類醫材，未套用，仍為 `unknown`，待 owner 決定。
+- NHI 規則檔改判：
+  - `nhi-lab-scope-v2` 改為 961 in／5,212 out／0 pending，`status=complete`。
+  - commit `33a7bdb`：`v2.json` 3,592,715 bytes，SHA-256 `6b4ec1b1a241aa5419368c17e8de544c8173bf7849cbea97a3751d95e6f52a5c`。
+  - v2 第一版（`7a298a1`）沒有被任何 build 或 Release 使用，所以沿用版本名，沒有另開 v3。
+  - owner 清單重產：1,963,542 bytes，SHA-256 `122b2cfb…`。
+- TFDA 決議檔改判：
+  - 附表 548 項中 538 算 IVD、13 不算；附表查無的 3 碼也算 IVD。
+  - 決議檔 461,561 bytes，SHA-256 `ab83604b…`。
+  - owner 清單 265,331 bytes，SHA-256 `7797cfae…`。
+  - 產生腳本 SHA-256 `7e7cb91e…`。
+- 重建：
+  - 新 wheel（`uv build`，SHA-256 `de908043…`）以 `uv pip install --python <uv tool python> --reinstall-package` 裝進 uv tool 環境；identity 為 `distribution`，規則檔 `complete`、6,173 筆。
+  - 重建腳本 `taiwan-lab-mcp-data\automation\rebuild_nhi_scope_v2.py`（SHA-256 `94c0c439…`），先 dry run 印出 10 題改前→改後，再 `--apply`。
+  - golden cases：沿用原 build 的 10 題，只改 `transform`、`expected_fields.scope_status`、`expected_warnings`（`["coverage_review_incomplete"]`→`[]`）與 `reviewed_at`（owner 回覆時間）。reviewer 仍為「專案負責人」。
+  - 三關 review：SOURCE 不變；SCHEMA、PUB 原文加一句以 v2 重建，`reviewed_at` 改為 owner 回覆時間；finding counts 不變。
+  - evidence：
+    - `nhi-golden-approved-2026-09-14-scope-v2.json`（SHA-256 `91d912e4…`）
+    - 原網站核對報告
+    - 重建紀錄 `owner-review\nhi-scope-v2-rebuild-confirmation-2026-09-14.md`（SHA-256 `88ccfbdc…`）
+  - 結果：
+    - build `nhi_fee-build-4ecd71e74f3bc4444a18eabba990fec318915f9bf8a4423769e457bdfe9ebe98`，6,173 rows。
+    - DB SHA-256 `f315aae1…`，manifest SHA-256 `07964d45…`。
+    - generation 13，publish event `publish-4fd9673c…`。
+    - 舊 build `76a1402a…` 保留可 rollback。
+  - 已知不一致：review protocol 第 2 版要求 golden cases 涵蓋「scope pending」情境；依 owner 決定已沒有 pending 代碼，無法涵蓋。protocol 未修改，已寫進重建紀錄。
+- 重建後以 uv tool 的 MCP stdio 行程查詢：
+  - 09006C：200 點、`in_scope`、`nhi-lab-scope-v2`、`coverage_status=complete`、warnings 空、stale false。
+  - 18001C：`out_of_scope`。
+  - 30011B：`in_scope`，locator 寫明依 owner 決定。
+  - 64：`in_scope`。
+  - `get_data_status` 的 nhi_fee 為 available、complete。
+- 新下載包：
+  - `export-snapshot` 輸出 `taiwan-lab-mcp-data\release\nhi_fee-snapshot-4ecd71e74f3b.zip`：1,718,253 bytes，SHA-256 `9642f2ca0eb0b9a29d392072d8325cee00fd0c9e18457eb613341c8f9bd3e6d6`，manifest＋13 檔。
+  - ZIP 內每個檔案搜尋 owner 本名：0 筆。
+  - 試裝到 `%TEMP%\tlv2`（帶 `--sha256`）：`installed`、generation 1、寫入 13 檔；查 09006C 為 200 點、`in_scope`、`complete`、warnings 空。試裝資料夾未刪除（本機擋刪除指令）。
+- 相容性：
+  - 舊 Release `nhi-data-20260914` 的 tag 指向 `402246a`。那版程式把 `rule_bundle_version` 寫死為 v1、`coverage_status` 寫死為 `review_incomplete`。
+  - 新下載包要搭配含 v2 程式的新 tag，安裝說明因此改寫為「程式與資料包都換成同一個新 Release」。
+- 尚未做：建立新的 GitHub Release，需 owner 確認 tag 名稱、檔名、大小、SHA-256。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。
