@@ -289,6 +289,36 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - CLI：`taiwan-lab-data sync tfda_devices --publisher-oid <oid> --data-dir <path> --json`（exit 0 通過、3 discover／fetch 失敗、4 ZIP／欄位失敗）；與 `--input` 互斥。
 - 測試：`tests/test_tfda_source.py` 13 個（身分正確、5 種身分漂移、成功保存 raw 與報告、同 bytes 沿用 raw revision、非 ZIP 保留 raw 但失敗、discover／fetch 失敗不留 raw、CLI）。原本 `sync tfda_devices --publisher-oid` 一律拒絕的測試改為「與 `--input` 同時給才拒絕」。
 - 儲存量提醒：每份官方 ZIP 約 16 MB，官方每 7 日更新；內容有變才會多存一份 raw。
+- 第一次真實下載（2026-09-14 22:4x，uv tool 安裝版）當掉：
+  - 解壓時 `MemoryError: Unable to allocate output buffer`，CLI 直接丟 traceback，沒有寫 staged 報告。ZIP 已先保存為 raw revision `aa38597717b13ee18b02e5e203b94b0a7f69e49dba6fb75d3fdd81bdc90a9f8c`（16,265,433 bytes）。
+  - 原因是整台電腦可承諾記憶體（commit）幾乎用完：`FreeVirtualMemory` 約 714–790 MB／上限 81,640 MB，實體記憶體仍有 13 GB 空閒。主要占用者：
+    - 5 個 `mempalace.mcp_server`（各 3–7 GB private，約 25 GB）
+    - WSL `vmmemWSL` 13.8 GB
+    - 3 個 `mempalace-mcp --read-only`（各 703 MB）
+    - Rojak `vibe_mcp_safe_start.py` 1.4 GB
+  - 以上都不是這個專案的行程，沒有結束任何行程。
+  - 同一份 ZIP 稍後以離線 `validate` 重跑通過。
+  - 量測：解壓峰值約 141 MB；`parse_tfda_csv` 會把 104,619 列、每列 34 欄全部留在記憶體，量測行程在這一步再次 `MemoryError`。
+- 修正（commit `2e60fa5`）：
+  - `importers/tfda.py` 把逐列檢查抽成串流產生器 `_iter_tfda_records`。`parse_tfda_csv` 仍建立完整列（留給之後建資料庫用）。
+  - 新增 `summarize_tfda_csv`，只計數、不保留每列資料；結果與原本「完整解析＋摘要」完全相同，錯誤碼也相同，有測試比對。
+  - 離線驗證、上游下載、`validate` CLI 都改用串流摘要；`MemoryError` 回 `RESOURCE_EXHAUSTED`，照常寫失敗報告（CLI 回 JSON、exit 4），不再丟 traceback。
+  - 新增 8 個測試（摘要一致、4 種失敗碼一致、上游解壓／摘要兩處記憶體不足、CLI 記憶體不足）。
+  - 驗證：repo 內 298 passed（另 2 個為 repo 內舊 `dist/` 已知失敗）；repo 外 wheel 全部測試 298 passed、2 skipped；本機工具以 `uv pip install --python` 就地更新。
+- 修正後真實下載重跑（2026-09-14 22:57，本機工具）：
+  - exit 0、`passed`；metadata 與 CSV 皆 HTTP 200，ZIP 16,265,433 bytes、SHA-256 `de880620…`。
+  - 沿用第一次當掉時已保存的 raw revision `aa385977…`。
+  - 104,619 列、93,219 個許可證字號；註銷狀態空白 49,659／已註銷 53,731／已廢止 1,229。
+  - 報告：`staged/tfda_devices/20260914T145722Z-d87ce1fa4c074eb69f41cd71b4f7cd97/validation.json`。
+- 每日排程加入 TFDA（repo 外 `taiwan-lab-mcp-data\automation\Invoke-NhiDailyCheck.ps1`，同一個 09:30 排程）：
+  - 流程：NHI check 之後執行 `taiwan-lab-data sync tfda_devices --publisher-oid <owner 確認值>`。
+  - 成功：STATUS 多一行「食藥署醫材資料：下載並檢查通過（N 筆）」。
+  - 失敗：寄 TFDA 專用通知信（說明 TFDA 還沒給 MCP 查詢、健保不受影響），STATUS 第一行改為「異常：食藥署醫材資料下載或檢查失敗；…」，原本 NHI 正常時的 exit 0 改為 exit 1。
+  - 第一次試跑發現：Windows PowerShell 5.1 的 `ConvertFrom-Json` 不接受空字串 key（TFDA 摘要的 `cancellation_status_counts` 以 `""` 計空白註銷狀態），TFDA 明明通過卻被判失敗。改為依 exit code 判斷成敗，只用文字比對取 `rows`、`stage`、`error_code`。
+  - 試跑紀錄（email 皆為 dry-run，沒有真的寄出）：
+    - 正常：exit 0、STATUS「OK：健保支付標準表沒有變動」＋「食藥署醫材資料：下載並檢查通過（104,619 筆）」。
+    - 故意傳錯 TFDA 發布機關代號：exit 1、STATUS「異常：食藥署醫材資料下載或檢查失敗；健保支付標準表沒有變動」＋「（discover／DISCOVERY_PUBLISHER_MISMATCH／exit=3）；email：試跑成功（沒有真的寄出）」。
+    - 之後再跑一次正常流程，STATUS 恢復 OK。
 
 ### GitHub Release `nhi-data-20260914`（2026-09-14）
 
