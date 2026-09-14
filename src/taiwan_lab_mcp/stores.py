@@ -56,6 +56,32 @@ def _now(clock: Callable[[], datetime] | None) -> datetime:
     return value
 
 
+OPEN_DATA_LICENSE_STATEMENT = (
+    "此開放資料依政府資料開放授權條款 (Open Government Data License) 進行公眾釋出，"
+    "使用者於遵守本條款各項規定之前提下，得利用之。"
+    "政府資料開放授權條款：https://data.gov.tw/license"
+)
+_TAIPEI = timezone(timedelta(hours=8))
+
+
+def nhi_attribution_text(
+    *,
+    provider: str,
+    dataset_name: str,
+    official_modified_at_raw: str | None,
+    retrieved_at: datetime,
+) -> str:
+    """Attribution in the 政府資料開放授權條款 appendix form: 機關 [年份] [名稱與版本] + 聲明."""
+
+    modified = (official_modified_at_raw or "").strip()
+    if modified[:4].isdigit():
+        year = modified[:4]
+    else:
+        year = str(retrieved_at.astimezone(_TAIPEI).year)
+    version = f" 官方標示更新時間 {modified}" if modified else ""
+    return f"{provider} {year} {dataset_name}{version}。{OPEN_DATA_LICENSE_STATEMENT}"
+
+
 def _nhi_scope_rule_version(manifest: dict[str, Any]) -> str:
     for rule in manifest["transform"]["rules"]:
         version = rule.get("version") if isinstance(rule, dict) else None
@@ -498,7 +524,12 @@ def _read_nhi_state(data_root: Path, now: datetime) -> OfficialState:
             rule_bundle_version=_nhi_scope_rule_version(manifest),
             license_name=source["license_name"],
             license_url=source["license_url"],
-            attribution=source["attribution"],
+            attribution=nhi_attribution_text(
+                provider=source["provider"],
+                dataset_name=source["dataset_name"],
+                official_modified_at_raw=official.get("modified_at_raw"),
+                retrieved_at=retrieved_at,
+            ),
             coverage_status=_nhi_coverage_status(manifest, rows),
             stale=bool(stale_reason_codes),
             stale_reason_codes=stale_reason_codes,

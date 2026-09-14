@@ -4,7 +4,7 @@ from datetime import date
 from typing import Any
 
 from ..config import DataContext
-from ..models import NHIRecord, SourceStatus, ToolResult
+from ..models import NHIRecord, NHISearchRecord, SourceStatus, ToolResult
 from ..rules.nhi import load_aliases
 from ..sources import NHI_FEE
 from ..stores import OfficialState, read_nhi_state
@@ -60,12 +60,48 @@ def _official_record(row: dict[str, Any], matched_by: list[str] | None = None) -
     )
 
 
+def _sample_summary(row: dict[str, Any], matched_by: list[str]) -> NHISearchRecord:
+    return NHISearchRecord.from_note(
+        row.get("note"),
+        matched_by=matched_by,
+        code_raw=row.get("code", ""),
+        points=row.get("points"),
+        effective_start=None,
+        effective_end=None,
+        possible_open_end_sentinel=False,
+        name_zh_raw=row.get("name_zh"),
+        name_en_raw=row.get("name_en"),
+        scope_status="review_pending",
+    )
+
+
+def _official_summary(row: dict[str, Any], matched_by: list[str]) -> NHISearchRecord:
+    return NHISearchRecord.from_note(
+        row["note_raw"],
+        matched_by=matched_by,
+        code_raw=row["code_raw"],
+        points=row["points"],
+        effective_start=row["effective_start"],
+        effective_end=row["effective_end"],
+        possible_open_end_sentinel=bool(row["possible_open_end_sentinel"]),
+        name_zh_raw=row["name_zh_raw"],
+        name_en_raw=row["name_en_raw"],
+        scope_status=row["scope_status"],
+    )
+
+
+# Owner decision 2026-09-15: bounded so a full page stays under host output limits.
+SEARCH_PAGE_MAX = 50
+
+
 def _valid_text(value: Any) -> bool:
     return isinstance(value, str) and 0 < len(value) <= 200 and bool(norm(value))
 
 
 def _valid_page(limit: Any, offset: Any) -> bool:
-    return type(limit) is int and 1 <= limit <= 100 and type(offset) is int and offset >= 0
+    return (
+        type(limit) is int and 1 <= limit <= SEARCH_PAGE_MAX and type(offset) is int and offset >= 0
+    )
 
 
 def _matched_by(
@@ -204,7 +240,7 @@ class NHIAdapter:
                 operation="search_payment_items",
                 query=request,
                 data_mode=self.context.mode,
-                note="query 必須是非空字串；limit 為 1–100 的整數，offset 不得小於 0。",
+                note="query 必須是非空字串；limit 為 1–50 的整數，offset 不得小於 0。",
             )
         state_or_unavailable = self._sample_or_unavailable(
             "search_payment_items", request, "NHI official serving snapshot 尚未建立。"
@@ -227,7 +263,7 @@ class NHIAdapter:
                 query=request,
                 rows=rows,
                 provenance=NHI_FEE,
-                record_factory=lambda row: _sample_record(
+                record_factory=lambda row: _sample_summary(
                     row, _matched_by(row, query, official=False)
                 ),
                 source_id="nhi_fee",
@@ -273,7 +309,7 @@ class NHIAdapter:
             query=request,
             rows=sorted(rows, key=rank),
             provenance=state.provenance,
-            record_factory=lambda row: _official_record(
+            record_factory=lambda row: _official_summary(
                 row, match_by.get(row["source_row_sha256"], ["code"])
             ),
             source_id="nhi_fee",

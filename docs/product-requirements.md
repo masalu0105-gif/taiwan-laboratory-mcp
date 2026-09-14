@@ -83,7 +83,7 @@ P1.1 的核心價值是「縮短找到官方資料並核對原文的時間」。
 | `get_submission_rule` | compatibility alias | `disease: string` | `cdc_manual` | sample + official | alias 到 `get_specimen_requirement`；回原始送驗相關欄位與定位 |
 | `find_authorized_lab` | active | `query: string, city: string|null=null` | `cdc_recognized_labs` | sample + official | 依疾病／目的／方法／證號／機構與 optional city 回名冊候選，不保證收件 |
 | `get_lab_scope` | compatibility alias | `query: string` | `cdc_recognized_labs` | sample + official | 使用 `find_authorized_lab(query, city=null)` 的相同 matching 與 default page |
-| `search_payment_items` | active | `query: string, limit: integer=20, offset: integer=0` | `nhi_fee` | sample + official | 查全表代碼／官方名稱／approved alias；回 total、分頁、scope、coverage、matched_by |
+| `search_payment_items` | active | `query: string, limit: integer=20, offset: integer=0` | `nhi_fee` | sample + official | 查全表代碼／官方名稱／approved alias；回 total、分頁、scope、coverage、matched_by。每筆為摘要 record `nhi_fee_summary`：代碼、點數、起迄日、中英文名稱、scope_status、備註前 60 字與全文字數；`limit` 1–50（owner 2026-09-15，避免超過 host 輸出上限）；完整備註與 scope 依據用 `get_points`／`get_payment_rule` |
 | `search_lab_code` | compatibility alias | `query: string` | `nhi_fee` | sample + official | 使用 `search_payment_items(query, limit=20, offset=0)`；名稱不代表完整 laboratory scope |
 | `get_points` | active | `code: string, as_of: string|null=null` | `nhi_fee` | sample + official | null 才做 current exact-code lookup；non-null 依下方 precedence 固定拒絕歷史查詢 |
 | `get_payment_rule` | active | `query: string` | `nhi_fee` | sample + official | trim 後非空且按 exact code 查詢；wrong type／空字串回 `invalid_request`，合法非空但無 exact match 回 `not_found`；不套用未經來源證實的固定碼長 regex |

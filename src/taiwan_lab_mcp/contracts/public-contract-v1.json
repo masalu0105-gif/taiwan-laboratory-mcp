@@ -1265,6 +1265,162 @@
         "type": "object"
       }
     },
+    "nhi_fee_summary": {
+      "required": [
+        "record_type",
+        "matched_by",
+        "code_raw",
+        "points",
+        "effective_start",
+        "effective_end",
+        "possible_open_end_sentinel",
+        "name_zh_raw",
+        "name_en_raw",
+        "scope_status",
+        "note_preview",
+        "note_chars",
+        "note_truncated"
+      ],
+      "model": "taiwan_lab_mcp.models.NHISearchRecord",
+      "schema": {
+        "additionalProperties": false,
+        "description": "Search-list summary of an NHI row; exact-code lookups return the full NHIRecord.",
+        "properties": {
+          "record_type": {
+            "const": "nhi_fee_summary",
+            "default": "nhi_fee_summary",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "code",
+                "name_zh",
+                "name_en",
+                "alias",
+                "note"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Matched By",
+            "type": "array"
+          },
+          "code_raw": {
+            "title": "Code Raw",
+            "type": "string"
+          },
+          "points": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points"
+          },
+          "effective_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Start"
+          },
+          "effective_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective End"
+          },
+          "possible_open_end_sentinel": {
+            "title": "Possible Open End Sentinel",
+            "type": "boolean"
+          },
+          "name_zh_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Zh Raw"
+          },
+          "name_en_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En Raw"
+          },
+          "scope_status": {
+            "enum": [
+              "in_scope",
+              "out_of_scope",
+              "review_pending"
+            ],
+            "title": "Scope Status",
+            "type": "string"
+          },
+          "note_preview": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Preview"
+          },
+          "note_chars": {
+            "minimum": 0,
+            "title": "Note Chars",
+            "type": "integer"
+          },
+          "note_truncated": {
+            "title": "Note Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "matched_by",
+          "code_raw",
+          "points",
+          "effective_start",
+          "effective_end",
+          "possible_open_end_sentinel",
+          "name_zh_raw",
+          "name_en_raw",
+          "scope_status",
+          "note_preview",
+          "note_chars",
+          "note_truncated"
+        ],
+        "title": "NHISearchRecord",
+        "type": "object"
+      }
+    },
     "cdc_specimen": {
       "required": [
         "record_type",
@@ -2362,6 +2518,7 @@
                     "cdc_recognized_lab": "#/$defs/CDCLabRecord",
                     "cdc_specimen": "#/$defs/CDCSpecimenRecord",
                     "nhi_fee": "#/$defs/NHIRecord",
+                    "nhi_fee_summary": "#/$defs/NHISearchRecord",
                     "tfda_device": "#/$defs/TFDARecord"
                   },
                   "propertyName": "record_type"
@@ -2369,6 +2526,9 @@
                 "oneOf": [
                   {
                     "$ref": "#/$defs/NHIRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/NHISearchRecord"
                   },
                   {
                     "$ref": "#/$defs/CDCSpecimenRecord"
@@ -2632,6 +2792,144 @@
               "scope_basis_locator"
             ],
             "title": "NHIRecord",
+            "type": "object"
+          },
+          "NHISearchRecord": {
+            "additionalProperties": false,
+            "description": "Search-list summary of an NHI row; exact-code lookups return the full NHIRecord.",
+            "properties": {
+              "record_type": {
+                "const": "nhi_fee_summary",
+                "default": "nhi_fee_summary",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "matched_by": {
+                "items": {
+                  "enum": [
+                    "code",
+                    "name_zh",
+                    "name_en",
+                    "alias",
+                    "note"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "title": "Matched By",
+                "type": "array"
+              },
+              "code_raw": {
+                "title": "Code Raw",
+                "type": "string"
+              },
+              "points": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Points"
+              },
+              "effective_start": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effective Start"
+              },
+              "effective_end": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effective End"
+              },
+              "possible_open_end_sentinel": {
+                "title": "Possible Open End Sentinel",
+                "type": "boolean"
+              },
+              "name_zh_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name Zh Raw"
+              },
+              "name_en_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name En Raw"
+              },
+              "scope_status": {
+                "enum": [
+                  "in_scope",
+                  "out_of_scope",
+                  "review_pending"
+                ],
+                "title": "Scope Status",
+                "type": "string"
+              },
+              "note_preview": {
+                "anyOf": [
+                  {
+                    "maxLength": 60,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Note Preview"
+              },
+              "note_chars": {
+                "minimum": 0,
+                "title": "Note Chars",
+                "type": "integer"
+              },
+              "note_truncated": {
+                "title": "Note Truncated",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "matched_by",
+              "code_raw",
+              "points",
+              "effective_start",
+              "effective_end",
+              "possible_open_end_sentinel",
+              "name_zh_raw",
+              "name_en_raw",
+              "scope_status",
+              "note_preview",
+              "note_chars",
+              "note_truncated"
+            ],
+            "title": "NHISearchRecord",
             "type": "object"
           },
           "NhiLocator": {

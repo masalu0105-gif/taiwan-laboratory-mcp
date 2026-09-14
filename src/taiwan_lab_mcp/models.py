@@ -195,6 +195,39 @@ class NHIRecord(BaseModel):
     scope_basis_locator: str | None
 
 
+NHI_NOTE_PREVIEW_CHARS = 60
+
+
+class NHISearchRecord(BaseModel):
+    """Search-list summary of an NHI row; exact-code lookups return the full NHIRecord."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: Literal["nhi_fee_summary"] = "nhi_fee_summary"
+    matched_by: list[Literal["code", "name_zh", "name_en", "alias", "note"]] = Field(min_length=1)
+    code_raw: str
+    points: int | None
+    effective_start: date | None
+    effective_end: date | None
+    possible_open_end_sentinel: StrictBool
+    name_zh_raw: str | None
+    name_en_raw: str | None
+    scope_status: Literal["in_scope", "out_of_scope", "review_pending"]
+    note_preview: str | None = Field(max_length=NHI_NOTE_PREVIEW_CHARS)
+    note_chars: int = Field(ge=0)
+    note_truncated: StrictBool
+
+    @classmethod
+    def from_note(cls, note: str | None, **fields: Any) -> NHISearchRecord:
+        text = note or ""
+        return cls(
+            **fields,
+            note_preview=text[:NHI_NOTE_PREVIEW_CHARS] or None,
+            note_chars=len(text),
+            note_truncated=len(text) > NHI_NOTE_PREVIEW_CHARS,
+        )
+
+
 class CDCSpecimenRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -247,7 +280,7 @@ class TFDARecord(BaseModel):
     classification_code: str | None
 
 
-Record = Union[NHIRecord, CDCSpecimenRecord, CDCLabRecord, TFDARecord]
+Record = Union[NHIRecord, NHISearchRecord, CDCSpecimenRecord, CDCLabRecord, TFDARecord]
 
 SourceId = Literal["cdc_manual", "cdc_recognized_labs", "nhi_fee", "tfda_device"]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]

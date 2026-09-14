@@ -572,7 +572,7 @@ scope_status, scope_rule_version, scope_basis_locator
 #### 查詢邊界
 
 - `get_points(code, as_of=null)` 的precedence完全依PRD §5.3：先驗所有參數；wrong type、空字串、非strict/無效`YYYY-MM-DD`回`invalid_request`。合法non-null `as_of`在讀source availability與查code前固定回`historical_query_unsupported`、`historical_truth_supported=false`、0 items；只有null才exact lookup serving全表並回原始有效期間與`scope_status`。不得回current points、日期涵蓋布林或其他可被誤讀為as-of事實的欄位。
-- `search_payment_items(query, limit=20, offset=0)` 是中性的正式全表候選搜尋，依序排序：exact code、exact official name／approved alias、prefix、substring，再以 code／`source_row_sha256` 穩定排序。每列都帶 `scope_status`、命中欄位與 truncation；scope registry 未核准時仍可回候選，但 `coverage_status=review_incomplete`，不得稱完整 laboratory清單。
+- `search_payment_items(query, limit=20, offset=0)` 是中性的正式全表候選搜尋，依序排序：exact code、exact official name／approved alias、prefix、substring，再以 code／`source_row_sha256` 穩定排序。每列都帶 `scope_status`、命中欄位與 truncation；每列 record 為 `NHISearchRecord`（`record_type=nhi_fee_summary`），只含 `code_raw`、`points`、起迄日、`possible_open_end_sentinel`、中英文名稱原文、`scope_status`、`note_preview`（前60字）、`note_chars`、`note_truncated`，`limit` 為1–50（owner 2026-09-15）；exact-code的`get_points`／`get_payment_rule`仍回完整`NHIRecord`。scope registry 未核准時仍可回候選，但 `coverage_status=review_incomplete`，不得稱完整 laboratory清單。
 - 舊`search_lab_code`是`search_payment_items`的相容wrapper，回傳相同候選與scope warning；`get_payment_rule(query)` 的 wrong type／trim 後空字串回 `invalid_request`，合法非空但沒有 exact code 回 `not_found`，不套固定碼長 regex；命中時只回原始備註／定位，不作名稱搜尋或個案申報判定。
 - 只有 `decision_status=approved` 的 alias參與production search。Alias registry每列保存 `alias_raw`、`code`、language、basis type/URL/locator、rule version/hash、reviewer/time/status；normalize collision時回所有命中候選，不做任意 winner。
 - 空結果只表示 serving snapshot 未命中，不代表「健保不給付」。
