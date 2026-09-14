@@ -372,6 +372,7 @@ def test_official_build_publishes_owner_reviewed_raw_revision(tmp_path, monkeypa
     assert [review["gate_id"] for review in reviews] == manifest["review"]["required_gates"]
     assert {review["reviewer_id"] for review in reviews} == {"unit-test-only-reviewer"}
     assert {review["protocol_id"] for review in reviews} == {"nhi-r1-owner-review"}
+    assert {review["protocol_version"] for review in reviews} == {"2"}
     validate_audit_evidence(tmp_path, manifest)
 
     monkeypatch.setenv("TAIWAN_LAB_DATA_MODE", "official_snapshot")
@@ -380,6 +381,29 @@ def test_official_build_publishes_owner_reviewed_raw_revision(tmp_path, monkeypa
     assert result.result_status == "ok"
     assert result.items[0].record.points == 10
     assert result.provenance.snapshot_id == built["snapshot_id"]
+
+
+def test_owner_review_protocol_v2_covers_github_release_and_keeps_v1_history():
+    import json
+    from importlib.resources import files
+
+    from taiwan_lab_mcp.importers.nhi import _owner_review_protocol
+
+    protocols = files("taiwan_lab_mcp").joinpath("review_protocols", "nhi-r1-owner-review")
+    v1 = json.loads(protocols.joinpath("1.json").read_text(encoding="utf-8"))
+    v2 = json.loads(protocols.joinpath("2.json").read_text(encoding="utf-8"))
+
+    assert _owner_review_protocol()[:2] == ("nhi-r1-owner-review", "2")
+    assert v1["gates"]["PUB-R1-OWNER"]["scope"] == "local_mcp_serving_only"
+    assert v2["supersedes_version"] == "1"
+    assert v2["gates"]["PUB-R1-OWNER"]["scope"] == "local_mcp_serving_and_github_release_bundle"
+    assert "excluded" not in v2["gates"]["PUB-R1-OWNER"]
+    assert v2["reviewer_alias"] == "專案負責人"
+    # Source, schema, golden-case and severity rules are unchanged from version 1.
+    for key in ("golden_cases", "severity_policy"):
+        assert v2[key] == v1[key]
+    for gate_id in ("NHI-R1-SOURCE", "NHI-R1-SCHEMA"):
+        assert v2["gates"][gate_id] == v1["gates"][gate_id]
 
 
 def test_official_build_refuses_development_install_identity(tmp_path, monkeypatch):

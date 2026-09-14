@@ -22,7 +22,11 @@
 
 CDC 結果須保留條件與例外；NHI 支付點數不能直接當成新臺幣金額；TFDA 許可證比對不能推論產品可互換。查不到資料時，說明搜尋範圍及資料狀態。實際作業仍需核對官方原文與適用的機構流程。
 
-## 五分鐘開始（Windows PowerShell）
+## 查正式健保資料（Windows／macOS）
+
+照 **[安裝說明](docs/install.md)** 做：安裝工具、從 [Releases](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/releases) 下載已審核的健保資料、用 `taiwan-lab-data install-snapshot` 裝進電腦，再接到 Claude 桌面版或 Claude Code。目前只有健保支付標準有正式資料；CDC 與 TFDA 仍會回 `data_unavailable`。
+
+## 五分鐘看示範資料（Windows PowerShell）
 
 需先安裝 Python 3.10 以上與 Git。本專案尚未發布到 PyPI，請從此 repo 安裝。
 
