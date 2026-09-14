@@ -896,7 +896,7 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 | PRD owner decision | SDD decision | 現況與阻擋點 |
 | --- | --- | --- |
 | `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；TFDA／CDC未決 |
-| `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14），官方文件依據研究中；sentinel維持原值＋可能未設定結束日推論 |
+| `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14）；~~官方文件依據研究中~~ AI審核已完成為`nhi-lab-scope-v2`（2026-09-14，見`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`），6,173碼中2碼仍`review_pending`；sentinel維持原值＋可能未設定結束日推論 |
 | `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14） |
 | `OD-04` | `D-011` | 待指定CDC內容與ODS認可制度reviewer及turnaround |
 | `OD-05` | `D-008`、`D-012` | NHI不hard-stop、支援Windows與macOS（2026-09-14）；TFDA／CDC stale門檻仍依各來源另定 |

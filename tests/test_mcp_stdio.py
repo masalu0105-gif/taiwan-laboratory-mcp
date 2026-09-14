@@ -151,7 +151,7 @@ def test_nhi_04_as_of_is_explicitly_unsupported_in_p1_1(tmp_path):
             assert data["result_status"] == "ok"
             assert data["data_mode"] == "official_snapshot"
             assert data["sample_only"] is False
-            assert data["coverage_status"] == "review_incomplete"
+            assert data["coverage_status"] == "complete"
             assert data["provenance"]["source_id"] == "nhi_fee"
 
             historical = await client.call_tool(
@@ -169,7 +169,7 @@ def test_nhi_04_as_of_is_explicitly_unsupported_in_p1_1(tmp_path):
                 if item["source_id"] == "nhi_fee"
             )
             assert nhi_status["availability"] == "available"
-            assert nhi_status["coverage_status"] == "review_incomplete"
+            assert nhi_status["coverage_status"] == "complete"
 
     asyncio.run(asyncio.wait_for(exercise(), timeout=60))
 

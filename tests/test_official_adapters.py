@@ -26,7 +26,7 @@ def test_nhi_02_name_and_reviewed_alias_search_returns_scoped_candidates(tmp_pat
     assert result.coverage_status == "review_incomplete"
     assert [item.record.code_raw for item in result.items] == ["09006C", "09007C"]
     assert all(item.record.matched_by == ["alias"] for item in result.items)
-    assert all(item.record.scope_status == "review_pending" for item in result.items)
+    assert [item.record.scope_status for item in result.items] == ["in_scope", "review_pending"]
 
 
 NHI_NOT_OFFICIAL_NOTE = "非健保署官方服務，內容以健保署公告為準。"

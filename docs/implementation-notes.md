@@ -361,6 +361,47 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 測試：`tests/test_tfda_importer.py` 42 個（研究 header 比對、字串與 row hash、多列字號、摘要數字、magic bytes、截斷 ZIP、10 種 entry 規則、反斜線路徑、解壓上限剛好等於與超過、壓縮檔上限、壓縮比、宣告大小竄改、16 種 CSV／日期／必填失敗、無 BOM 警告、staged 報告只寫 staged、失敗報告、CLI）。
 - 官方檔一次性驗證（owner 同意）：2026-09-14 21:32 以 curl 下載 `https://data.fda.gov.tw/data/opendata/export/68/csv`（HTTP 200、`application/zip`、無 redirect），存於 repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\tfda-validation\tfda-68-csv-20260914.zip`（16,265,433 bytes、SHA-256 `de880620c56177e492806618f103fc7ac55b4f7302e7870c9992facba7f08292`，與研究文件 2026-09-13 的 ZIP hash 相同）。以 uv tool 安裝版 `taiwan-lab-data validate tfda_devices --input ... --json` 檢查：exit 0、`passed`；entry `68_2.csv` 70,554,601 bytes、SHA-256 `bce64d9276d1072ce9b52c098bbd943184a357d1dcff2cab722e75ddb5d5c370`；104,619 列、93,219 個許可證字號、11,229 個字號有多列、單一字號最多 4 列；註銷狀態空白 49,659／已註銷 53,731／已廢止 1,229；空值數 註銷日期 49,543、註銷理由 53,879、舊證字號 103,615、醫療器材級數 11,439、劑型 104,619、包裝 104,432、申請商名稱 1、申請商統一編號 794、製造廠國別 25，均與研究文件 §5／§6 實測值一致；四個日期欄沒有格式錯誤、有效日期沒有空白。輸出存於同資料夾 `validate-20260914.json`。這只是離線檢查，沒有建立 raw revision、candidate 或任何 MCP 可查的資料。
 
+### 健保「哪些項目算檢驗」AI 審核（2026-09-14）
+
+- owner 決定：
+  - `NHI-R1-SCOPE` 由 AI 審核（見上方「Owner 決定：AI 審核、取消 pilot、清理舊資料」）。
+  - owner 另說「哪些項目算檢驗，你不需要幫我加上備註」，所以結果 notes 不加 AI 審核備註（PRD OD-02 已以刪除線標示）。
+- 審核紀錄（依據文件、判定標準、逐項與逐碼結果、與衛福部值集差異）：`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`。
+- 規格解讀：
+  - 規則版本改為 `nhi-lab-scope-v2`，保留 v1 空規則檔作歷史，理由是規則檔內容與 hash 綁在 build fingerprint。
+  - `coverage_status=complete` 的條件是 build 內每一列都有核准規則；manifest `capability_reviews` 的 `NHI-R1-SCOPE` 依此寫 `approved` 或 `pending`，runtime 讀 manifest 並再確認沒有 `review_pending` 列。
+  - SDD 沒寫這個判斷方式，這是依 SDD「Capability gate核准會改rule bundle與curated build ID，必須新build後才能變成complete」的實作解讀。
+- 判定標準由 AI reviewer 自訂，寫在規則檔 `note`：取自病人的檢體在實驗室進行的檢查算檢驗；在病人身上進行的檢查、採檢處置、計畫管理費與治療不算；官方文字沒說明檢查對象與方法的留 `review_pending`。
+- 依據與對照資料（repo 外 `taiwan-lab-mcp-data\nhi-scope-research\`）：
+  - 支付標準 ZIP：`dl-99892-…-1.zip`，9,243,815 bytes，SHA-256 `09f3dcf8…`。
+  - 第二部第二章第一節 doc：SHA-256 `410d4159…`。
+  - 衛福部 TW Core「檢驗值集」2022-07-01：`twcore-ValueSet-laboratory-category-tw-2022-07-01.json`，41,674 bytes，SHA-256 `cf01d953af43bb58cd9b49412e88de4043a207b798eb224c1c659c60d8049dfa`，只作對照。
+  - 產生規則檔的腳本：`build_scope_bundle.py`，SHA-256 `be4e7c29…`。
+- 結果：6,173 碼中算檢驗 959、不算 5,212、無法判定 2。無法判定的是 30011B 黴菌平板試驗、30505B 電氣解析術，支付標準與 CSV 都沒有說明，網路搜尋也沒找到。
+  - 因為這 2 碼，正式資料重建後 `coverage_status` 仍是 `review_incomplete`。
+- 產出：
+  - `src/taiwan_lab_mcp/rules/nhi_lab_scope/v2.json`：3,592,558 bytes，SHA-256 `37d52b6e…`。
+  - owner 可讀清單 `taiwan-lab-mcp-data\owner-review\nhi-lab-scope-list-2026-09-14.csv`：UTF-8 BOM，1,963,434 bytes，SHA-256 `dbffcb1f…`。
+- 程式改動：
+  - `rules/nhi.py` 接受 v1／v2，並要求每筆規則版本等於規則檔版本。
+  - importer 的 transform、curated row、manifest capability status 與 golden case 預期 warnings 改為依規則與列涵蓋度計算。
+  - `stores.py` 的 `rule_bundle_version` 與 `coverage_status` 改讀 manifest，不再寫死。
+  - 審核包重綁 golden cases 時同步更新 `expected_warnings`，有變化時列在逐題比對。
+- 測試：
+  - 新增 `tests/test_nhi_scope.py` 5 個：規則檔版本與 AI reviewer、版本不一致拒絕、全列有規則時 `complete`、缺規則時 `review_incomplete`、golden warnings 跟著涵蓋度。
+  - 新增 `tests/test_nhi_review.py` 1 個：審核包重綁 warnings。
+  - 依新行為更新 3 個既有測試：stdio 單列 09006C 變 `complete`、alias 搜尋兩列 scope、package 必含 v1／v2 規則檔。
+- 驗證：
+  - in-repo `pytest` 306 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）。
+  - `ruff check`／`ruff format --check src tests` 通過；`git diff --check` 通過。
+  - `uv build` wheel 241,407 bytes（50 檔，SHA-256 `7f781b54…`）、sdist 462,393 bytes（102 檔）。
+  - repo 外 venv 安裝 wheel，在 repo 外 cwd 以 `--import-mode=importlib` 跑全部測試：306 passed，import 路徑為該 venv site-packages。
+  - 安裝後 contract 101,746 bytes 與 repo 相同；stdio discovery 22 個工具，名稱與 contract operations 相同。
+- 尚未做：
+  - 本機 serving build 與已發布的 `nhi-data-20260914` 仍是 v1 規則，全部 `review_pending`。
+  - 用 v2 重建 serving、發新 Release，都需要 owner 確認。
+  - 30011B、30505B 待有官方說明或 owner 知道內容後再判。
+
 ## 目前驗證證據
 
 以下為 2026-09-14 同步保留原始檔與授權代碼核對修改後、基於 commit `a14b1da` 加上未提交 worktree 變更的重跑結果（前兩版記錄為 `155 passed`、`177 passed`）：

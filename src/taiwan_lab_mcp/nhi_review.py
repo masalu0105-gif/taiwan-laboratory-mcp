@@ -28,6 +28,7 @@ from .importers.nhi import (
     _owner_review_protocol,
     _packaged_rule_bundles,
     _same_json_value,
+    _serving_warnings,
     active_nhi_transform,
     build_official_nhi_snapshot,
     parse_nhi_csv,
@@ -237,6 +238,7 @@ def prepare_nhi_review_packet(data_root: Path, *, output_dir: Path) -> dict[str,
         row.code_normalized: _curated_row(row, scope_rules_by_code) for row in parsed.rows
     }
     raw_sha256 = sha256_bytes(payload)
+    candidate_warnings = _serving_warnings(rows_by_code.values())
     transform = active_nhi_transform()
     modified_at_raw = fetch_record["discovery"].get("official_modified_at_raw")
 
@@ -255,6 +257,14 @@ def prepare_nhi_review_packet(data_root: Path, *, output_dir: Path) -> dict[str,
             for field, before in sorted(previous["expected_fields"].items())
             if field in row and not _same_json_value(before, row[field])
         ]
+        if previous.get("expected_warnings") != candidate_warnings:
+            changes.append(
+                {
+                    "field": "expected_warnings",
+                    "before": previous.get("expected_warnings"),
+                    "after": candidate_warnings,
+                }
+            )
         comparisons.append(
             {
                 "case_id": previous["case_id"],
@@ -275,6 +285,7 @@ def prepare_nhi_review_packet(data_root: Path, *, output_dir: Path) -> dict[str,
                     "source_row_number": row["source_row_number"],
                 },
                 "source_row_sha256": row["source_row_sha256"],
+                "expected_warnings": candidate_warnings,
                 "expected_fields": {
                     field: row[field] if field in row else before
                     for field, before in previous["expected_fields"].items()

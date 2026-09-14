@@ -305,6 +305,52 @@ def test_review_packet_rebinds_approved_cases_to_pending_candidate(tmp_path, dis
     assert _descriptor_bytes(data_root) == descriptor_before
 
 
+def test_review_packet_rebinds_expected_warnings_to_candidate_scope_coverage(
+    tmp_path, distribution_identity, monkeypatch
+):
+    import taiwan_lab_mcp.importers.nhi as nhi_importer
+    import taiwan_lab_mcp.nhi_review as nhi_review
+
+    data_root = tmp_path / "data"
+    _serve_official(data_root)
+    assert _check(data_root, _rows({3: 35}))["result"] == "changed"
+    _, alias_bytes = nhi_importer._packaged_rule_bundles()
+    bundle = {
+        "rule_version": "nhi-lab-scope-v2",
+        "source_id": "nhi_fee",
+        "status": "complete",
+        "entries": [
+            {
+                "code": f"9{index:04d}C",
+                "scope_status": "in_scope",
+                "basis_type": "nhi_fee_schedule_section",
+                "basis_url": "https://example.test/scope",
+                "basis_locator": "unit test section",
+                "rule_version": "nhi-lab-scope-v2",
+                "reviewer_id": "ai-reviewer:unit-test",
+                "reviewed_at": "2026-09-14T23:00:00+08:00",
+                "decision_status": "approved",
+            }
+            for index in range(1, 11)
+        ],
+    }
+
+    def patched_bundles():
+        return json.dumps(bundle).encode(), alias_bytes
+
+    monkeypatch.setattr(nhi_importer, "_packaged_rule_bundles", patched_bundles)
+    monkeypatch.setattr(nhi_review, "_packaged_rule_bundles", patched_bundles)
+
+    packet_summary = nhi_review.prepare_nhi_review_packet(data_root, output_dir=tmp_path / "r")
+    packet = json.loads(Path(packet_summary["packet_path"]).read_text(encoding="utf-8"))
+
+    assert [case["expected_warnings"] for case in packet["proposed_cases"]] == [[]] * 10
+    unchanged_points = next(item for item in packet["case_comparisons"] if item["code"] == "90001C")
+    assert unchanged_points["changes"] == [
+        {"field": "expected_warnings", "before": ["coverage_review_incomplete"], "after": []}
+    ]
+
+
 def test_review_packet_reports_golden_codes_missing_from_candidate(tmp_path, distribution_identity):
     from taiwan_lab_mcp.nhi_review import prepare_nhi_review_packet
 

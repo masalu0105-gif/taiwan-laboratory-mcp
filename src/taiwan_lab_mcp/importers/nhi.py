@@ -9,7 +9,7 @@ import os
 import re
 import sqlite3
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -23,7 +23,13 @@ from ..canonical import canonical_json_bytes, sha256_bytes, sha256_json
 from ..models import GoldenCaseV1, NHIRecord
 from ..nhi_source import nhi_discovery_metadata_sha256, nhi_raw_revision_id
 from ..publish import publish_current_descriptor
-from ..rules.nhi import ScopeRule, parse_alias_bundle, parse_scope_bundle
+from ..rules.nhi import (
+    ACTIVE_SCOPE_RULE_FILE,
+    ACTIVE_SCOPE_RULE_VERSION,
+    ScopeRule,
+    parse_alias_bundle,
+    parse_scope_bundle,
+)
 from ..util import search_normalize
 
 NHI_COLUMNS = (
@@ -85,7 +91,7 @@ class NHIParsedRow:
             note_raw=self.note_raw or None,
             note_search=search_normalize(self.note_raw) or None,
             scope_status=scope_status,
-            scope_rule_version="nhi-lab-scope-v1",
+            scope_rule_version=ACTIVE_SCOPE_RULE_VERSION,
             scope_basis_locator=None,
         )
 
@@ -320,15 +326,30 @@ _GOLDEN_NHI_FIELDS = frozenset(
         "scope_basis_locator",
     }
 )
-# stores.py serves NHI with coverage_status=review_incomplete while NHI-R1-SCOPE is
-# pending, so every current exact lookup carries this result-level warning.
-_NHI_SERVING_WARNINGS = ["coverage_review_incomplete"]
+
+
+def _serving_warnings(rows: Iterable[Mapping[str, Any]]) -> list[str]:
+    """Return the result-level warnings a current exact lookup carries for these rows.
+
+    stores.py serves coverage_status=review_incomplete until every row has an approved
+    NHI-R1-SCOPE rule, and that coverage status adds coverage_review_incomplete.
+    """
+
+    complete = all(row["scope_status"] != "review_pending" for row in rows)
+    return [] if complete else ["coverage_review_incomplete"]
+
+
+def _scope_capability_status(
+    parsed: NHIParseResult, scope_rules_by_code: Mapping[str, ScopeRule]
+) -> str:
+    covered = all(row.code_normalized in scope_rules_by_code for row in parsed.rows)
+    return "approved" if covered else "pending"
 
 
 def _packaged_rule_bundles() -> tuple[bytes, bytes]:
     package = files("taiwan_lab_mcp")
     return (
-        package.joinpath("rules", "nhi_lab_scope", "v1.json").read_bytes(),
+        package.joinpath("rules", "nhi_lab_scope", ACTIVE_SCOPE_RULE_FILE).read_bytes(),
         package.joinpath("rules", "nhi_aliases", "v1.json").read_bytes(),
     )
 
@@ -344,7 +365,7 @@ def _nhi_transform(scope_bundle_bytes: bytes, alias_bundle_bytes: bytes) -> dict
         "rules": [
             {
                 "name": "nhi_lab_scope",
-                "version": "nhi-lab-scope-v1",
+                "version": ACTIVE_SCOPE_RULE_VERSION,
                 "bundle_sha256": sha256_bytes(scope_bundle_bytes),
             },
             {
@@ -391,7 +412,7 @@ def _curated_row(row: NHIParsedRow, scope_rules_by_code: Mapping[str, ScopeRule]
         "note_raw": row.note_raw or None,
         "note_search": search_normalize(row.note_raw) or None,
         "scope_status": rule.scope_status if rule else "review_pending",
-        "scope_rule_version": "nhi-lab-scope-v1",
+        "scope_rule_version": ACTIVE_SCOPE_RULE_VERSION,
         "scope_basis_locator": rule.basis_locator if rule else None,
     }
 
@@ -445,7 +466,7 @@ def _golden_failure_codes(
         for field in sorted(set(case.expected_fields) & _GOLDEN_NHI_FIELDS)
         if not _same_json_value(case.expected_fields[field], row[field])
     )
-    if case.expected_warnings != _NHI_SERVING_WARNINGS:
+    if case.expected_warnings != _serving_warnings(rows_by_code.values()):
         codes.append("WARNINGS_MISMATCH")
     return codes
 
@@ -717,7 +738,11 @@ def build_nhi_snapshot(
             "required_gates": ["NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"],
             "completed_gates": ["NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"],
             "capability_reviews": [
-                {"capability": "nhi_lab_scope", "gate_id": "NHI-R1-SCOPE", "status": "pending"}
+                {
+                    "capability": "nhi_lab_scope",
+                    "gate_id": "NHI-R1-SCOPE",
+                    "status": _scope_capability_status(parsed, scope_rules_by_code),
+                }
             ],
         },
         "audit_evidence": {
@@ -1281,7 +1306,11 @@ def build_official_nhi_snapshot(
             "required_gates": list(OWNER_SERVING_GATES),
             "completed_gates": list(OWNER_SERVING_GATES),
             "capability_reviews": [
-                {"capability": "nhi_lab_scope", "gate_id": "NHI-R1-SCOPE", "status": "pending"}
+                {
+                    "capability": "nhi_lab_scope",
+                    "gate_id": "NHI-R1-SCOPE",
+                    "status": _scope_capability_status(parsed, scope_rules_by_code),
+                }
             ],
         },
         "audit_evidence": {

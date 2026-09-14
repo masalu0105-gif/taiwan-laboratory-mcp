@@ -6,7 +6,7 @@
 
 免費、開源，由 masalu.lab 發起。希望醫檢師第一次使用就能解決一個查資料的麻煩，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
 
-> **目前基準版本：0.1.1。** Package 提供 22 個工具與四組合成示範資料。健保支付標準已有專案負責人審核過的正式資料，可從 Releases 下載安裝（見[安裝說明](docs/install.md)）；檢驗範圍清單（scope）尚未審核完成。CDC 與 TFDA 正式資料尚未完成。程式不會自動下載或發布正式資料。不可用於實際採檢、申報或採購。
+> **目前基準版本：0.1.1。** Package 提供 22 個工具與四組合成示範資料。健保支付標準已有專案負責人審核過的正式資料，可從 Releases 下載安裝（見[安裝說明](docs/install.md)）；檢驗範圍清單（scope）已由 AI 審核（[審核紀錄](docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md)），尚未包進正式資料下載包。CDC 與 TFDA 正式資料尚未完成。程式不會自動下載或發布正式資料。不可用於實際採檢、申報或採購。
 
 ## 三個先做好的問題
 
@@ -78,7 +78,7 @@ macOS／Linux 可用 `python3 -m venv .venv` 建立環境，再以 `.venv/bin/py
 | TFDA | `search_reviewed_ivd`、`search_ivd_candidates`、`search_ivd`、`get_license`、`find_manufacturer`、`list_matching_license_records`、`compare_products` |
 | 保留介面 | `standards_status`、`eqa_status`；只回報尚未設定的狀態 |
 
-CDC 的採檢、容器、運送等工具目前回傳同一完整疾病紀錄，保留原骨架的工具名稱與上下文。Sample 僅涵蓋麻疹、登革熱，以及示範用實驗室、HbA1c 健保項目和 IVD 各一筆。查 HPV DNA 會得到 `not_found` 與 sample 警示。NHI official serving snapshot 目前只支援 current exact lookup、搜尋與分頁；`as_of` 歷史查詢會明確拒絕，實驗室 scope 會標示 `coverage_status=review_incomplete`。
+CDC 的採檢、容器、運送等工具目前回傳同一完整疾病紀錄，保留原骨架的工具名稱與上下文。Sample 僅涵蓋麻疹、登革熱，以及示範用實驗室、HbA1c 健保項目和 IVD 各一筆。查 HPV DNA 會得到 `not_found` 與 sample 警示。NHI official serving snapshot 目前只支援 current exact lookup、搜尋與分頁；`as_of` 歷史查詢會明確拒絕。每筆結果帶實驗室 scope 判定；資料內仍有未判定代碼時標示 `coverage_status=review_incomplete`。
 
 ## 文件與參與
 

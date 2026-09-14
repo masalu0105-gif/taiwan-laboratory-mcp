@@ -9,6 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..util import search_normalize
 
+ACTIVE_SCOPE_RULE_VERSION = "nhi-lab-scope-v2"
+ACTIVE_SCOPE_RULE_FILE = "v2.json"
+ScopeRuleVersion = Literal["nhi-lab-scope-v1", "nhi-lab-scope-v2"]
+
 
 class NhiRuleError(ValueError):
     def __init__(self, code: str, detail: str = "") -> None:
@@ -24,7 +28,7 @@ class ScopeRule(BaseModel):
     basis_type: str = Field(min_length=1)
     basis_url: str = Field(min_length=1)
     basis_locator: str = Field(min_length=1)
-    rule_version: Literal["nhi-lab-scope-v1"]
+    rule_version: ScopeRuleVersion
     reviewer_id: str | None
     reviewed_at: datetime | None
     decision_status: Literal["approved", "review_pending", "rejected"]
@@ -45,11 +49,17 @@ class ScopeRule(BaseModel):
 class ScopeBundle(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    rule_version: Literal["nhi-lab-scope-v1"]
+    rule_version: ScopeRuleVersion
     source_id: Literal["nhi_fee"]
     status: Literal["complete", "review_incomplete"]
     entries: list[ScopeRule]
     note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_entry_versions(self) -> ScopeBundle:
+        if any(entry.rule_version != self.rule_version for entry in self.entries):
+            raise ValueError("every scope rule must use the bundle rule_version")
+        return self
 
 
 class AliasRule(BaseModel):
@@ -144,7 +154,11 @@ def parse_alias_bundle(payload: bytes) -> dict[str, tuple[str, ...]]:
 
 
 def load_scope_rules() -> dict[str, ScopeRule]:
-    payload = files("taiwan_lab_mcp").joinpath("rules", "nhi_lab_scope", "v1.json").read_bytes()
+    payload = (
+        files("taiwan_lab_mcp")
+        .joinpath("rules", "nhi_lab_scope", ACTIVE_SCOPE_RULE_FILE)
+        .read_bytes()
+    )
     return parse_scope_bundle(payload)
 
 

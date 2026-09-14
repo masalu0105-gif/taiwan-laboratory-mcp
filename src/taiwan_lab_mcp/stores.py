@@ -56,6 +56,27 @@ def _now(clock: Callable[[], datetime] | None) -> datetime:
     return value
 
 
+def _nhi_scope_rule_version(manifest: dict[str, Any]) -> str:
+    for rule in manifest["transform"]["rules"]:
+        version = rule.get("version") if isinstance(rule, dict) else None
+        if rule.get("name") == "nhi_lab_scope" and isinstance(version, str) and version:
+            return version
+    raise ValueError("scope rule identity missing")
+
+
+def _nhi_coverage_status(manifest: dict[str, Any], rows: tuple[dict[str, Any], ...]) -> str:
+    reviews = manifest.get("review", {}).get("capability_reviews", [])
+    approved = any(
+        isinstance(item, dict)
+        and item.get("gate_id") == "NHI-R1-SCOPE"
+        and item.get("status") == "approved"
+        for item in reviews
+    )
+    if approved and all(row["scope_status"] != "review_pending" for row in rows):
+        return "complete"
+    return "review_incomplete"
+
+
 def _effective_stale_reason_codes(descriptor: dict[str, Any], now: datetime) -> list[str]:
     stored = list(descriptor["stale_reason_codes"])
     codes = set(stored)
@@ -474,11 +495,11 @@ def _read_nhi_state(data_root: Path, now: datetime) -> OfficialState:
             ],
             parser_version=manifest["transform"]["parser"]["version"],
             schema_version=manifest["transform"]["schema"]["version"],
-            rule_bundle_version="nhi-lab-scope-v1",
+            rule_bundle_version=_nhi_scope_rule_version(manifest),
             license_name=source["license_name"],
             license_url=source["license_url"],
             attribution=source["attribution"],
-            coverage_status="review_incomplete",
+            coverage_status=_nhi_coverage_status(manifest, rows),
             stale=bool(stale_reason_codes),
             stale_reason_codes=stale_reason_codes,
             last_check_at=(
