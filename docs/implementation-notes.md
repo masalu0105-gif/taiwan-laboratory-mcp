@@ -172,7 +172,8 @@
   - 空 data root＋`-EmailDryRun`：runner exit 1、STATUS「異常：本機沒有正在服務的健保資料」；gws dry-run exit 0，解碼後信件收件人、中文主旨、UTF-8 多行內文正確。dry-run 不需要授權，因此只證明參數與內文組裝正確，沒有證明真的寄得出去。
   - 真實 data root（`-EmailDryRun`）：exit 0、STATUS「OK：健保支付標準表沒有變動」、check `nhi_fee-check-20260914t124544z-a039872cecd24e269d9e83ed54ce67f1`、generation 3。
   - 登記後 `-Check`：State `Ready`、Execute `wscript.exe`、NextRunTime `2026-09-15 09:30`。手動 `Start-ScheduledTask` 一次：LastTaskResult `0`、STATUS OK、check `nhi_fee-check-20260914t124610z-eff6f332d1d847d282b7b03d347bb28a`、generation 4，沒有殘留 wscript 程序。
-- UNVERIFIED／OWNER GATE：`gws` 目前授權失效（唯讀 `gmail users getProfile` 回 401 `invalid_grant`，2026-09-14 兩次實測），真的有新版或失敗時信件會寄不出去；STATUS 會記「email：寄送失敗」。需要 owner 本人在 PowerShell 重新登入 `gws`，之後再經 owner 同意寄一封真的測試信並到寄件備份確認。`changed`、`failed` 兩條路徑的真實寄信與排程環境下的非 0 結束碼尚未實測。
+- ~~UNVERIFIED／OWNER GATE：`gws` 目前授權失效（唯讀 `gmail users getProfile` 回 401 `invalid_grant`，2026-09-14 兩次實測），真的有新版或失敗時信件會寄不出去；STATUS 會記「email：寄送失敗」。需要 owner 本人在 PowerShell 重新登入 `gws`，之後再經 owner 同意寄一封真的測試信並到寄件備份確認。~~ 2026-09-14 owner 本人重新登入（PowerShell 停用腳本執行，`gws` 會叫到 `gws.ps1` 被擋，改用 `gws.cmd auth login`；未修改 execution policy）。唯讀 `getProfile` 成功。經 owner 同意，以排程腳本對空 data root 真實寄一封「本機沒有正在服務的健保資料」通知：STATUS「email：已寄出」，Gmail 讀回 message `1a09fff1f5bcd026` 標籤 `SENT`／`INBOX`、收件人與中文主旨正確。之後以真實 data root 重跑，STATUS 回到 OK（check `nhi_fee-check-20260914t125814z-5760272cd76b435aa4ff6d245e22270a`）。
+- UNVERIFIED：`changed`、`failed` 兩條路徑的真實寄信，以及排程環境下的非 0 結束碼（`Run-HiddenTask.vbs` 程式碼以 `WScript.Quit exitCode` 回傳，未實跑）尚未實測。`gws` 登入日後若再次失效，STATUS 會記「email：寄送失敗」。
 
 ## 目前驗證證據
 
