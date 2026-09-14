@@ -185,6 +185,12 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 - 規格解讀第 2–5 點（見「本切片的規格解讀」）與 `official_content_date.precision` 對外投影（非 `day|month|year` 顯示 `unknown`）：owner 同意。
 - `OD-05` 平台承諾：P1.1 同時支援 Windows 與 macOS。本機只有 Windows，macOS 驗證需另找環境（CI 或 owner 的 Mac），驗證前不得宣稱 macOS 已通過。
 
+- 2026-09-14 owner 在對話中另決定（AskUserQuestion 回覆）：
+  - 公開下載包內審核紀錄的 reviewer 不寫本名，改寫「專案負責人」代號；需以新安裝版重建一次 NHI snapshot，並由 owner 再確認同樣的審核內容。
+  - 下載包附上健保署原始 CSV。依據：2026-09-14 下載 `https://data.gov.tw/license`（HTTP 200、484,109 bytes），「二、授與權利」原文授權使用者不限目的、非專屬、免授權金進行重製、散布、公開傳輸等利用，並得再轉授權；條件為顯名（manifest 已帶 attribution 與 license URL）。
+  - 現有本機 commit 推上 GitHub，CI 加上 macOS。
+  - 下載一次 TFDA 官方 CSV ZIP 到 repo 外資料夾，只用離線驗證指令檢查，不發布、不給 MCP 查詢。
+
 ### NHI upstream check overdue（2026-09-14）
 
 - `stores.py`：runtime 讀 descriptor 時以 injected clock（`DataContext.clock`，預設 UTC 現在時間；naive datetime 拒絕）計算 overdue：`last_successful_check_at` 為 null，或距今超過 2 個宣告週期（data.gov.tw `updateFrequency` 每 1 日 → 48 小時，剛好 48 小時不算）時，加上 `upstream_check_overdue`。與 descriptor 已存的 reason codes 合併、依 PRD registry 順序排列；status 與 provenance 用同一次計算，stored descriptor／check bytes 不改寫。`freshness_policy_version` 維持 `nhi-v1`（SDD §8.3 原本就定義兩個宣告週期）。
@@ -218,6 +224,7 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
   4. entry 名稱只要求 `.csv` 副檔名，不要求一定是 `68_2.csv`。
 - 未做（依規格需要 owner 決定或屬後續切片）：TFDA live 下載（publisher OID、metadata API、license 代碼、host allowlist 文件都沒寫）、raw 保存、註銷／效期 truth table、三組分類 code 解析、IVD registry（`TFDA-R1-IVD` reviewer 未指定，OD-03）、curated SQLite、public contract 補欄位（TFDARecord 缺 PRD 要求欄位、warning registry 缺 TFDA codes）、official adapter、golden cases。這一片不代表 `REL-G2` 或任何 TFDA gate 完成。
 - 測試：`tests/test_tfda_importer.py` 42 個（研究 header 比對、字串與 row hash、多列字號、摘要數字、magic bytes、截斷 ZIP、10 種 entry 規則、反斜線路徑、解壓上限剛好等於與超過、壓縮檔上限、壓縮比、宣告大小竄改、16 種 CSV／日期／必填失敗、無 BOM 警告、staged 報告只寫 staged、失敗報告、CLI）。
+- 官方檔一次性驗證（owner 同意）：2026-09-14 21:32 以 curl 下載 `https://data.fda.gov.tw/data/opendata/export/68/csv`（HTTP 200、`application/zip`、無 redirect），存於 repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\tfda-validation\tfda-68-csv-20260914.zip`（16,265,433 bytes、SHA-256 `de880620c56177e492806618f103fc7ac55b4f7302e7870c9992facba7f08292`，與研究文件 2026-09-13 的 ZIP hash 相同）。以 uv tool 安裝版 `taiwan-lab-data validate tfda_devices --input ... --json` 檢查：exit 0、`passed`；entry `68_2.csv` 70,554,601 bytes、SHA-256 `bce64d9276d1072ce9b52c098bbd943184a357d1dcff2cab722e75ddb5d5c370`；104,619 列、93,219 個許可證字號、11,229 個字號有多列、單一字號最多 4 列；註銷狀態空白 49,659／已註銷 53,731／已廢止 1,229；空值數 註銷日期 49,543、註銷理由 53,879、舊證字號 103,615、醫療器材級數 11,439、劑型 104,619、包裝 104,432、申請商名稱 1、申請商統一編號 794、製造廠國別 25，均與研究文件 §5／§6 實測值一致；四個日期欄沒有格式錯誤、有效日期沒有空白。輸出存於同資料夾 `validate-20260914.json`。這只是離線檢查，沒有建立 raw revision、candidate 或任何 MCP 可查的資料。
 
 ## 目前驗證證據
 
