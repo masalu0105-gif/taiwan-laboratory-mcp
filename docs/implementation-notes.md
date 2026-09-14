@@ -159,7 +159,20 @@
   - 尚無 serving snapshot：只留 sync report，`result=no_serving_snapshot`，不建立 descriptor。
   - CLI exit code 依 SDD §12：成功（含 changed）0、discover／fetch 失敗 3、parse／validate 失敗 4、current／check 完整性錯誤 6。
 - live 實測（repo 外 uv tool 安裝版）：`taiwan-lab-data check nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --actor claude-code-for-owner --data-dir <data-root> --json` exit 0、`result=unchanged`、check `nhi_fee-check-20260914t123202z-ae306e358a7145e5b6089d9d60c80d0d`、descriptor generation 2。MCP stdio `get_data_status` 顯示 `last_check_at=2026-09-14T12:32:02Z`、`last_successful_publish_at=2026-09-14T12:14:32Z`（未改）、`stale=false`；`get_points("09006C")` 仍回 200 點。
-- 待 owner 決定：是否建立每日自動執行 `check` 的排程（Windows 工作排程器或 WSL cron，屬持久設定），以及有新版時要用什麼方式通知 owner；新版審核通過後的「發布新版」流程目前需依 `build_official_nhi_snapshot` 手動執行。
+- ~~待 owner 決定：是否建立每日自動執行 `check` 的排程（Windows 工作排程器或 WSL cron，屬持久設定），以及有新版時要用什麼方式通知 owner；~~ 2026-09-14 owner 決定：排程用 Windows 工作排程器（選項 A），通知用 email。新版審核通過後的「發布新版」流程目前需依 `build_official_nhi_snapshot` 手動執行。
+- 本 slice 另以 commit `17be1f8` push；push 後 `git rev-parse HEAD` 與 `origin/main` 同為 `17be1f85ed929055d79214dffd25a9fe0164a6cc`。
+
+### 每日排程與 email 通知（2026-09-14）
+
+- 排程腳本放 repo 外（本機設定，不進 git）：`C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\automation\`
+  - `Invoke-NhiDailyCheck.ps1`：跑 uv tool 安裝版 `taiwan-lab-data.exe check nhi_fee --json`，每次寫 `logs\nhi-daily-check-<時間>.log`，並覆寫 `STATUS.txt`（第一行固定「OK：…」或「異常：…」）。`unchanged` 只更新 STATUS、不寄信；`changed` 寄信附 `diff-summary.md`；`failed`、`no_serving_snapshot`、輸出無法解析寄信並記「異常」、exit 1。
+  - `Register-NhiDailyCheckTask.ps1`：建立使用者排程 `taiwan-lab-nhi-daily-check`，每天 09:30、錯過補跑、不重複執行、30 分鐘上限；動作走既有 `scheduled-task-ops\Run-HiddenTask.vbs`（wscript 隱藏執行，避免跳出主控台視窗）；已存在時拒絕覆寫，`-Check` 只讀。
+- email 走 Google Workspace CLI（`gws` 0.16.0，`gmail +send`），收件人為 owner 帳號。先前記憶寫的 `gog` CLI 在本機查不到（`where gog` 無結果），實際可用的是 `gws`。
+- 驗證：
+  - 空 data root＋`-EmailDryRun`：runner exit 1、STATUS「異常：本機沒有正在服務的健保資料」；gws dry-run exit 0，解碼後信件收件人、中文主旨、UTF-8 多行內文正確。dry-run 不需要授權，因此只證明參數與內文組裝正確，沒有證明真的寄得出去。
+  - 真實 data root（`-EmailDryRun`）：exit 0、STATUS「OK：健保支付標準表沒有變動」、check `nhi_fee-check-20260914t124544z-a039872cecd24e269d9e83ed54ce67f1`、generation 3。
+  - 登記後 `-Check`：State `Ready`、Execute `wscript.exe`、NextRunTime `2026-09-15 09:30`。手動 `Start-ScheduledTask` 一次：LastTaskResult `0`、STATUS OK、check `nhi_fee-check-20260914t124610z-eff6f332d1d847d282b7b03d347bb28a`、generation 4，沒有殘留 wscript 程序。
+- UNVERIFIED／OWNER GATE：`gws` 目前授權失效（唯讀 `gmail users getProfile` 回 401 `invalid_grant`，2026-09-14 兩次實測），真的有新版或失敗時信件會寄不出去；STATUS 會記「email：寄送失敗」。需要 owner 本人在 PowerShell 重新登入 `gws`，之後再經 owner 同意寄一封真的測試信並到寄件備份確認。`changed`、`failed` 兩條路徑的真實寄信與排程環境下的非 0 結束碼尚未實測。
 
 ## 目前驗證證據
 
