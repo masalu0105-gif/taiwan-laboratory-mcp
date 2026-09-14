@@ -276,6 +276,20 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 清單：舊 build `17880b71…`、`trial-install`、`trial-install-2`、`release-download-check`、`%TEMP%\tlsim-a`、`tlsim-b`、`tlsim-b-moved`、`tlsim-b-export`。
   - 刻意保留：serving build、raw、checks／publish events、`owner-review` 原始審核紀錄（其中兩個檔含本名，屬 owner 審核原始紀錄，不視為舊版資料）、`release` 正式下載包、`tfda-validation`。
 
+### TFDA 自動下載（2026-09-14）
+
+- owner 看過 `owner-review\tfda-source-identity-confirmation-2026-09-14.md` 後回覆「正確，開始做自動下載」。
+- 新增 `src/taiwan_lab_mcp/tfda_source.py`：
+  - `discover_tfda_resource`：比對 metadata 的 `publisherOID`（呼叫端明確傳入，owner 確認值 `2.16.886.101.20003.20065.20065`）、`identifier=A21020000I-000053`、`license="1"`；只接受唯一一筆 UTF-8 CSV distribution，下載網址必須是 HTTPS 且 host 為 `data.fda.gov.tw`。
+  - `run_tfda_upstream_sync`：metadata 只從 `data.gov.tw` 讀；ZIP 下載上限 64 MiB、content type 限 `application/zip`／`application/octet-stream`。
+    - 下載成功即保存 `raw/tfda_devices/<raw revision>/artifacts/source.zip` 與 `fetch.json`。同 bytes 重抓沿用同一 raw revision，不改寫第一份 fetch 紀錄；既有 raw bytes 不同回 `IMMUTABLE_RAW_CONFLICT`。
+    - 接著跑既有 ZIP 與 34 欄檢查，只寫 `staged/tfda_devices/<attempt>/validation.json`。discover／fetch 失敗不留 raw；ZIP 或欄位失敗保留 raw。
+    - 不建立 candidate、curated、current descriptor，MCP 查不到 TFDA 正式資料。
+  - raw revision ID 依 `RawRevisionFingerprintV1`：非揮發 discovery 身分＋ZIP 大小與 SHA-256。
+- CLI：`taiwan-lab-data sync tfda_devices --publisher-oid <oid> --data-dir <path> --json`（exit 0 通過、3 discover／fetch 失敗、4 ZIP／欄位失敗）；與 `--input` 互斥。
+- 測試：`tests/test_tfda_source.py` 13 個（身分正確、5 種身分漂移、成功保存 raw 與報告、同 bytes 沿用 raw revision、非 ZIP 保留 raw 但失敗、discover／fetch 失敗不留 raw、CLI）。原本 `sync tfda_devices --publisher-oid` 一律拒絕的測試改為「與 `--input` 同時給才拒絕」。
+- 儲存量提醒：每份官方 ZIP 約 16 MB，官方每 7 日更新；內容有變才會多存一份 raw。
+
 ### GitHub Release `nhi-data-20260914`（2026-09-14）
 
 - owner 看過 release notes 草稿（`taiwan-lab-mcp-data\release\release-notes-nhi-data-20260914.md`）與檔名、大小、SHA-256 後回覆「建立 Release」，條件是 CI 全部通過。

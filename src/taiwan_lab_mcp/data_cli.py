@@ -89,12 +89,24 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")))
         return 0
     if args.command == "sync" and args.source_id == "tfda_devices":
-        if args.publisher_oid is not None or args.metadata_url is not None:
-            parser.error("sync tfda_devices only supports offline --input in this slice")
+        if args.metadata_url is not None:
+            parser.error("sync tfda_devices does not support --metadata-url")
         if args.fail_stage is not None:
             parser.error("sync tfda_devices does not support --fail-stage")
+        if args.publisher_oid is not None:
+            if args.input is not None:
+                parser.error("sync --input and --publisher-oid are mutually exclusive")
+            from . import tfda_source
+
+            report = tfda_source.run_tfda_upstream_sync(
+                args.data_dir, expected_publisher_oid=args.publisher_oid
+            )
+            print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+            if report["status"] == "passed":
+                return 0
+            return 3 if report["stage"] in {"discover", "fetch"} else 4
         if args.input is None:
-            parser.error("sync tfda_devices requires --input")
+            parser.error("sync tfda_devices requires --input or --publisher-oid")
         from .importers.tfda import run_tfda_offline_validation
 
         try:

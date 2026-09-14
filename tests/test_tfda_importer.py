@@ -371,11 +371,14 @@ def test_cli_validate_and_sync_tfda_offline_zip(tmp_path, capsys):
     assert synced["status"] == "passed"
     assert (data_root / Path(synced["report_data_root_relative_path"])).is_file()
 
+    # Offline input and upstream discovery are mutually exclusive, like NHI.
     with pytest.raises(SystemExit):
         main(
             [
                 "sync",
                 "tfda_devices",
+                "--input",
+                str(archive_path),
                 "--publisher-oid",
                 "unused",
                 "--data-dir",
