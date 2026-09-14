@@ -1,4 +1,4 @@
-"""Owner-approved NHI search slimming (2026-09-15): summary records, 1–50 page size,
+"""Owner-approved NHI search slimming (2026-09-15): summary records, 1–20 page size,
 open-data-license attribution and data-not-instruction tool descriptions."""
 
 import asyncio
@@ -82,11 +82,11 @@ def test_exact_code_lookups_keep_the_full_record(official):
     assert rule.note_raw == LONG_NOTE
 
 
-def test_search_payment_items_page_size_is_capped_at_50(official):
-    assert official.search_payment_items("0", limit=50).result_status == "ok"
-    rejected = official.search_payment_items("0", limit=51)
+def test_search_payment_items_page_size_is_capped_at_20(official):
+    assert official.search_payment_items("0", limit=20).result_status == "ok"
+    rejected = official.search_payment_items("0", limit=21)
     assert rejected.result_status == "invalid_request"
-    assert "1–50" in rejected.notes[0]
+    assert "1–20" in rejected.notes[0]
 
 
 def test_official_attribution_follows_the_open_data_license_notice(official):

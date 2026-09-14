@@ -571,6 +571,24 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - GitHub Release 下載包說明與 README 顯名文字，下次發 Release 時一起更新。
   - 食藥署查詢照同樣原則實作。
 
+### 搜尋一次最多 20 筆（2026-09-15）
+
+- owner 看完瘦身結果後回覆「我覺得給20筆就很夠了」。
+- 規格解讀：套用在健保 `search_payment_items`（`search_lab_code` 本來固定 20 筆），以及尚未實作的 TFDA `list_matching_license_records`（PRD TFDA-06、TDD 分頁條目）。其他 TFDA 搜尋工具目前仍是 sample 骨架，這次沒動。
+- 改動：
+  - `adapters/nhi.py` 的 `SEARCH_PAGE_MAX` 50→20，說明文字改為「limit 為 1–20 的整數」。
+  - PRD §5 工具表與 TFDA-06、SDD §10.1、TDD 兩處、README 同步。
+  - 前一節「上限 100→50」保留作歷史。
+- 測試：`test_nhi_search_summary.py` 改為測 `limit=20` 可用、`limit=21` 回 `invalid_request`。先跑 1 failed、6 passed，改完全過。
+- 驗證：
+  - in-repo `pytest` 313 passed，`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel SHA-256 `2801c40908ec99c7a1b89ed581de78ca94e13417456e88e2cce39c68741cbd14`。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：313 passed。
+  - 新 wheel 以 `uv pip install --reinstall-package` 裝進 uv tool 環境，MCP stdio 查正式資料：
+    - 「檢」`limit=20`：回 20 筆，總共 1,270 筆，`truncated=true`，26,264 字（粗估約 7,625 tokens）。
+    - 「檢」`limit=20, offset=1260`：回最後 10 筆，`truncated=false`。
+    - `limit=21`：`invalid_request`。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

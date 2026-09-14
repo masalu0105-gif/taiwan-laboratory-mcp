@@ -90,8 +90,8 @@ def _official_summary(row: dict[str, Any], matched_by: list[str]) -> NHISearchRe
     )
 
 
-# Owner decision 2026-09-15: bounded so a full page stays under host output limits.
-SEARCH_PAGE_MAX = 50
+# Owner decisions 2026-09-15: bounded under host output limits, then "20 筆就很夠了".
+SEARCH_PAGE_MAX = 20
 
 
 def _valid_text(value: Any) -> bool:
@@ -240,7 +240,7 @@ class NHIAdapter:
                 operation="search_payment_items",
                 query=request,
                 data_mode=self.context.mode,
-                note="query 必須是非空字串；limit 為 1–50 的整數，offset 不得小於 0。",
+                note="query 必須是非空字串；limit 為 1–20 的整數，offset 不得小於 0。",
             )
         state_or_unavailable = self._sample_or_unavailable(
             "search_payment_items", request, "NHI official serving snapshot 尚未建立。"
