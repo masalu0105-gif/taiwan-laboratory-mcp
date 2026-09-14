@@ -14,11 +14,11 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("--data-dir", type=Path)
     status_parser.add_argument("--json", action="store_true")
     validate_parser = subparsers.add_parser("validate")
-    validate_parser.add_argument("source_id", choices=["nhi_fee"])
+    validate_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
     validate_parser.add_argument("--input", required=True, type=Path)
     validate_parser.add_argument("--json", action="store_true")
     sync_parser = subparsers.add_parser("sync")
-    sync_parser.add_argument("source_id", choices=["nhi_fee"])
+    sync_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
     sync_parser.add_argument("--input", type=Path)
     sync_parser.add_argument(
         "--publisher-oid",
@@ -76,6 +76,22 @@ def main(argv: list[str] | None = None) -> int:
         result: DataStatusResult = get_data_status()
         print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")))
         return 0
+    if args.command == "sync" and args.source_id == "tfda_devices":
+        if args.publisher_oid is not None or args.metadata_url is not None:
+            parser.error("sync tfda_devices only supports offline --input in this slice")
+        if args.fail_stage is not None:
+            parser.error("sync tfda_devices does not support --fail-stage")
+        if args.input is None:
+            parser.error("sync tfda_devices requires --input")
+        from .importers.tfda import run_tfda_offline_validation
+
+        try:
+            tfda_payload = args.input.read_bytes()
+        except OSError:
+            tfda_payload = b""
+        report = run_tfda_offline_validation(tfda_payload, args.data_dir)
+        print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
+        return 0 if report["status"] == "passed" else 4
     if args.command == "sync":
         if args.publisher_oid is not None:
             if args.input is not None:
@@ -137,6 +153,38 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         if summary.get("failed_stage"):
             return 4
+        return 0
+    if args.command == "validate" and args.source_id == "tfda_devices":
+        from .importers.tfda import (
+            TFDAImportError,
+            extract_tfda_csv,
+            parse_tfda_csv,
+            tfda_validation_summary,
+        )
+
+        try:
+            entry = extract_tfda_csv(args.input.read_bytes())
+            summary = tfda_validation_summary(entry, parse_tfda_csv(entry.payload))
+        except (OSError, TFDAImportError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "source_id": args.source_id,
+                        "validation_status": "failed",
+                        "error_code": getattr(exc, "code", "INPUT_UNAVAILABLE"),
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 4
+        print(
+            json.dumps(
+                {"source_id": args.source_id, "validation_status": "passed", "summary": summary},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
         return 0
     if args.command == "validate":
         from .importers.nhi import NHIImportError, parse_nhi_csv

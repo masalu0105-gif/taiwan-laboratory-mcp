@@ -201,6 +201,24 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 - 未做：owner 拒絕新版（`decision=rejected`）目前只回 `REVIEW_DECISION_NOT_APPROVED`、不寫任何狀態，候選會維持 `review_pending`；把候選標成 `rejected` 的流程尚未實作。新版找不到的題目需要人工補題，工具不自動挑新題。
 - 測試：`tests/test_nhi_review.py` 16 個（審核包逐題比對與只讀、找不到題目、無候選、發布後 serving 切換並查到新點數、7 種無效 decision 在任何寫入前擋下、審核包被改、審核包產生後又出現更新候選、major finding 由 builder 擋下、CLI 成功與 exit 5）。
 
+### TFDA 第一個切片：離線 ZIP 驗證（2026-09-14）
+
+依 owner「3B 馬上做」開始 TFDA。範圍依 SDD §10.2、TDD §8.1 與研究文件切片 1，只做不需要 owner 決定的部分；沒有下載官方 TFDA 檔。
+
+- 新增 `src/taiwan_lab_mcp/importers/tfda.py`（internal source id `tfda_devices`，依 SDD §6 與 §11.1 投影表）：
+  - `extract_tfda_csv`：先檢查大小（ZIP 64 MiB）與 ZIP magic bytes（HTML 錯誤頁、純 CSV 回 `CONTENT_MAGIC_MISMATCH`），壞檔回 `ARCHIVE_CORRUPT`；恰好一個 entry（`ARCHIVE_ENTRY_COUNT`）；路徑正規化（反斜線視為 `/`）後拒絕 `..`、絕對路徑、UNC、drive path（`ARCHIVE_PATH_TRAVERSAL`）；拒絕目錄、symlink、加密 entry、非 `.csv`（`ARCHIVE_ENTRY_TYPE`）。解壓時以實際讀出的 bytes 計數，超過 256 MiB 回 `ARCHIVE_SIZE_LIMIT`、超過壓縮比 30 回 `ARCHIVE_RATIO_LIMIT`；宣告大小被竄改時由 CRC／大小比對回 `ARCHIVE_CORRUPT`。只在記憶體處理，不把 server 檔名寫到磁碟。
+  - `parse_tfda_csv`：`utf-8-sig`、strict CSV、header 必須完全等於研究文件第 5 節的 34 欄（測試直接比對研究文件 header 原文）；錯誤碼沿用 NHI parser 命名（`SCHEMA_HEADER_MISMATCH`、`SCHEMA_DUPLICATE_COLUMN`、`ROW_WIDTH_MISMATCH`、`ZERO_ROWS` 等）。所有欄位保留原字串（統編前導零、級數、許可證種類 `09` 不轉數字、規格內換行保留）。`source_row_sha256` 依 SDD §7.2 以 34 欄原值 JSON array 計算；同許可證字號多列全部保留。
+  - `tfda_validation_summary`：列數、不同許可證字號數、多列字號數、單一字號最多列數、註銷狀態原值分布、各欄空值數、header hash、ZIP／entry 大小與 SHA-256。
+  - `run_tfda_offline_validation`：只寫 `staged/tfda_devices/<attempt>/validation.json`；離線輸入沒有上游來源證明，不建立 raw、candidate、curated 或 current descriptor（與 NHI `--input` 相同規則）。
+- CLI：`taiwan-lab-data validate tfda_devices --input <zip> --json`（exit 0／4）與 `taiwan-lab-data sync tfda_devices --input <zip> --data-dir <path> --json`；TFDA 帶 `--publisher-oid`、`--metadata-url` 或 `--fail-stage` 時直接拒絕。
+- 規格解讀（保守做法，待文件修訂或 owner 確認）：
+  1. 日期欄（註銷日期、有效日期、發證日期、異動日期）只接受空字串或 strict `YYYY/MM/DD`，前後空白也算無效，整批 block（SDD §10.2「日期只接受 empty 或 YYYY/MM/DD」）；有效日期空白整批 block（PRD §6.3.1）。研究文件「發證日期晚於有效日期進 quarantine」SDD／TDD 沒有，本輪不實作。
+  2. 許可證字號空白整批 block（研究文件 §7 列為 quarantine；目前 publish 規則 quarantine 必須為 0，等同 block）。
+  3. 「恰好一個非目錄 entry」解讀為 archive 只能有一個 entry，連目錄 entry 也不允許。壓縮比剛好 30 通過、超過才拒絕；比例以 entry 解壓 bytes ÷ entry 壓縮 bytes 計算。
+  4. entry 名稱只要求 `.csv` 副檔名，不要求一定是 `68_2.csv`。
+- 未做（依規格需要 owner 決定或屬後續切片）：TFDA live 下載（publisher OID、metadata API、license 代碼、host allowlist 文件都沒寫）、raw 保存、註銷／效期 truth table、三組分類 code 解析、IVD registry（`TFDA-R1-IVD` reviewer 未指定，OD-03）、curated SQLite、public contract 補欄位（TFDARecord 缺 PRD 要求欄位、warning registry 缺 TFDA codes）、official adapter、golden cases。這一片不代表 `REL-G2` 或任何 TFDA gate 完成。
+- 測試：`tests/test_tfda_importer.py` 42 個（研究 header 比對、字串與 row hash、多列字號、摘要數字、magic bytes、截斷 ZIP、10 種 entry 規則、反斜線路徑、解壓上限剛好等於與超過、壓縮檔上限、壓縮比、宣告大小竄改、16 種 CSV／日期／必填失敗、無 BOM 警告、staged 報告只寫 staged、失敗報告、CLI）。
+
 ## 目前驗證證據
 
 以下為 2026-09-14 同步保留原始檔與授權代碼核對修改後、基於 commit `a14b1da` 加上未提交 worktree 變更的重跑結果（前兩版記錄為 `155 passed`、`177 passed`）：
