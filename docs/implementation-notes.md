@@ -218,6 +218,12 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 - 尚未做：以「專案負責人」代號重建本機 NHI snapshot（需 owner 再確認）、實際匯出正式下載包、建立 GitHub Release（需 owner 確認實際檔案）。
 - review protocol 第 2 版：新增 package resource `src/taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/2.json`，builder 常數 `OWNER_REVIEW_PROTOCOL_VERSION` 改為 `"2"`。與第 1 版的差異只有：`PUB-R1-OWNER` 範圍改為 `local_mcp_serving_and_github_release_bundle`（依 owner 2026-09-14 選 OD-01 B）、移除「再散布需另行核准」、checklist 加入下載包內容限制（ADR 0001）、公開審核紀錄使用「專案負責人」代號、每次建立 Release 前 owner 確認檔名／大小／SHA-256；另加 `supersedes_version` 與 `reviewer_alias`。來源、格式、golden case 與嚴重度規則和第 1 版完全相同（有測試比對）。第 1 版保留在 package，因為現有 build 的審核紀錄引用它。
 
+### 本機工具重裝失敗與修復（2026-09-14）
+
+- 21:52 以 `uv tool install --force <protocol v2 wheel>` 更新本機工具時失敗：`failed to remove directory ...\uv\tools\taiwan-laboratory-mcp\Scripts: 存取被拒 (os error 5)`。uv 已刪掉整個 `Lib`，但 `Scripts\python.exe` 被兩個執行中的 MCP server 行程占用（`taiwan-lab-mcp.exe` PID 17196、47944，21:32、21:33 由 Claude Code 啟動），刪不掉，環境變成半毀：`taiwan-lab-data.exe --help` 回 `No module named taiwan_lab_mcp`。若未修復，隔天 09:30 排程檢查會失敗。
+- 修復方式：不結束任何行程，改用 `uv pip install --python <tool env>\Scripts\python.exe <wheel>` 把套件與相依套件重新裝回同一個環境。
+- 之後更新本機工具的做法：MCP server 可能正在執行時，一律用上述 `uv pip install --python ...` 就地重裝，不用 `uv tool install --force`（它會先刪除整個環境）。
+
 ### GitHub CI 失敗的更正（2026-09-14）
 
 - 2026-09-14 21:35 查 `gh run list`：從 commit `3238d70` 起，`3238d70`、`17be1f8`、`4353943`、`be5401c` 四次 CI 都是 failure。先前回報「push 成功、local == remote」只驗證了 commit 有推上去，沒有檢查 GitHub CI 結果；本機驗證只在 repo 外跑了 `tests/test_mcp_stdio.py`，沒有照 CI 在 repo 外跑全部測試。
