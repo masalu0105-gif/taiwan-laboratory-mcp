@@ -92,7 +92,7 @@ P1.1 的核心價值是「縮短找到官方資料並核對原文的時間」。
 | `search_ivd` | compatibility alias | `query: string, manufacturer: string|null=null` | `tfda_device` | sample + official | 使用 `search_reviewed_ivd(query, manufacturer, limit=20, offset=0)`，description 明示 reviewed-only |
 | `get_license` | active | `license_no: string` | `tfda_device` | sample + official | exact 許可／登錄字號，保留全部 source rows、角色、truth-table outputs |
 | `find_manufacturer` | active | `name: string` | `tfda_device` | sample + official | 依製造商名稱搜尋，保留同字號各 source row，不把申請商當製造商 |
-| `list_matching_license_records` | active | `query: string, limit: integer=10` | `tfda_device` | sample + official | 只按穩定非臨床順序並列原始欄位；不計分、不判等效、不作採購排序 |
+| `list_matching_license_records` | active | ~~`query: string, limit: integer=10`~~ `query: string, limit: integer=10, offset: integer=0, prefer_ivd: boolean=false, prefer_main_category: string|null=null, ivd_scope: string|null=null, main_category: string|null=null`（OD-06） | `tfda_device` | sample + official | ~~只按穩定非臨床順序並列原始欄位；不計分、不判等效、不作採購排序~~ 查全部許可證列（含已註銷），依 TFDA-06 命中程度排序並分頁；偏好只調順序、篩選只在明確指定時縮小範圍；並列原始欄位與標籤，不輸出品質分數、不判等效、不作採購排序 |
 | `compare_products` | deprecated | `query: string, limit: integer=10` | `tfda_device` | sample + official | 固定 `deprecated_unsupported`、0 items，指向 `list_matching_license_records` |
 | `standards_status` | reserved status | 無 | `reserved_standards` | sample + official | 只回 LOINC／FHIR／SNOMED 尚未設定狀態，不查或內含術語資料 |
 | `eqa_status` | reserved status | 無 | `reserved_eqa` | sample + official | 只回 EQA／CAP 未設定與授權待確認狀態，不抓 catalog |
@@ -134,6 +134,7 @@ NHI alias 只有在版本化 registry 中狀態為 `approved` 才能影響正式
 | TFDA-03 | Then 申請商與製造商使用不同欄位與標籤；中文品名、英文品名、效能、規格與限制項目保留原文，不從相似文字推論臨床能力或產品等效。 |
 | TFDA-04 | Given `search_reviewed_ivd`，Then 只回 reviewed `included`，每筆帶官方次類別 code 與 rule version；沒有 included 但 `ambiguous`／`unknown` 候選存在時回 `candidate_matches_available`。Given `search_ivd_candidates`，Then 回 `included`／`ambiguous`／`unknown` 及 review coverage、舊制／缺碼筆數、總命中與 truncation，不得把 included-only 空結果說成「沒有相關 IVD」。 |
 | TFDA-05 | Given code 同時命中衝突規則、缺次類別、舊制分類或未知 code，Then candidate search 回 `ambiguous`／`unknown` 與命中理由；關鍵字只能增加候選召回，不能升格為正式 IVD。未完成逐碼 reviewer 核准時 `coverage_status=review_incomplete`，不得稱完整 IVD 清單。 |
+| TFDA-06 | Given 已核准的 TFDA snapshot，When 呼叫 `list_matching_license_records`，Then 搜尋全部 source rows（含官方已註銷、缺分類代碼、舊制分類），比對許可證字號、中文品名、英文品名、申請商名稱、製造商名稱、效能與主／次類別原文（正規化同 NHI）。每筆帶標籤：`ivd_scope`、主類別字母、醫療器材級數原文、許可證種類原文、`cancellation_recorded_in_source`，以及命中欄位 `matched_by`。預設排序依序為：命中程度（完全相同字號→完全相同中文或英文品名→品名開頭相同→品名包含→其他欄位包含）、官方註銷欄空白者在前、許可證字號、原始列號。`prefer_ivd=true` 或 `prefer_main_category` 只在同一命中程度內把符合者排前，不增減筆數；`ivd_scope`（`included`／`excluded`／`ambiguous`／`unknown`）或 `main_category`（A–P 單一字母）為篩選，只在使用者明確要求某一類時使用，非法值回 `invalid_request`。回 `total_matches`、`returned_count`、`limit`（1–100）、`offset` 與 `truncated`，可翻頁到最後一筆。不得輸出品質分數、相似度、優劣、可替代性或採購建議；「官方註銷欄空白」不得稱為有效許可。 |
 
 #### 6.3.1 TFDA cancellation × date canonical truth table
 
@@ -367,6 +368,7 @@ Pilot result schema 只保存 participant pseudonymous ID、角色類型、scena
 | OD-03 | TFDA IVD registry reviewer 由 AI 擔任，依官方醫療器材分類分級附表原文逐碼判斷 | 同 OD-02 的揭露要求；~~不確定者維持 `ambiguous`／`unknown`，不得升格為 `included`~~（2026-09-14 owner 決定同 OD-02：附表逐碼判不出來或附表查無的 A/B/C 代碼一律 `included`，判定依據須寫明是依此決定；沒有 A–P 分類代碼或舊制編號的許可證列不在此決定範圍，仍為 `unknown`） |
 | OD-04 | 尚未決定 | — |
 | OD-05 | NHI 超過兩個宣告週期沒有成功檢查時標 `upstream_check_overdue`，不 hard-stop，持續回答並揭露；P1.1 支援 Windows 與 macOS | macOS 以 CI macos-latest 驗證；實機安裝流程尚未驗證前不得宣稱實機已驗證 |
+| OD-06 | TFDA 許可證資料 104,619 筆（含已註銷、缺分類代碼、舊制分類）全部收錄、全部查得到，服務 IVD 以外產業的使用者（例如競品研究）。每筆掛官方欄位與審核結果的標籤；預設依命中程度排序、不偏任何類別；使用者的語意由 host AI 判斷，再指定偏好（只調順序）或篩選（使用者明確要求時）。缺分類代碼的 17,606 列維持 `ivd_scope=unknown`（owner 2026-09-15：「A 這樣才有做 data 清理的意義在啊」；2026-09-14「舊制那些維持現狀」） | TFDA-06；`list_matching_license_records` 新增分頁、偏好與篩選參數；可並排原始欄位供使用者自行比較，系統不判優劣、等效或可替代，`compare_products` 維持 deprecated；TFDA 下載包大小上限另行調整 |
 | REL-G5 | 取消 5–10 人 pilot，改為公開上線並由使用者回報收集回饋 | 見第 8.2 節修訂列與第 8.4 節註記 |
 
 ## 10. 風險、假設與緩解

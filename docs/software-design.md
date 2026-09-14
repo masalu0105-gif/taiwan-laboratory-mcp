@@ -619,7 +619,15 @@ Query capabilities分開：
 - `search_reviewed_ivd(query, manufacturer=null, limit=20, offset=0)`只回逐碼`decision_status=approved`的`included`；nullable `manufacturer`只篩選製造商角色。`TFDA-R1-IVD`未完成時仍可回已核准列，但`coverage_status=review_incomplete`；沒有included而candidate tool有命中時回`candidate_matches_available`，不能用空結果暗示沒有IVD。Serving snapshot本身仍必須有`PUB-R1-OWNER`。
 - `search_ivd_candidates(query, manufacturer=null, limit=20, offset=0)` 回 `included|ambiguous|unknown`候選；nullable `manufacturer`只篩選製造商角色；必帶 `coverage_status`、reviewed code分子/分母、舊制/缺碼/未知列數、命中依據及 truncation。Keyword只能召回候選。
 - 舊 `search_ivd` 是 reviewed-only相容 alias；若沒有included命中但 candidate tool有命中，回 `result_status=candidate_matches_available`與候選tool指引，不回 `not_found`。
-- `get_license` 可回全部一般許可source rows並逐列附scope。`list_matching_license_records`只並列原始許可欄位與來源，不比較、排序優劣或推論等效。
+- `get_license` 可回全部一般許可source rows並逐列附scope。~~`list_matching_license_records`只並列原始許可欄位與來源，不比較、排序優劣或推論等效。~~
+- `list_matching_license_records(query, limit=10, offset=0, prefer_ivd=false, prefer_main_category=null, ivd_scope=null, main_category=null)`（`D-015`／PRD TFDA-06）搜尋全部 `tfda_source_row`，不因註銷、缺碼或舊制排除。
+  - 比對欄位：字號、中英文品名、申請商、製造商、效能、主／次類別原文。
+  - 排序key：`(match_tier, preference_miss, cancellation_raw_nonempty, license_no, source_row_number)`。
+    - `match_tier` 0＝normalized字號完全相同，1＝中文或英文品名完全相同，2＝品名prefix，3＝品名substring，4＝其他欄位substring。
+    - `preference_miss` 為未符合 `prefer_ivd`（`ivd_scope=included`）與 `prefer_main_category` 的條件數。
+  - `ivd_scope`／`main_category` 篩選先於排序套用。`main_category` 只比對三組主類別開頭的A–P字母，舊制四碼不命中任何字母。
+  - 每列回 `ivd_scope`、主類別字母陣列、級數與許可證種類原文、`cancellation_recorded_in_source`、`matched_by`。
+  - 不輸出分數、相似度、優劣或可替代性；只並列原始欄位與來源。
 - `compare_products` 在P1.1只回 `result_status=deprecated_unsupported`、0 items與中性tool指引；不得回可被host整理成比較表的資料。
 
 在當期出現的399個A/B/C code未逐碼review、舊制coverage未說明或owner未核准前，`coverage_status=review_incomplete`，產品不得宣稱「完整台灣IVD清單」。`B.9225`、`B.9195`、`B.9245`必須是regression cases。
@@ -890,16 +898,18 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-012` 支援平台承諾 | Accepted（owner 2026-09-14）：Windows與macOS | macOS以CI macos-latest驗證；Linux仍在CI執行但不列為公開承諾平台 |
 | `D-013` local integrity threat model | Accepted | hash不宣稱抵抗可寫data root的惡意writer；runtime read-only principal，若需authenticity另做signed manifest ADR |
 | `D-014` NHI `29101231` sentinel對外語意 | OWNER GATE | 目前只保留raw/parsed date與`possible_open_end_sentinel=true` inference，禁止顯示「永久有效」；需由OD-02 owner核准官方語意後另建rule/build |
+| `D-015` TFDA全收錄、標籤與查詢排序 | Accepted（owner 2026-09-15） | 全部104,619列可查；標籤只取官方欄位與approved registry；預設依命中程度排序、不偏類別；語意由host AI判斷後以`prefer_*`（只調順序）或篩選參數表達，不在server端猜意圖或加隱藏權重；缺分類代碼列維持`unknown`；不輸出分數、等效或採購排序 |
 
 PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列出的工程decision不得冒充owner決議：
 
 | PRD owner decision | SDD decision | 現況與阻擋點 |
 | --- | --- | --- |
 | `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；TFDA／CDC未決 |
-| `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14）；~~官方文件依據研究中~~ AI審核已完成為`nhi-lab-scope-v2`（2026-09-14，見`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`），6,173碼中2碼仍`review_pending`；sentinel維持原值＋可能未設定結束日推論 |
+| `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14）；~~官方文件依據研究中~~ AI審核已完成為`nhi-lab-scope-v2`（2026-09-14，見`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`），~~6,173碼中2碼仍`review_pending`~~ 依owner決定判不出來的2碼改算檢驗，已重建serving並發布`nhi-data-20260914-lab-scope`；sentinel維持原值＋可能未設定結束日推論 |
 | `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14）；附表逐碼AI判定已完成（2026-09-14，見`docs/reviews/tfda-ivd-ai-review-2026-09-14.md`），尚未接入MCP |
 | `OD-04` | `D-011` | 待指定CDC內容與ODS認可制度reviewer及turnaround |
 | `OD-05` | `D-008`、`D-012` | NHI不hard-stop、支援Windows與macOS（2026-09-14）；TFDA／CDC stale門檻仍依各來源另定 |
+| `OD-06` | `D-015` | TFDA全收錄＋標籤＋host AI指定偏好／篩選（2026-09-15）；TFDA curated build、adapter與contract參數尚未實作 |
 
 `REL-G5` pilot 已由 owner 於 2026-09-14 取消，改為公開上線並以 GitHub Issues 收集使用者回饋（PRD §8.2、§8.4）；本文件中以 pilot 為前提的 `PilotResultV1` 等設計保留為歷史，不再是發布條件。
 

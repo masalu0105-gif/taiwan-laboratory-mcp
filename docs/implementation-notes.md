@@ -483,6 +483,27 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 舊制的有效列：「牙科用注射針」「"柯惠" ＧＩＡ自動手術縫合器」。
 - 品名關鍵字只用來估計比例，不是判定依據。
 
+### Owner 決定：TFDA 全收錄、標籤與查詢方式（2026-09-15，OD-06／D-015）
+
+- 過程：
+  - owner 先說：「全部都要收…那 10 萬多筆全部都要收，全部都要找得到。只是你要再去稍微打標籤，然後再讓它去依照標籤去分它的權重吧」，並提到非 IVD 產業（例如競品比較）也要能用這個資料庫。
+  - Claude 提出 A／B 兩案：
+    - A：預設依命中程度、不偏類別，由 host AI 依使用者問法指定偏好或篩選。
+    - B：server 固定依標籤加權，IVD 永遠在前。
+  - owner 回覆「A 這樣才有做 data 清理的意義在啊，對吧？」。
+- 已同步：
+  - PRD：§5 工具表 `list_matching_license_records` 列、新增 TFDA-06、Owner 決定表新增 OD-06。
+  - SDD：§10.2 查詢規則、`D-015`、OD 對照表 `OD-06`；並修正 `OD-02` 列已過期的「2碼仍review_pending」。
+  - TDD：§8 分頁與排序測試、stdio 工具簽名。
+  - 舊文字以刪除線保留。
+- 規格解讀（owner 未逐項指定，依 A 案內容落地）：
+  - 「權重」實作為排序 key 中的 `preference_miss`，只在同一命中程度內調整順序，不改變 `total_matches`。
+  - server 不從 query 文字猜意圖。
+  - 缺分類代碼的 17,606 列依 owner 2026-09-14「舊制那些維持現狀」維持 `unknown`，與 TDD「主類別 A／B／C 本身不得讓資料變成 IVD」一致。
+  - 「官方註銷欄空白者在前」只是排序，不得稱為有效許可（PRD TFDA-02）。
+  - 可並排原始欄位供使用者自行比較；`compare_products` 維持 deprecated，不輸出優劣、等效或可替代，這是原始 goal 的限制。
+- 尚未實作：TFDA curated build、IVD registry 入 repo、adapter、contract 新參數、TFDA 三關審核與下載包（下載包上限 64 MiB 需調整）。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

@@ -328,8 +328,16 @@ Validity table 也逐列測：`evaluated_as_of <= valid_through` 為 `true`（�
 - Public `ivd_scope` 只接受 `included`、`excluded`、`ambiguous`、`unknown`：approved included 與 excluded／ambiguous 同時命中時為 `ambiguous`；全部 reviewed codes 皆 excluded 時為 `excluded`；缺次類別、舊制四碼、未知 code 或規則版本不明均為 `unknown`。Internal review state 可分開保存，但 `review_pending`、`not_ivd_by_reviewed_classification`、`ivd_unknown`、`ivd_candidate` 都不得出現在 public `ivd_scope`；contract mutation tests 逐一拒絕。
 - `search_reviewed_ivd` 只回逐碼 approved included；相容名稱 `search_ivd` alias 到此行為。若沒有 included 但 candidate tool 可命中，回 `candidate_matches_available`，不可用空結果暗示沒有 IVD。
 - `search_ivd_candidates` 回 included／ambiguous／unknown，並強制回 `coverage_status`、reviewed code 比例、舊制／缺碼列數、`total_matches`、`returned_count` 與 `truncated`；candidate 不得混進 reviewed-only 結果。名稱／效能／規格關鍵字只能召回 candidate，不能覆蓋 registry decision。
-- Bounded-result contract 對 `search_disease`、`get_specimen_requirement`、`find_authorized_lab`、`get_license`、`find_manufacturer` 各測 0、20、21 筆：無公開分頁參數時固定 `limit=20, offset=0`，第 21 筆令 `total_matches=21`、`returned_count=20`、`truncated=true`；不得無界回傳或靜默截斷。`get_lab_scope` 及其他 alias 另驗 canonical default page。`list_matching_license_records` 固定 `offset=0` 並依 request `limit`，P1.1 不提供下一頁。
-- `list_matching_license_records` 只並列來源欄位並採穩定、非臨床排序。舊 `compare_products` 固定 `deprecated_unsupported`、0 items，不輸出比較表、相似度、優劣、可替代性或採購排序。
+- Bounded-result contract 對 `search_disease`、`get_specimen_requirement`、`find_authorized_lab`、`get_license`、`find_manufacturer` 各測 0、20、21 筆：無公開分頁參數時固定 `limit=20, offset=0`，第 21 筆令 `total_matches=21`、`returned_count=20`、`truncated=true`；不得無界回傳或靜默截斷。`get_lab_scope` 及其他 alias 另驗 canonical default page。~~`list_matching_license_records` 固定 `offset=0` 並依 request `limit`，P1.1 不提供下一頁。~~ `list_matching_license_records` 依 request `limit`（1–100）與 `offset` 分頁（OD-06），測 0、limit、limit+1 與最後一頁。
+- ~~`list_matching_license_records` 只並列來源欄位並採穩定、非臨床排序。~~ `list_matching_license_records`（PRD TFDA-06）測：
+  - 已註銷、缺分類代碼、舊制分類列都能命中。
+  - 五級命中程度排序與 tie-break 固定。
+  - `prefer_ivd`／`prefer_main_category` 只改順序、`total_matches` 不變。
+  - `ivd_scope`／`main_category` 篩選與非法值 `invalid_request`。
+  - 每列標籤與 `matched_by`。
+  - 輸出不含 score／similarity 欄位。
+
+  舊 `compare_products` 固定 `deprecated_unsupported`、0 items，不輸出比較表、相似度、優劣、可替代性或採購排序。
 - registry 未含 reviewer、reviewed_at、官方頁碼／版本、source hash 或 rule version 時，不能成為 production-approved registry。
 
 ## 9. CDC PDF 與 ODS 測試案例
@@ -520,7 +528,7 @@ search_ivd_candidates(query:string, manufacturer:string|null=null, limit:integer
 search_ivd(query:string, manufacturer:string|null=null)
 get_license(license_no:string)
 find_manufacturer(name:string)
-list_matching_license_records(query:string, limit:integer=10)
+list_matching_license_records(query:string, limit:integer=10, offset:integer=0, prefer_ivd:boolean=false, prefer_main_category:string|null=null, ivd_scope:string|null=null, main_category:string|null=null)
 compare_products(query:string, limit:integer=10)
 standards_status()
 eqa_status()
