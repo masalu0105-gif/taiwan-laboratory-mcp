@@ -205,7 +205,10 @@ def get_data_status() -> DataStatusResult:
     assert CONTEXT.data_root is not None
     return DataStatusResult(
         data_mode="official_snapshot",
-        sources=[read_source_status(CONTEXT.data_root, source_id) for source_id in SOURCE_IDS],
+        sources=[
+            read_source_status(CONTEXT.data_root, source_id, clock=CONTEXT.clock)
+            for source_id in SOURCE_IDS
+        ],
     )
 
 

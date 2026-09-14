@@ -179,7 +179,7 @@ class NHIAdapter:
 
     def _state(self) -> OfficialState:
         assert self.context.data_root is not None
-        return read_nhi_state(self.context.data_root)
+        return read_nhi_state(self.context.data_root, clock=self.context.clock)
 
     def _sample_or_unavailable(
         self, operation: str, query: dict[str, Any], note: str

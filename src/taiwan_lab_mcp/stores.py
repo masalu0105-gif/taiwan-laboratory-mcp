@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -32,6 +33,41 @@ class OfficialState:
 
 class _OperationalIntegrityError(ValueError):
     """The serving data may be intact, but its operational status is not bound."""
+
+
+# data.gov.tw declares the NHI dataset as updated every 1 day (updateFrequency).
+# SDD 8.3: NHI is stale after more than two declared cycles without a successful check.
+# Owner decision 2026-09-14 (D-008): no hard-stop; keep serving with the warning.
+NHI_DECLARED_UPDATE_CYCLE = timedelta(days=1)
+NHI_CHECK_OVERDUE_AFTER = 2 * NHI_DECLARED_UPDATE_CYCLE
+_STALE_REASON_ORDER = (
+    "upstream_check_overdue",
+    "upstream_verification_failed",
+    "newer_candidate_pending_review",
+    "newer_candidate_rejected",
+    "newer_candidate_awaiting_publish",
+)
+
+
+def _now(clock: Callable[[], datetime] | None) -> datetime:
+    value = clock() if clock else datetime.now(timezone.utc)
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("freshness clock must include a timezone")
+    return value
+
+
+def _effective_stale_reason_codes(descriptor: dict[str, Any], now: datetime) -> list[str]:
+    stored = list(descriptor["stale_reason_codes"])
+    codes = set(stored)
+    last_success = descriptor["last_successful_check_at"]
+    if (
+        last_success is None
+        or now - datetime.fromisoformat(last_success.replace("Z", "+00:00"))
+        > NHI_CHECK_OVERDUE_AFTER
+    ):
+        codes.add("upstream_check_overdue")
+    ordered = [code for code in _STALE_REASON_ORDER if code in codes]
+    return ordered + [code for code in stored if code not in _STALE_REASON_ORDER]
 
 
 def _empty_status() -> SourceStatus:
@@ -87,13 +123,16 @@ def _unavailable(
     )
 
 
-def _status_from_descriptor(descriptor: dict[str, Any], available: bool) -> SourceStatus:
+def _status_from_descriptor(
+    descriptor: dict[str, Any], available: bool, stale_reason_codes: list[str] | None = None
+) -> SourceStatus:
+    codes = list(stale_reason_codes or []) if available else []
     return SourceStatus(
         serving_validation_status="passed" if available else "not_applicable",
         serving_review_status="approved" if available else "not_applicable",
         latest_candidate_status=descriptor.get("latest_candidate_status", "none"),
-        stale=bool(descriptor.get("stale", False)) if available else False,
-        stale_reason_codes=descriptor.get("stale_reason_codes", []) if available else [],
+        stale=bool(codes),
+        stale_reason_codes=codes,
     )
 
 
@@ -272,7 +311,13 @@ def _validate_check_record(
         raise _OperationalIntegrityError("check hash mismatch")
 
 
-def read_nhi_state(data_root: Path) -> OfficialState:
+def read_nhi_state(
+    data_root: Path, *, clock: Callable[[], datetime] | None = None
+) -> OfficialState:
+    return _read_nhi_state(data_root, _now(clock))
+
+
+def _read_nhi_state(data_root: Path, now: datetime) -> OfficialState:
     descriptor_path = Path(data_root) / "manifests" / "current" / "nhi_fee.json"
     if not descriptor_path.is_file():
         try:
@@ -404,6 +449,7 @@ def read_nhi_state(data_root: Path) -> OfficialState:
                 timezone_known=bool(official.get("timezone_known", False)),
             )
         retrieved_at = datetime.fromisoformat(manifest["fetched_at"].replace("Z", "+00:00"))
+        stale_reason_codes = _effective_stale_reason_codes(descriptor, now)
         provenance = Provenance(
             source_id="nhi_fee",
             source_name=source["dataset_name"],
@@ -433,8 +479,8 @@ def read_nhi_state(data_root: Path) -> OfficialState:
             license_url=source["license_url"],
             attribution=source["attribution"],
             coverage_status="review_incomplete",
-            stale=bool(descriptor.get("stale", False)),
-            stale_reason_codes=descriptor.get("stale_reason_codes", []),
+            stale=bool(stale_reason_codes),
+            stale_reason_codes=stale_reason_codes,
             last_check_at=(
                 datetime.fromisoformat(descriptor["last_check_at"].replace("Z", "+00:00"))
                 if descriptor.get("last_check_at")
@@ -445,7 +491,7 @@ def read_nhi_state(data_root: Path) -> OfficialState:
         return OfficialState(
             availability="available",
             reason=None,
-            status=_status_from_descriptor(descriptor, True),
+            status=_status_from_descriptor(descriptor, True, stale_reason_codes),
             provenance=provenance,
             rows=rows,
         )
@@ -455,9 +501,12 @@ def read_nhi_state(data_root: Path) -> OfficialState:
         return _unavailable("serving_integrity_failure")
 
 
-def read_source_status(data_root: Path, source_id: str) -> SourceDataStatus:
+def read_source_status(
+    data_root: Path, source_id: str, *, clock: Callable[[], datetime] | None = None
+) -> SourceDataStatus:
+    now = _now(clock)
     if source_id == "nhi_fee":
-        state = read_nhi_state(data_root)
+        state = _read_nhi_state(data_root, now)
         descriptor_path = Path(data_root) / "manifests" / "current" / "nhi_fee.json"
     else:
         state = _unavailable("no_serving_snapshot")
@@ -517,8 +566,8 @@ def read_source_status(data_root: Path, source_id: str) -> SourceDataStatus:
             if state.provenance
             else None,
             latest_seen_version=descriptor.get("latest_seen_version"),
-            stale=descriptor.get("stale", False),
-            stale_reason_codes=descriptor.get("stale_reason_codes", []),
+            stale=state.status.stale,
+            stale_reason_codes=list(state.status.stale_reason_codes),
             content_age_status=descriptor.get("content_age_status", "unknown"),
             freshness_policy_version=descriptor.get("freshness_policy_version", f"{source_id}-v1"),
             content_age_evidence=descriptor.get("content_age_evidence"),

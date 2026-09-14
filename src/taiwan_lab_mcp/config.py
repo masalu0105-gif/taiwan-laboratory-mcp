@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -14,6 +16,8 @@ class DataContext:
 
     mode: DataMode
     data_root: Path | None = None
+    # Injected for freshness tests; None means the real UTC clock.
+    clock: Callable[[], datetime] | None = None
 
     @classmethod
     def from_env(cls) -> DataContext:

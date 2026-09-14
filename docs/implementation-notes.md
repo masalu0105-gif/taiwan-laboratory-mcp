@@ -175,6 +175,22 @@
 - ~~UNVERIFIED／OWNER GATE：`gws` 目前授權失效（唯讀 `gmail users getProfile` 回 401 `invalid_grant`，2026-09-14 兩次實測），真的有新版或失敗時信件會寄不出去；STATUS 會記「email：寄送失敗」。需要 owner 本人在 PowerShell 重新登入 `gws`，之後再經 owner 同意寄一封真的測試信並到寄件備份確認。~~ 2026-09-14 owner 本人重新登入（PowerShell 停用腳本執行，`gws` 會叫到 `gws.ps1` 被擋，改用 `gws.cmd auth login`；未修改 execution policy）。唯讀 `getProfile` 成功。經 owner 同意，以排程腳本對空 data root 真實寄一封「本機沒有正在服務的健保資料」通知：STATUS「email：已寄出」，Gmail 讀回 message `1a09fff1f5bcd026` 標籤 `SENT`／`INBOX`、收件人與中文主旨正確。之後以真實 data root 重跑，STATUS 回到 OK（check `nhi_fee-check-20260914t125814z-5760272cd76b435aa4ff6d245e22270a`）。
 - UNVERIFIED：`changed`、`failed` 兩條路徑的真實寄信，以及排程環境下的非 0 結束碼（`Run-HiddenTask.vbs` 程式碼以 `WScript.Quit exitCode` 回傳，未實跑）尚未實測。`gws` 登入日後若再次失效，STATUS 會記「email：寄送失敗」。
 
+### Owner 決定：過期處理、再散布、下一步與平台（2026-09-14）
+
+owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我寫完、3A+B馬上做、4 同意 windows跟mac都要」：
+
+- `D-008`（NHI 超過 7 日是否 hard-stop）：選 A，不 hard-stop。超過兩個宣告週期沒有成功 upstream check 時標 `upstream_check_overdue`，持續回答已核准舊版並顯著揭露。
+- `OD-01`（curated snapshot 是否隨 GitHub Release 再散布）：選 B，NHI curated snapshot 要放上 GitHub Release，並寫完整安裝說明。`PUB-R1-OWNER` 先前核准範圍只到本機 serving；再散布的 artifact 內容、授權與 archive 檢查完成後，實際建立 Release 前仍需把具體檔案內容交 owner 確認。
+- 下一步：A（NHI 收尾：overdue 標示、新版審核後發布的指令）與 B（TFDA 第一個切片）都要做。
+- 規格解讀第 2–5 點（見「本切片的規格解讀」）與 `official_content_date.precision` 對外投影（非 `day|month|year` 顯示 `unknown`）：owner 同意。
+- `OD-05` 平台承諾：P1.1 同時支援 Windows 與 macOS。本機只有 Windows，macOS 驗證需另找環境（CI 或 owner 的 Mac），驗證前不得宣稱 macOS 已通過。
+
+### NHI upstream check overdue（2026-09-14）
+
+- `stores.py`：runtime 讀 descriptor 時以 injected clock（`DataContext.clock`，預設 UTC 現在時間；naive datetime 拒絕）計算 overdue：`last_successful_check_at` 為 null，或距今超過 2 個宣告週期（data.gov.tw `updateFrequency` 每 1 日 → 48 小時，剛好 48 小時不算）時，加上 `upstream_check_overdue`。與 descriptor 已存的 reason codes 合併、依 PRD registry 順序排列；status 與 provenance 用同一次計算，stored descriptor／check bytes 不改寫。`freshness_policy_version` 維持 `nhi-v1`（SDD §8.3 原本就定義兩個宣告週期）。
+- `adapters/nhi.py`、`server.py` 的 `get_data_status` 都傳入 context clock。
+- 測試：`tests/test_freshness.py` 新增 4 個（48 小時邊界、8 天後仍可查、與 `upstream_verification_failed` 合併順序、adapter 經 context clock 產生 warning、naive clock 拒絕）。
+
 ## 目前驗證證據
 
 以下為 2026-09-14 同步保留原始檔與授權代碼核對修改後、基於 commit `a14b1da` 加上未提交 worktree 變更的重跑結果（前兩版記錄為 `155 passed`、`177 passed`）：

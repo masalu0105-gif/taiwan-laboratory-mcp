@@ -61,6 +61,131 @@ def test_sdd_fresh_01_internal_states_map_to_prd_freshness(tmp_path):
     )
 
 
+def _synthetic_nhi_root(tmp_path):
+    from taiwan_lab_mcp.importers.nhi import NHI_COLUMNS, build_nhi_snapshot
+
+    payload = (
+        "\ufeff" + ",".join(NHI_COLUMNS) + "\n" + "09006C,0,20120101,29101231,HbA1c,醣化血紅素,\n"
+    ).encode()
+    build_nhi_snapshot(payload, tmp_path)
+    descriptor = json.loads(
+        (tmp_path / "manifests" / "current" / "nhi_fee.json").read_text(encoding="utf-8")
+    )
+    return descriptor
+
+
+def _utc(text):
+    from datetime import datetime
+
+    return datetime.fromisoformat(text.replace("Z", "+00:00"))
+
+
+def test_nhi_upstream_check_overdue_after_two_declared_daily_cycles(tmp_path):
+    from datetime import timedelta
+
+    from taiwan_lab_mcp.stores import read_nhi_state, read_source_status
+
+    descriptor = _synthetic_nhi_root(tmp_path)
+    last_success = _utc(descriptor["last_successful_check_at"])
+    before = (tmp_path / "manifests" / "current" / "nhi_fee.json").read_bytes()
+
+    at_limit = read_source_status(
+        tmp_path, "nhi_fee", clock=lambda: last_success + timedelta(days=2)
+    )
+    assert at_limit.stale is False
+    assert at_limit.stale_reason_codes == []
+
+    def overdue_clock():
+        return last_success + timedelta(days=2, seconds=1)
+
+    overdue = read_source_status(tmp_path, "nhi_fee", clock=overdue_clock)
+    assert overdue.availability == "available"
+    assert overdue.stale is True
+    assert overdue.stale_reason_codes == ["upstream_check_overdue"]
+    assert overdue.last_successful_check_at == last_success
+
+    state = read_nhi_state(tmp_path, clock=overdue_clock)
+    assert state.availability == "available"
+    assert state.status.stale is True
+    assert state.status.stale_reason_codes == ["upstream_check_overdue"]
+    assert state.provenance.stale is True
+    assert state.provenance.stale_reason_codes == ["upstream_check_overdue"]
+
+    # Owner decision 2026-09-14 (D-008): no hard-stop; keep serving with the warning.
+    week_later = read_nhi_state(tmp_path, clock=lambda: last_success + timedelta(days=8))
+    assert week_later.availability == "available"
+    assert week_later.rows
+    assert week_later.status.stale_reason_codes == ["upstream_check_overdue"]
+
+    # The overdue flag is computed at read time; stored evidence is never rewritten.
+    assert (tmp_path / "manifests" / "current" / "nhi_fee.json").read_bytes() == before
+
+
+def test_nhi_overdue_merges_with_stored_reasons_in_registry_order(tmp_path):
+    from datetime import timedelta
+
+    from taiwan_lab_mcp.canonical import canonical_json_bytes, sha256_bytes
+    from taiwan_lab_mcp.stores import read_nhi_state, read_source_status
+
+    descriptor = _synthetic_nhi_root(tmp_path)
+    descriptor_path = tmp_path / "manifests" / "current" / "nhi_fee.json"
+    check_path = tmp_path / Path(descriptor["latest_check_data_root_relative_path"])
+    check = json.loads(check_path.read_text(encoding="utf-8"))
+    for record in (check, descriptor):
+        record["stale"] = True
+        record["stale_reason_codes"] = ["upstream_verification_failed"]
+    check_bytes = canonical_json_bytes(check)
+    check_path.write_bytes(check_bytes)
+    descriptor["latest_check_sha256"] = sha256_bytes(check_bytes)
+    descriptor_path.write_bytes(canonical_json_bytes(descriptor))
+    last_success = _utc(descriptor["last_successful_check_at"])
+
+    def clock():
+        return last_success + timedelta(days=3)
+
+    status = read_source_status(tmp_path, "nhi_fee", clock=clock)
+    assert status.stale_reason_codes == ["upstream_check_overdue", "upstream_verification_failed"]
+    state = read_nhi_state(tmp_path, clock=clock)
+    assert state.provenance.stale_reason_codes == [
+        "upstream_check_overdue",
+        "upstream_verification_failed",
+    ]
+
+
+def test_nhi_adapter_uses_context_clock_for_overdue_warning(tmp_path):
+    from datetime import timedelta
+
+    from taiwan_lab_mcp.adapters.nhi import NHIAdapter
+    from taiwan_lab_mcp.config import DataContext
+
+    descriptor = _synthetic_nhi_root(tmp_path)
+    last_success = _utc(descriptor["last_successful_check_at"])
+    context = DataContext(
+        mode="official_snapshot",
+        data_root=tmp_path,
+        clock=lambda: last_success + timedelta(days=5),
+    )
+
+    result = NHIAdapter(context).get_points("09006C")
+
+    assert result.result_status == "ok"
+    assert result.source_status.stale is True
+    assert "upstream_check_overdue" in result.warnings
+    assert result.provenance.stale_reason_codes == ["upstream_check_overdue"]
+
+
+def test_nhi_overdue_rejects_naive_clock(tmp_path):
+    from datetime import datetime
+
+    import pytest
+
+    from taiwan_lab_mcp.stores import read_source_status
+
+    _synthetic_nhi_root(tmp_path)
+    with pytest.raises(ValueError):
+        read_source_status(tmp_path, "nhi_fee", clock=lambda: datetime(2030, 1, 1))
+
+
 def test_sdd_fail_01_operational_integrity_is_data_unavailable(tmp_path, monkeypatch):
     from taiwan_lab_mcp.adapters.nhi import NHIAdapter
     from taiwan_lab_mcp.canonical import canonical_json_bytes
