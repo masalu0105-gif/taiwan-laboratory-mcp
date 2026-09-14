@@ -148,6 +148,19 @@
 - repo 內 `dist/`（2026-09-14 00:40 建立、git ignored）是舊 archive，不含新增的 review protocol；未覆寫。在未設定 `TAIWAN_LAB_ARTIFACT_DIR` 時，`tests/test_package_contents.py` 會讀到這份舊 archive 而失敗；本輪 archive 驗證改用 session scratchpad 內重建的 wheel／sdist。
 - 仍未做：curated artifact 再散布（GitHub Release）核准、`NHI-R1-SCOPE`、新舊版差異偵測（「有變才發」）、`review`／`publish` CLI、audit 對 review protocol 是否為 package 內核准版本的比對。
 
+### 提交、本機 MCP 設定與「有變才發」上游檢查（2026-09-14）
+
+- owner 要求後，commit `3238d70`（feat: owner-reviewed official NHI build and local serving）已 push 到 `origin/main`；push 後 `git rev-parse HEAD` 與 `git ls-remote origin refs/heads/main` 同為 `3238d70451d1295d46d3a997cd53911823929e08`。
+- 本機 MCP：以 `uv tool install` 安裝 wheel（`C:\Users\User\.local\bin\taiwan-lab-mcp.exe`、`taiwan-lab-data.exe`），並以 `claude mcp add-json taiwan-laboratory ... -s user` 加入 Claude Code 使用者設定，env 為 `TAIWAN_LAB_DATA_MODE=official_snapshot`、`TAIWAN_LAB_DATA_DIR=C:/Users/User/Documents/ChatGPT/taiwan-lab-mcp-data/data-root`、`PYTHONIOENCODING=utf-8`；`claude mcp list` 顯示 `✔ Connected`。Claude 桌面聊天 App 的設定檔未修改。
+- 新增 `sync.run_nhi_upstream_check()` 與 CLI `taiwan-lab-data check nhi_fee --publisher-oid <oid> --actor <id> --data-dir <path> [--json]`：先讀 current descriptor 與 serving manifest，再跑既有 upstream sync（保留 raw revision），用 raw artifact SHA-256 與 serving build 比對，最後經既有 `publish_operational_check` 寫 immutable check record 並更新 descriptor，serving snapshot 不變。
+  - 同一 SHA-256：`result=unchanged`、check success、candidate none、`stale=false`，不重建（SDD §9.2／TDD §6.4）。
+  - 不同 SHA-256：`result=changed`、check success、candidate `review_pending`（id 為新 raw revision）、`stale=true` 與 `newer_candidate_pending_review`（SDD §8.3）；在該次 sync attempt 目錄寫 `diff.json`（新增／刪除代碼、逐代碼變動欄位、筆數與代碼數）與中文 `diff-summary.md`。`review_gate` 以整數運算標示筆數或代碼數變動是否超過 10%（SDD §13.2 啟動期門檻；非官方門檻）。
+  - 抓取或驗證失敗：`result=failed`、check failed、`stale=true` 與 `upstream_verification_failed`；已取得不同 bytes 但驗證失敗時另標 candidate `rejected` 與 `newer_candidate_rejected`。`last_successful_check_at` 不變。
+  - 尚無 serving snapshot：只留 sync report，`result=no_serving_snapshot`，不建立 descriptor。
+  - CLI exit code 依 SDD §12：成功（含 changed）0、discover／fetch 失敗 3、parse／validate 失敗 4、current／check 完整性錯誤 6。
+- live 實測（repo 外 uv tool 安裝版）：`taiwan-lab-data check nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --actor claude-code-for-owner --data-dir <data-root> --json` exit 0、`result=unchanged`、check `nhi_fee-check-20260914t123202z-ae306e358a7145e5b6089d9d60c80d0d`、descriptor generation 2。MCP stdio `get_data_status` 顯示 `last_check_at=2026-09-14T12:32:02Z`、`last_successful_publish_at=2026-09-14T12:14:32Z`（未改）、`stale=false`；`get_points("09006C")` 仍回 200 點。
+- 待 owner 決定：是否建立每日自動執行 `check` 的排程（Windows 工作排程器或 WSL cron，屬持久設定），以及有新版時要用什麼方式通知 owner；新版審核通過後的「發布新版」流程目前需依 `build_official_nhi_snapshot` 手動執行。
+
 ## 目前驗證證據
 
 以下為 2026-09-14 同步保留原始檔與授權代碼核對修改後、基於 commit `a14b1da` 加上未提交 worktree 變更的重跑結果（前兩版記錄為 `155 passed`、`177 passed`）：

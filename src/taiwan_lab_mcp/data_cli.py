@@ -31,6 +31,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=["discover", "fetch", "parse", "normalize", "validate"],
     )
     sync_parser.add_argument("--json", action="store_true")
+    check_parser = subparsers.add_parser("check")
+    check_parser.add_argument("source_id", choices=["nhi_fee"])
+    check_parser.add_argument("--publisher-oid", required=True)
+    check_parser.add_argument("--actor", required=True)
+    check_parser.add_argument("--data-dir", required=True, type=Path)
+    check_parser.add_argument("--json", action="store_true")
     rollback_parser = subparsers.add_parser("rollback")
     rollback_parser.add_argument("source_id", choices=["nhi_fee"])
     rollback_parser.add_argument("target_curated_build_id")
@@ -95,6 +101,31 @@ def main(argv: list[str] | None = None) -> int:
         if report["stage"] in {"discover", "fetch"}:
             return 3
         return 4
+    if args.command == "check":
+        from .publish import PublishError
+        from .sync import SyncError, run_nhi_upstream_check
+
+        try:
+            summary = run_nhi_upstream_check(
+                args.data_dir,
+                expected_publisher_oid=args.publisher_oid,
+                actor=args.actor,
+            )
+        except (PublishError, SyncError) as exc:
+            print(
+                json.dumps(
+                    {"operation": "check", "result": "failed", "error_code": exc.code},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 6
+        print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
+        if summary.get("failed_stage") in {"discover", "fetch"}:
+            return 3
+        if summary.get("failed_stage"):
+            return 4
+        return 0
     if args.command == "validate":
         from .importers.nhi import NHIImportError, parse_nhi_csv
 

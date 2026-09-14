@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from datetime import datetime, timezone
@@ -9,12 +10,13 @@ from uuid import uuid4
 
 from .canonical import canonical_json_bytes, sha256_bytes
 from .fetch import FetchedArtifact, FetchError
-from .importers.nhi import NHIImportError, NHIParseResult, parse_nhi_csv
+from .importers.nhi import NHI_COLUMNS, NHIImportError, NHIParseResult, parse_nhi_csv
 from .nhi_source import (
     fetch_nhi_source,
     nhi_discovery_metadata_sha256,
     nhi_raw_revision_id,
 )
+from .publish import publish_operational_check
 
 SyncClock = Callable[[], datetime]
 
@@ -378,3 +380,313 @@ def run_nhi_upstream_sync(
         discovery=discovery,
         fetched_artifact=fetched["artifact"],
     )
+
+
+_SUMMARY_LIST_LIMIT = 50
+
+
+def _read_serving_state(data_root: Path) -> dict[str, Any] | None:
+    descriptor_path = data_root / "manifests" / "current" / "nhi_fee.json"
+    if not descriptor_path.is_file():
+        return None
+    try:
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        serving_id = descriptor["serving_curated_build_id"]
+        if serving_id is None:
+            return None
+        manifest_path = data_root / PurePosixPath(descriptor["manifest_data_root_relative_path"])
+        manifest_bytes = manifest_path.read_bytes()
+        if sha256_bytes(manifest_bytes) != descriptor["manifest_sha256"]:
+            raise SyncError("CURRENT_POINTER_INTEGRITY", "check")
+        artifact = json.loads(manifest_bytes.decode("utf-8"))["artifacts"][0]
+        return {
+            "descriptor": descriptor,
+            "serving_id": serving_id,
+            "artifact_sha256": artifact["sha256"],
+            "artifact_relative": artifact["data_root_relative_path"],
+        }
+    except (KeyError, IndexError, OSError, TypeError, UnicodeDecodeError, ValueError) as exc:
+        if isinstance(exc, SyncError):
+            raise
+        raise SyncError("CURRENT_POINTER_INTEGRITY", "check") from exc
+
+
+def _read_hashed_raw(data_root: Path, relative: str, expected_sha256: str) -> bytes:
+    payload = (data_root / PurePosixPath(relative)).read_bytes()
+    if sha256_bytes(payload) != expected_sha256:
+        raise SyncError("RAW_ARTIFACT_READBACK_MISMATCH", "check")
+    return payload
+
+
+def _raw_values(row: Any) -> list[str]:
+    return [
+        row.code_raw,
+        row.points_raw,
+        row.effective_start_raw,
+        row.effective_end_raw,
+        row.name_en_raw,
+        row.name_zh_raw,
+        row.note_raw,
+    ]
+
+
+def _exceeds_ten_percent(before: int, after: int) -> bool:
+    # Integer arithmetic keeps the report canonical-JSON friendly (no floats).
+    return abs(after - before) * 10 > before
+
+
+def _nhi_upstream_diff(serving_payload: bytes, candidate_payload: bytes) -> tuple[dict, dict, dict]:
+    serving_parsed = parse_nhi_csv(serving_payload)
+    candidate_parsed = parse_nhi_csv(candidate_payload)
+    serving_rows = {row.code_normalized: row for row in serving_parsed.rows}
+    candidate_rows = {row.code_normalized: row for row in candidate_parsed.rows}
+    added = sorted(
+        candidate_rows[key].code_raw for key in candidate_rows.keys() - serving_rows.keys()
+    )
+    removed = sorted(
+        serving_rows[key].code_raw for key in serving_rows.keys() - candidate_rows.keys()
+    )
+    changed = []
+    for key in sorted(
+        serving_rows.keys() & candidate_rows.keys(), key=lambda k: candidate_rows[k].code_raw
+    ):
+        old_values = _raw_values(serving_rows[key])
+        new_values = _raw_values(candidate_rows[key])
+        fields = [name for name, old, new in zip(NHI_COLUMNS, old_values, new_values) if old != new]
+        if fields:
+            changed.append({"code": candidate_rows[key].code_raw, "fields": fields})
+    diff = {
+        "added_codes": added,
+        "removed_codes": removed,
+        "changed": changed,
+        "row_counts": {
+            "serving": len(serving_parsed.rows),
+            "candidate": len(candidate_parsed.rows),
+        },
+        "unique_code_counts": {"serving": len(serving_rows), "candidate": len(candidate_rows)},
+        "review_gate": {
+            "row_count_change_exceeds_10_percent": _exceeds_ten_percent(
+                len(serving_parsed.rows), len(candidate_parsed.rows)
+            ),
+            "unique_code_change_exceeds_10_percent": _exceeds_ten_percent(
+                len(serving_rows), len(candidate_rows)
+            ),
+        },
+    }
+    by_raw_code_serving = {row.code_raw: row for row in serving_parsed.rows}
+    by_raw_code_candidate = {row.code_raw: row for row in candidate_parsed.rows}
+    return diff, by_raw_code_serving, by_raw_code_candidate
+
+
+def _short(value: str, limit: int = 120) -> str:
+    text = " ".join((value or "").split())
+    if not text:
+        return "（空白）"
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def _diff_summary_markdown(
+    diff: dict, serving_rows: dict, candidate_rows: dict, *, checked_at: str, serving_id: str
+) -> str:
+    gate = diff["review_gate"]
+    lines = [
+        "# 健保支付標準表：上游有新版（等你審核）",
+        "",
+        f"- 檢查時間（UTC）：{checked_at}",
+        f"- 目前 MCP 服務中的版本：`{serving_id}`",
+        f"- 筆數：服務中 {diff['row_counts']['serving']:,} 筆 → 新版 {diff['row_counts']['candidate']:,} 筆",
+        f"- 新增 {len(diff['added_codes'])} 筆、刪除 {len(diff['removed_codes'])} 筆、內容有改 {len(diff['changed'])} 筆",
+        "- 筆數變動超過 10%：" + ("是" if gate["row_count_change_exceeds_10_percent"] else "否"),
+        "- 代碼數變動超過 10%："
+        + ("是" if gate["unique_code_change_exceeds_10_percent"] else "否"),
+        "",
+        "新版審核通過並發布之前，MCP 會繼續回目前的版本，並標示「有新版等待審核」。",
+        "",
+    ]
+
+    def section(title: str, codes: list[str], describe) -> None:
+        lines.extend([f"## {title}（{len(codes)} 筆）", ""])
+        if not codes:
+            lines.extend(["（無）", ""])
+            return
+        for code in codes[:_SUMMARY_LIST_LIMIT]:
+            lines.append(describe(code))
+        if len(codes) > _SUMMARY_LIST_LIMIT:
+            lines.append(f"- …另外 {len(codes) - _SUMMARY_LIST_LIMIT} 筆，完整清單見 diff.json")
+        lines.append("")
+
+    section(
+        "新增的代碼",
+        diff["added_codes"],
+        lambda code: (
+            f"- `{code}` {_short(candidate_rows[code].name_zh_raw, 60)}：{candidate_rows[code].points_raw} 點"
+        ),
+    )
+    section(
+        "刪除的代碼",
+        diff["removed_codes"],
+        lambda code: (
+            f"- `{code}` {_short(serving_rows[code].name_zh_raw, 60)}：{serving_rows[code].points_raw} 點"
+        ),
+    )
+    changed_by_code = {item["code"]: item["fields"] for item in diff["changed"]}
+
+    def describe_change(code: str) -> str:
+        old_row = next(
+            row
+            for row in serving_rows.values()
+            if row.code_normalized == candidate_rows[code].code_normalized
+        )
+        pairs = dict(zip(NHI_COLUMNS, zip(_raw_values(old_row), _raw_values(candidate_rows[code]))))
+        details = "；".join(
+            f"{field}：{_short(pairs[field][0])} → {_short(pairs[field][1])}"
+            for field in changed_by_code[code]
+        )
+        return f"- `{code}` {_short(candidate_rows[code].name_zh_raw, 60)}｜{details}"
+
+    section("內容有改的代碼", [item["code"] for item in diff["changed"]], describe_change)
+    return "\n".join(lines)
+
+
+def run_nhi_upstream_check(
+    data_root: Path,
+    *,
+    expected_publisher_oid: str,
+    actor: str,
+    metadata_url: str | None = None,
+    opener=None,
+    clock: SyncClock | None = None,
+) -> dict[str, Any]:
+    """Check upstream once and record the result without switching the serving snapshot.
+
+    Same raw bytes as the serving build record a successful check. Different bytes keep
+    serving the approved build, mark a review-pending candidate and write a diff report.
+    Failed fetch or validation keeps serving the approved build and marks it stale.
+    """
+
+    data_root = Path(data_root)
+    serving = _read_serving_state(data_root)
+    report = run_nhi_upstream_sync(
+        data_root,
+        expected_publisher_oid=expected_publisher_oid,
+        metadata_url=metadata_url,
+        opener=opener,
+        clock=clock,
+    )
+    summary: dict[str, Any] = {
+        "result": None,
+        "sync_report_data_root_relative_path": report["report_data_root_relative_path"],
+        "diff_data_root_relative_path": None,
+        "diff_summary_data_root_relative_path": None,
+        "candidate_raw_revision_id": None,
+        "failed_stage": None if report["status"] == "passed" else report["stage"],
+        "error_code": report["error_code"],
+        "check_id": None,
+        "generation": None,
+        "stale": None,
+        "stale_reason_codes": None,
+    }
+    if serving is None:
+        summary["result"] = "no_serving_snapshot"
+        return summary
+
+    descriptor = serving["descriptor"]
+    artifact = report["artifact_hashes"][0] if report["artifact_hashes"] else None
+    candidate_id = None
+    candidate_status = "none"
+    if report["status"] != "passed":
+        result = "failed"
+        check_result = "failed"
+        reasons = ["upstream_verification_failed"]
+        if artifact is not None and artifact["sha256"] != serving["artifact_sha256"]:
+            candidate_status = "rejected"
+            candidate_id = report["raw_revision_id"]
+            reasons.append("newer_candidate_rejected")
+        seen_sha256 = artifact["sha256"] if artifact else descriptor["latest_seen_artifact_sha256"]
+    elif artifact["sha256"] == serving["artifact_sha256"]:
+        result = "unchanged"
+        check_result = "success"
+        reasons = []
+        seen_sha256 = artifact["sha256"]
+    else:
+        result = "changed"
+        check_result = "success"
+        candidate_status = "review_pending"
+        candidate_id = report["raw_revision_id"]
+        reasons = ["newer_candidate_pending_review"]
+        seen_sha256 = artifact["sha256"]
+        serving_payload = _read_hashed_raw(
+            data_root, serving["artifact_relative"], serving["artifact_sha256"]
+        )
+        candidate_payload = _read_hashed_raw(
+            data_root, artifact["data_root_relative_path"], artifact["sha256"]
+        )
+        diff, serving_rows, candidate_rows = _nhi_upstream_diff(serving_payload, candidate_payload)
+        attempt_dir = PurePosixPath(report["report_data_root_relative_path"]).parent
+        diff_relative = str(attempt_dir / "diff.json")
+        summary_relative = str(attempt_dir / "diff-summary.md")
+        _write_immutable_json(
+            data_root / PurePosixPath(diff_relative),
+            {
+                "diff_schema_version": 1,
+                "source_id": "nhi_fee",
+                "checked_at": report["completed_at"],
+                "serving_snapshot_id": serving["serving_id"],
+                "serving_raw_artifact_sha256": serving["artifact_sha256"],
+                "candidate_raw_revision_id": candidate_id,
+                "candidate_raw_artifact_sha256": artifact["sha256"],
+                **diff,
+            },
+        )
+        _write_new_file(
+            data_root / PurePosixPath(summary_relative),
+            _diff_summary_markdown(
+                diff,
+                serving_rows,
+                candidate_rows,
+                checked_at=report["completed_at"],
+                serving_id=serving["serving_id"],
+            ).encode("utf-8"),
+        )
+        summary["diff_data_root_relative_path"] = diff_relative
+        summary["diff_summary_data_root_relative_path"] = summary_relative
+
+    check = {
+        "check_schema_version": 1,
+        "check_id": f"nhi_fee-check-{report['attempt_id'].lower()}",
+        "source_id": "nhi_fee",
+        "generation": descriptor["generation"] + 1,
+        "serving_snapshot_id": serving["serving_id"],
+        "serving_curated_build_id": serving["serving_id"],
+        "checked_at": report["completed_at"],
+        "latest_seen_version": None,
+        "latest_seen_artifact_sha256": seen_sha256,
+        "latest_candidate_id": candidate_id,
+        "latest_candidate_status": candidate_status,
+        "check_result": check_result,
+        "failed_stage": summary["failed_stage"],
+        "error_code": summary["error_code"],
+        "stale": bool(reasons),
+        "stale_reason_codes": reasons,
+        "freshness_policy_version": descriptor["freshness_policy_version"],
+        "content_age_status": descriptor["content_age_status"],
+        "content_age_evidence": descriptor["content_age_evidence"],
+    }
+    event = publish_operational_check(
+        data_root,
+        "nhi_fee",
+        check,
+        expected_generation=descriptor["generation"],
+        actor=actor,
+    )
+    summary.update(
+        {
+            "result": result,
+            "candidate_raw_revision_id": candidate_id,
+            "check_id": check["check_id"],
+            "generation": event["generation"],
+            "stale": check["stale"],
+            "stale_reason_codes": reasons,
+        }
+    )
+    return summary
