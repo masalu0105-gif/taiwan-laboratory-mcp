@@ -884,7 +884,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-006` CDC PDF layout engine | Proposed / qualification gate | LiteParse文字抽取已證明；以ignored official raw與pinned identity驗bbox/table lineage，CI fixture只驗synthetic contract |
 | `D-007` curated artifact是否再散布 | Accepted for NHI（owner 2026-09-14） | NHI以GitHub Release下載包散布並附原始CSV，見`docs/adr/0001-nhi-snapshot-release-bundle.md`；TFDA／CDC仍需另案確認第三方內容、大小與更新責任 |
 | `D-008` NHI stale 7日是否hard-stop | Accepted（owner 2026-09-14）：不hard-stop | 超過兩個宣告週期未成功check時runtime加`upstream_check_overdue`，持續回舊版並揭露 |
-| `D-009` NHI lab scope owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | allowlist依據須為健保署支付標準官方文件原文與locator；review record與結果notes必須揭露AI審核、未經人工複核；不確定者留`review_pending` |
+| `D-009` NHI lab scope owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | allowlist依據須為健保署支付標準官方文件原文與locator；review record必須標明AI reviewer；不確定者留`review_pending`。結果notes不另加AI審核備註（owner 2026-09-14） |
 | `D-010` TFDA IVD owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | 依官方分類分級附表原文逐碼判斷；揭露同D-009；不確定者留`ambiguous`／`unknown` |
 | `D-011` CDC專業reviewer與turnaround | OWNER GATE | 每版發布需要內容複核，工程測試不能取代 |
 | `D-012` 支援平台承諾 | Accepted（owner 2026-09-14）：Windows與macOS | macOS以CI macos-latest驗證；Linux仍在CI執行但不列為公開承諾平台 |
