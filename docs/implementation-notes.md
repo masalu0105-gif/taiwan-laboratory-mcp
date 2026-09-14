@@ -237,6 +237,14 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
   - `docs/install.md` 錯誤表補上這兩個碼。
   - 新增 3 個測試。
   - 深層試裝資料夾留在 scratchpad，未刪除（本機擋刪除指令）。
+
+### GitHub Release `nhi-data-20260914`（2026-09-14）
+
+- owner 看過 release notes 草稿（`taiwan-lab-mcp-data\release\release-notes-nhi-data-20260914.md`）與檔名、大小、SHA-256 後回覆「建立 Release」，條件是 CI 全部通過。
+- 目標 commit `402246a` 的 CI run `34852852048`：windows-latest、ubuntu-latest（3.10、3.13）、macos-latest 全部 success 後才建立。
+- `gh release create nhi-data-20260914 --target 402246ab29caf040e331ee90098848b3e55dd0b3`：https://github.com/masalu0105-gif/taiwan-laboratory-mcp/releases/tag/nhi-data-20260914 ，非 draft、非 prerelease；遠端 tag `refs/tags/nhi-data-20260914` 指向 `402246a`。附件 `nhi_fee-snapshot-76a1402a4dab.zip`（1,630,389 bytes）與 `.sha256`（100 bytes）。
+- 從 Release 重新下載到 `taiwan-lab-mcp-data\release-download-check`：`sha256sum -c` OK；安裝到全新資料夾 `taiwan-lab-mcp-data\trial-install-2`：`installed`、generation 1、寫入 13 檔；查 `09006C` 200 點、stale false、snapshot 結尾 `0d8e4b6b55ad`。
+- 這是 NHI curated snapshot 的第一次公開散布，不代表 `REL-G5` 使用者試用、`NHI-R1-SCOPE` 或 P1.1 release approval 完成。
 - review protocol 第 2 版：新增 package resource `src/taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/2.json`，builder 常數 `OWNER_REVIEW_PROTOCOL_VERSION` 改為 `"2"`。與第 1 版的差異只有：`PUB-R1-OWNER` 範圍改為 `local_mcp_serving_and_github_release_bundle`（依 owner 2026-09-14 選 OD-01 B）、移除「再散布需另行核准」、checklist 加入下載包內容限制（ADR 0001）、公開審核紀錄使用「專案負責人」代號、每次建立 Release 前 owner 確認檔名／大小／SHA-256；另加 `supersedes_version` 與 `reviewer_alias`。來源、格式、golden case 與嚴重度規則和第 1 版完全相同（有測試比對）。第 1 版保留在 package，因為現有 build 的審核紀錄引用它。
 
 ### 本機工具重裝失敗與修復（2026-09-14）

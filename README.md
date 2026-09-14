@@ -6,7 +6,7 @@
 
 免費、開源，由 masalu.lab 發起。希望醫檢師第一次使用就能解決一個查資料的麻煩，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
 
-> **目前基準版本：0.1.1；P1.1 第一輪共用信任邊界＋NHI vertical slice 已實作。** Package 目前提供 22 個工具與四組合成示範資料。NHI official runtime 目前以 synthetic／offline snapshot 驗證；不會自動下載或發布正式資料，正式 source／scope／owner qualification、CDC／TFDA official vertical slice 尚未完成。不可用於實際採檢、申報或採購。
+> **目前基準版本：0.1.1。** Package 提供 22 個工具與四組合成示範資料。健保支付標準已有專案負責人審核過的正式資料，可從 Releases 下載安裝（見[安裝說明](docs/install.md)）；檢驗範圍清單（scope）尚未審核完成。CDC 與 TFDA 正式資料尚未完成。程式不會自動下載或發布正式資料。不可用於實際採檢、申報或採購。
 
 ## 三個先做好的問題
 
