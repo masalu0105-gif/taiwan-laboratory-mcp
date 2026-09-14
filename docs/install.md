@@ -194,6 +194,15 @@ taiwan-lab-data check nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --a
 - 不支援查歷史點數；查過去日期會明確回「不支援」。
 - macOS 目前由 GitHub 自動測試驗證，還沒有在實體 Mac 上完整走過這份安裝流程。
 
+## 遇到問題或有建議
+
+歡迎直接回報，這是改進這個工具的主要方式：
+
+- 查到的資料不對、裝不起來、結果看不懂：[回報錯誤或資料問題](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues/new?template=bug_report.yml)
+- 希望多查哪些資料、怎樣才更好用：[提出使用需求](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues/new?template=feature_request.yml)
+
+回報內容是公開的。請不要貼病人資料、院內資料或帳號密碼。
+
 ## 授權與資料來源
 
 - 程式：MIT License。

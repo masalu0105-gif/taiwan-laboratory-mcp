@@ -581,7 +581,8 @@ Pilot evidence 固定放 `reports/pilot/<protocol-version>/<run-id>/summary.json
 | `REL-G2` 來源契約 | 該來源 unit／contract／integration、drift、至少 10 個 `official_qualification_approved` golden cases、row provenance及 MCP official fixture 全 green | 該來源 data unavailable，或繼續服務舊 approved build 並揭露 stale |
 | `REL-G3` 領域複核 | 所有 required source gate review records 的 subject digest、path與 hash 通過；NHI scope、TFDA registry、CDC PDF 與 ODS 各自完整 | 只回 candidate／review incomplete，不宣稱完整正式範圍 |
 | `REL-G4` 授權與呈現 | provenance／顯名 contract、license URL、非官方背書、snapshot/upstream reproducibility 區分與 artifact contents 檢查通過 | 只提供部署者自行同步，或暫停該 artifact |
-| `REL-G5` 使用者驗收 | 5–10 人使用同版 protocol；四正常＋五安全情境、分母／rubric／hash可稽核，PRD 指標達標且 critical safety issue 為 0 | 修正並重跑相關 Red cases 與 pilot |
+| ~~`REL-G5` 使用者驗收~~ | ~~5–10 人使用同版 protocol；四正常＋五安全情境、分母／rubric／hash可稽核，PRD 指標達標且 critical safety issue 為 0~~ | ~~修正並重跑相關 Red cases 與 pilot~~ |
+| `REL-G5` 公開上線與市場回饋（owner 2026-09-14 取代 pilot） | README／Release 頁可見安裝說明、已知限制與 GitHub Issues 回報入口；使用者回報的 critical safety issue 先寫重現用 Red test 再修正 | 暫停該資料集新 Release，修正並補測試後再發 |
 
 每次準備 release 另需跑完整 pytest、ruff、wheel 建置、repo 外安裝與 MCP stdio；wheel／source archive 不得意外包含 raw、staged、quarantine、暫存報告或秘密。這是 `REL-G1`／`REL-G2` 的工程證據，不另設 gate ID。
 

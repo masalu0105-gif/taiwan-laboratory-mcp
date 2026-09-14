@@ -882,12 +882,12 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-004` sample/official以process mode隔離 | Accepted | 保留示範體驗並消除混查與silent fallback |
 | `D-005` source importer分開 | Accepted | 四種格式與醫療語意不同，共用領域模型會隱藏錯誤 |
 | `D-006` CDC PDF layout engine | Proposed / qualification gate | LiteParse文字抽取已證明；以ignored official raw與pinned identity驗bbox/table lineage，CI fixture只驗synthetic contract |
-| `D-007` curated artifact是否再散布 | OWNER GATE | 需確認CDC附件第三方內容、release大小與更新責任 |
-| `D-008` NHI stale 7日是否hard-stop | OWNER GATE | 研究提出安全建議，但實際可用性/風險政策尚未核准 |
-| `D-009` NHI lab scope owner/reviewer | OWNER GATE | 官方CSV無scope欄；未核准前不能宣稱完整lab清單 |
-| `D-010` TFDA IVD owner/reviewer | OWNER GATE | ambiguous/unknown已限定在candidate operation；逐碼included/excluded仍需領域核准 |
+| `D-007` curated artifact是否再散布 | Accepted for NHI（owner 2026-09-14） | NHI以GitHub Release下載包散布並附原始CSV，見`docs/adr/0001-nhi-snapshot-release-bundle.md`；TFDA／CDC仍需另案確認第三方內容、大小與更新責任 |
+| `D-008` NHI stale 7日是否hard-stop | Accepted（owner 2026-09-14）：不hard-stop | 超過兩個宣告週期未成功check時runtime加`upstream_check_overdue`，持續回舊版並揭露 |
+| `D-009` NHI lab scope owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | allowlist依據須為健保署支付標準官方文件原文與locator；review record與結果notes必須揭露AI審核、未經人工複核；不確定者留`review_pending` |
+| `D-010` TFDA IVD owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | 依官方分類分級附表原文逐碼判斷；揭露同D-009；不確定者留`ambiguous`／`unknown` |
 | `D-011` CDC專業reviewer與turnaround | OWNER GATE | 每版發布需要內容複核，工程測試不能取代 |
-| `D-012` 支援平台承諾 | OWNER GATE | 程式設計維持跨平台；P1.1 release是否正式承諾三平台仍待決定 |
+| `D-012` 支援平台承諾 | Accepted（owner 2026-09-14）：Windows與macOS | macOS以CI macos-latest驗證；Linux仍在CI執行但不列為公開承諾平台 |
 | `D-013` local integrity threat model | Accepted | hash不宣稱抵抗可寫data root的惡意writer；runtime read-only principal，若需authenticity另做signed manifest ADR |
 | `D-014` NHI `29101231` sentinel對外語意 | OWNER GATE | 目前只保留raw/parsed date與`possible_open_end_sentinel=true` inference，禁止顯示「永久有效」；需由OD-02 owner核准官方語意後另建rule/build |
 
@@ -895,11 +895,13 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 
 | PRD owner decision | SDD decision | 現況與阻擋點 |
 | --- | --- | --- |
-| `OD-01` | `D-007` | curated再散布仍待授權、大小與更新責任審查；未決前只提供自行同步 |
-| `OD-02` | `D-009`、`D-014` | 同一owner決定scope reviewer/allowlist依據及sentinel對外語意；兩者均未核准 |
-| `OD-03` | `D-010` | ambiguous/unknown可進candidate已由PRD解決；仍待指定IVD registry owner/reviewer |
+| `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；TFDA／CDC未決 |
+| `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14），官方文件依據研究中；sentinel維持原值＋可能未設定結束日推論 |
+| `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14） |
 | `OD-04` | `D-011` | 待指定CDC內容與ODS認可制度reviewer及turnaround |
-| `OD-05` | `D-008`、`D-012` | 待決各source hard-stop門檻與P1.1平台承諾；Windows本機stdio以外不先宣稱 |
+| `OD-05` | `D-008`、`D-012` | NHI不hard-stop、支援Windows與macOS（2026-09-14）；TFDA／CDC stale門檻仍依各來源另定 |
+
+`REL-G5` pilot 已由 owner 於 2026-09-14 取消，改為公開上線並以 GitHub Issues 收集使用者回饋（PRD §8.2、§8.4）；本文件中以 pilot 為前提的 `PilotResultV1` 等設計保留為歷史，不再是發布條件。
 
 ## 18. Definition of Done
 

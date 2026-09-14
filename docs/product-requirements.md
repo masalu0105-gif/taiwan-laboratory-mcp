@@ -305,7 +305,8 @@ PRD 第 7.1～7.3 節與 `public-contract-v1.json` 是唯一 public status／fre
 | `REL-G2` 來源契約 | 該資料集 importer、欄位規則、drift 測試、item-level provenance 與至少 10 個 countable official golden cases 全數通過 | 該資料集維持 data_unavailable；不阻止其他已核准資料集獨立發布 |
 | `REL-G3` 領域複核 | CDC 手冊、CDC ODS、NHI scope、TFDA IVD 分別通過第 8.3 節 protocol 與對應 source review records | 受影響內容只可標候選／review incomplete，不能宣稱正式範圍完整 |
 | `REL-G4` 授權與發布 | 每資料集完成顯名、授權 URL、非官方服務聲明、archive 內容檢查及 `PUB-R1-OWNER`；若散布 curated artifact，另完成再散布確認 | 只提供部署者自行同步，或暫不發布該 artifact |
-| `REL-G5` 使用者驗收 | 5–10 人依第 8.4 節固定 pilot protocol 完成，量化 UX 指標達標，所有 critical safety issue 歸零，protocol/result hashes 綁入 release evidence | 修正並重測；不得宣稱 P1.1 完成 |
+| ~~`REL-G5` 使用者驗收~~ | ~~5–10 人依第 8.4 節固定 pilot protocol 完成，量化 UX 指標達標，所有 critical safety issue 歸零，protocol/result hashes 綁入 release evidence~~ | ~~修正並重測；不得宣稱 P1.1 完成~~ |
+| `REL-G5` 公開上線與市場回饋（owner 2026-09-14 決定取代 pilot） | 已通過 `REL-G1`～`REL-G4` 的資料集直接以公開 Release 上線；安裝說明、GitHub Issues 回報入口與已知限制在 README／Release 頁可見；使用者回報的 critical safety issue 以 Issue 追蹤並在修正版本中關閉 | 發現 critical safety issue 時暫停該資料集的新 Release，修正後再發 |
 
 `REL-G1`～`REL-G5` 只代表 release-level gates，不得寫入 source review record 充當審查類型。Source qualification gate 使用下列 namespace：
 
@@ -339,6 +340,8 @@ P1.1 official publish 永不接受 OCR-derived rows；OCR 只能產生 staged re
 
 ### 8.4 Versioned pilot protocol
 
+> **2026-09-14 owner 決定取消本節 pilot**：不找 5–10 位受測者，改為通過 `REL-G1`～`REL-G4` 後直接公開上線，由使用者回報（GitHub Issues）收集回饋。以下原文保留作歷史，不再是發布條件；第 8.1 節量化 UX 指標因此沒有受測資料，不得宣稱已達標。
+
 `REL-G5` 使用固定 protocol version，5–10 位參與者逐人完成九個 scenario IDs：四個正常任務（CDC 手冊、NHI、TFDA、ODS）及五個安全情境（sample、stale、not_found、IVD unknown、NHI historical query unsupported）。正常任務每題上限 10 分鐘，安全情境每題上限 5 分鐘；可使用公開安裝說明與 tool help，不可由主持人提供答案或代操作。需要答案提示者標 `assisted=true`，不計入 unassisted task completion。
 
 每題 rubric 固定為：找到正確 operation、取得符合 acceptance criterion 的結果、辨識限制／警示、完成 artifact 核對；每項 0／1，四項全數通過才算該題完成。Critical safety issue 包含：把 sample 當 official、把 current NHI 值當歷史或個案可申報、把 TFDA 結果作採購／等效／「有效許可」判定、把 CDC「應保存」當送驗前保存、把 ODS 命中當收件保證、跨列錯接，或高風險 item 缺少結構化警示。
@@ -355,6 +358,17 @@ Pilot result schema 只保存 participant pseudonymous ID、角色類型、scena
 | OD-04 | CDC 手冊與認可機構 reviewer 身分，以及新版本 turnaround time | 簽核格式已由第 8.3 節鎖定；分開指定醫檢內容 reviewer 與認可制度 reviewer | `CDC-R1-CONTENT`／`ODS-R1-CONTENT` 前 | `D-011` |
 | OD-05 | 各資料集 stale warning／hard-stop 門檻與 P1.1 支援平台 | 先依來源研究建立可設定門檻；首版以 Windows 本機 stdio 為必測，其他平台不承諾至通過相同驗證 | `REL-G1`／公開安裝文件前 | `D-008`、`D-012` |
 
+**Owner 已決定（2026-09-14，在 Claude Code 對話中回覆；上表保留原始建議作歷史）：**
+
+| ID | 決定 | 落地要求 |
+| --- | --- | --- |
+| OD-01 | NHI curated snapshot 以 GitHub Release 下載包公開散布，附原始 CSV；公開審核紀錄的 reviewer 寫「專案負責人」代號。TFDA／CDC 另案決定 | `docs/adr/0001-nhi-snapshot-release-bundle.md`；review protocol `nhi-r1-owner-review` 第 2 版；每次建立 Release 前 owner 確認檔名、大小、SHA-256 |
+| OD-02 | scope reviewer 由 AI 擔任；allowlist 依據必須是健保署支付標準官方文件原文（章節／項目標題與代碼範圍，附 locator）。`29101231` 維持只顯示原值並標「可能表示未設定結束日」 | review record 的 reviewer 必須標明為 AI（不得寫成人工 reviewer），每筆正式結果的 notes 必須揭露「檢驗範圍由 AI 審核，未經人工複核」；AI 判斷不確定的代碼維持 `review_pending` |
+| OD-03 | TFDA IVD registry reviewer 由 AI 擔任，依官方醫療器材分類分級附表原文逐碼判斷 | 同 OD-02 的揭露要求；不確定者維持 `ambiguous`／`unknown`，不得升格為 `included` |
+| OD-04 | 尚未決定 | — |
+| OD-05 | NHI 超過兩個宣告週期沒有成功檢查時標 `upstream_check_overdue`，不 hard-stop，持續回答並揭露；P1.1 支援 Windows 與 macOS | macOS 以 CI macos-latest 驗證；實機安裝流程尚未驗證前不得宣稱實機已驗證 |
+| REL-G5 | 取消 5–10 人 pilot，改為公開上線並由使用者回報收集回饋 | 見第 8.2 節修訂列與第 8.4 節註記 |
+
 ## 10. 風險、假設與緩解
 
 | 風險／假設 | 目前狀態 | 影響 | P1.1 緩解 |
@@ -370,7 +384,7 @@ Pilot result schema 只保存 participant pseudonymous ID、角色類型、scena
 
 ## 11. P1.1 完成定義
 
-P1.1 只有在下列事項全部成立時才算完成：三個領域、四個資料集／查詢任務均使用各自已核准的 official snapshot；`REL-G1`～`REL-G5` 全數通過；狀態及 provenance 可由 MCP 使用者看見；pilot 指標達標；沒有未解決的 critical semantic contamination 或 sample/official 混查問題。
+P1.1 只有在下列事項全部成立時才算完成：三個領域、四個資料集／查詢任務均使用各自已核准的 official snapshot；`REL-G1`～`REL-G5` 全數通過；狀態及 provenance 可由 MCP 使用者看見；沒有未解決的 critical semantic contamination 或 sample/official 混查問題。~~pilot 指標達標~~（2026-09-14 owner 取消 pilot，改由公開上線後的使用者回報收集回饋；見第 8.2、8.4 節）。
 
 完成 P1.1 只代表適合本機離線公開資料查詢，不構成院內部署 readiness，也不代表 CDC、NHI、TFDA 對本產品的認證、核准或背書。即使在醫院環境試用，仍不得輸入病人資料；MCP host／LLM 的查詢記錄、資料傳輸、權限、retention 與院方核准不在 P1.1 已驗證範圍。院內正式導入須另走 P2 的資料責任、存取控制、端點治理、稽核與變更管理 gate。實際採檢、申報、送驗與採購仍須核對當期官方原文及使用者所屬機構流程。
 

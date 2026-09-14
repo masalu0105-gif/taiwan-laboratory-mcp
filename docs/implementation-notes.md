@@ -238,6 +238,44 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
   - 新增 3 個測試。
   - 深層試裝資料夾留在 scratchpad，未刪除（本機擋刪除指令）。
 
+### Owner 決定：AI 審核、取消 pilot、清理舊資料（2026-09-14）
+
+owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取消5-10人串接MCP的測試 直接上線,並且直接由市場來給我回饋 健保表裡面哪些項目算檢驗的範圍清單？這個就是給 AI 幫我去做審理就好了。再來，舊資料就清掉吧。」：
+
+- 1A：TFDA 官方來源身分由 Claude 查證並整理成確認頁，owner 確認後才啟用自動下載。
+- 2A（AI 審）：`TFDA-R1-IVD` 醫材分類由 AI 審核。
+- 3A：PRD／SDD／TDD 同步 owner 決定。已修改 PRD §8.2 `REL-G5` 列、§8.4 註記、§9 新增「Owner 已決定」表、§11；SDD §17 `D-007`～`D-010`、`D-012` 與 OD 對照表；TDD §16 `REL-G5` 列。原文以刪除線或「保留作歷史」標示，沒有直接刪除。
+- 4B＋取消 pilot：不找 5–10 位受測者，改為公開上線並以 GitHub Issues 收集回饋。PRD §8.1 量化 UX 指標因此沒有受測資料，不得宣稱達標。
+- `NHI-R1-SCOPE` 檢驗範圍清單由 AI 審核。
+- 清掉舊資料。
+- 落地要求（寫入 PRD §9）：
+  - AI 審核的 review record 必須標明 reviewer 是 AI。
+  - 每筆正式結果的 notes 揭露「由 AI 審核，未經人工複核」。
+  - 不確定的項目維持 `review_pending`／`ambiguous`／`unknown`。
+- NHI scope 分類依據調查：
+  - 健保署查詢服務每筆只回 `treaT_CHAP_CODE`。實測 09006C 醣化血紅素、13007C 細菌培養、18001C 心電圖、19001C 腹部超音波同為「第二部第二章第一節」，00101B 門診診察費為「第二部第一章第一節」。
+  - 只靠節分不出檢驗與非檢驗，正在另查支付標準官方文件的項目標題與代碼範圍。
+- TFDA 官方身分查證（2026-09-14）：
+  - 機器讀取資料 `https://data.gov.tw/api/v2/rest/dataset/9576`：HTTP 200、13,375 bytes、SHA-256 `cd96d639…`。
+    - `publisherOID=2.16.886.101.20003.20065.20065`、`identifier=A21020000I-000053`、`license="1"`
+    - `updateFrequency` 每 7 日、`modifiedDate=2026-09-11 15:57:04`
+    - distribution 三筆（CSV／JSON／XML）皆在 `data.fda.gov.tw`。
+  - 資料集網頁 `https://data.gov.tw/dataset/9576`：HTTP 200、540,536 bytes、SHA-256 `56ce0132…`。
+    - 提供機關「衛生福利部食品藥物管理署」、授權方式「政府資料開放授權條款-第1版」、更新頻率「每7日」、計費「免費」
+    - 網頁上沒有 publisherOID。
+  - 確認頁：`taiwan-lab-mcp-data\owner-review\tfda-source-identity-confirmation-2026-09-14.md`，待 owner 確認。
+- 清理舊資料的模擬：
+  - 第一次把 data root 複製到 session scratchpad 後移除舊 build，結果 `data_unavailable`。
+  - 推測原因是副本路徑太長（scratchpad 本身約 95 字元），與移除舊 build 無關。
+  - 在短路徑重做對照：`%TEMP%\tlsim-a`（完整副本）與 `%TEMP%\tlsim-b`（移除舊 build `17880b71…`）都是 `available`，`09006C` 都是 200 點。從 tlsim-b 重新匯出的下載包 SHA-256 與已發布的 `aa29a34f…` 完全相同。
+  - 結論：新 build 不依賴舊 build，可以清掉。
+  - 另記風險：data root 放在很深的資料夾時，Windows 260 字元路徑上限會讓 runtime 讀不到 audit evidence，回 `serving_integrity_failure`。安裝時已有路徑長度檢查；自行搬移資料夾的使用者仍可能碰到，安裝說明建議短路徑。
+- 清理方式：本機擋刪除指令，因此寫成 owner 雙擊執行的腳本。
+  - 腳本：`taiwan-lab-mcp-data\automation\Clear-OldTaiwanLabData.ps1`，桌面啟動檔 `C:\Users\User\Desktop\clear-taiwan-lab-old-data.cmd`。
+  - 執行流程：先列清單、要求輸入 Y；舊 build 若仍是 serving 就停止；全部移到資源回收筒（可還原，非永久刪除）；最後以 `taiwan-lab-data status` 確認 nhi_fee 仍 available。
+  - 清單：舊 build `17880b71…`、`trial-install`、`trial-install-2`、`release-download-check`、`%TEMP%\tlsim-a`、`tlsim-b`、`tlsim-b-moved`、`tlsim-b-export`。
+  - 刻意保留：serving build、raw、checks／publish events、`owner-review` 原始審核紀錄（其中兩個檔含本名，屬 owner 審核原始紀錄，不視為舊版資料）、`release` 正式下載包、`tfda-validation`。
+
 ### GitHub Release `nhi-data-20260914`（2026-09-14）
 
 - owner 看過 release notes 草稿（`taiwan-lab-mcp-data\release\release-notes-nhi-data-20260914.md`）與檔名、大小、SHA-256 後回覆「建立 Release」，條件是 CI 全部通過。
