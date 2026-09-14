@@ -129,8 +129,18 @@ def _source_lock(path: Path, timeout_seconds: float = 5.0) -> Iterator[None]:
         else:
             import fcntl
 
+            # Non-blocking attempts with the same bounded retry as Windows; a blocking
+            # LOCK_EX would wait forever and never report PUBLISH_LOCK_TIMEOUT.
+            deadline = time.monotonic() + timeout_seconds
+            while True:
+                try:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError as exc:
+                    if time.monotonic() >= deadline:
+                        raise PublishError("PUBLISH_LOCK_TIMEOUT") from exc
+                    time.sleep(0.05)
             try:
-                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
                 yield
             finally:
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)

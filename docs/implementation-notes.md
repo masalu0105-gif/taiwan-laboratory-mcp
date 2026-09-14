@@ -221,7 +221,8 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 
 - 2026-09-14 21:35 查 `gh run list`：從 commit `3238d70` 起，`3238d70`、`17be1f8`、`4353943`、`be5401c` 四次 CI 都是 failure。先前回報「push 成功、local == remote」只驗證了 commit 有推上去，沒有檢查 GitHub CI 結果；本機驗證只在 repo 外跑了 `tests/test_mcp_stdio.py`，沒有照 CI 在 repo 外跑全部測試。
 - 失敗點（run `34846439844`，windows-latest，步驟「Verify installed wheel outside repository」）：`tests/test_nhi_importer.py::test_official_build_refuses_development_install_identity` 預期「開發安裝」會被拒絕，但 CI 這一步是用安裝好的 wheel 跑，程式判定為正式安裝，所以沒有拒絕（`DID NOT RAISE`）。本機照 CI 方式在 repo 外跑全部測試可重現：1 failed、258 passed、2 skipped。
-- 修正：測試改用 monkeypatch 固定回傳 `development` identity，不再依賴目前的安裝方式。之後每次驗證改為照 CI 在 repo 外跑全部測試，並在 push 後查 CI 結果。
+- 修正：測試改用 monkeypatch 固定回傳 `development` identity，不再依賴目前的安裝方式。之後每次驗證改為照 CI 在 repo 外跑全部測試，並在 push 後查 CI 結果。修正 commit `1c1d9d6` 的 CI windows-latest job 已 success。
+- 同一批 CI 另一個問題：ubuntu／macOS job 在「Test source and MCP stdio」步驟卡住，直到 job 15 分鐘上限被取消（例：run `34846439844` 的 ubuntu job 結尾為 `Terminate orphan process ... (python)`）。原因：`publish._source_lock` 在非 Windows 分支用阻塞式 `fcntl.flock(LOCK_EX)`，沒有 timeout；`tests/test_p1_1_red.py` 的 lock timeout 測試讓子行程持鎖、主行程以 `timeout_seconds=0.0` 取鎖，在 POSIX 會永遠等待。Windows 分支原本就有 bounded retry，所以只有 Windows job 會跑完。SDD §8.2 只寫 POSIX 用 `fcntl.flock(LOCK_EX)`，TDD 要求測 lock timeout；修正為 `LOCK_EX | LOCK_NB` 加上與 Windows 相同的 deadline 重試，逾時回 `PUBLISH_LOCK_TIMEOUT`。POSIX 本機重現（WSL Ubuntu 24.04、系統 Python 3.12.3、lock 檔在 WSL `/tmp`）：以同一情境的探測腳本（子行程持鎖、主行程 `timeout_seconds=0.0`）跑修正前 `git archive HEAD src` 的程式，20 秒後被 `timeout` 終止（exit 124）；跑修正後程式立即回 `PUBLISH_LOCK_TIMEOUT`（0.00 秒），子行程 exit 0。macOS 仍以 CI macos-latest job 驗證。
 
 ### TFDA 第一個切片：離線 ZIP 驗證（2026-09-14）
 
