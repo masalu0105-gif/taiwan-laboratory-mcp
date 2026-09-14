@@ -207,6 +207,16 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 - 未做：owner 拒絕新版（`decision=rejected`）目前只回 `REVIEW_DECISION_NOT_APPROVED`、不寫任何狀態，候選會維持 `review_pending`；把候選標成 `rejected` 的流程尚未實作。新版找不到的題目需要人工補題，工具不自動挑新題。
 - 測試：`tests/test_nhi_review.py` 16 個（審核包逐題比對與只讀、找不到題目、無候選、發布後 serving 切換並查到新點數、7 種無效 decision 在任何寫入前擋下、審核包被改、審核包產生後又出現更新候選、major finding 由 builder 擋下、CLI 成功與 exit 5）。
 
+### NHI 下載包：匯出與安裝指令（2026-09-14）
+
+- 決策與設計見 `docs/adr/0001-nhi-snapshot-release-bundle.md`。
+- 新增 `src/taiwan_lab_mcp/snapshot_bundle.py` 與 CLI：
+  - `taiwan-lab-data export-snapshot nhi_fee --data-dir <path> --output-dir <path> [--json]`：serving build 必須 runtime 驗證通過且沒有 stale reason，否則 `EXPORT_SERVING_STALE`（exit 5）。輸出固定 bytes 的 ZIP 與 `.sha256`。
+  - `taiwan-lab-data install-snapshot nhi_fee --bundle <zip> [--sha256 <hash>] --actor <id> --data-dir <path> [--json]`：寫入前完成全部檢查；同路徑不同內容拒絕覆寫；寫入後驗 raw revision，再經既有 publish CAS 切換。重裝同一包回 `already_installed`。exit code：2 輸入、4 下載包內容、6 衝突或 publish。
+- 規格解讀：規格沒寫使用者端的取得與啟用方式（見 ADR 背景）。安裝時 check record 沿用發布者最後一次成功檢查時間，使用者端 48 小時後會看到 `upstream_check_overdue`。
+- 測試：`tests/test_snapshot_bundle.py` 14 個（匯出內容只含 raw＋curated、清單 hash、stale 時拒絕匯出、空 data root 安裝後可查、重裝不變、較新包切換並保留 parent、5 種竄改在寫入前擋下、非 ZIP 與整包 SHA-256 不符、既有檔案衝突不覆寫、CLI）。
+- 尚未做：以「專案負責人」代號重建本機 NHI snapshot（需 owner 再確認）、實際匯出正式下載包、建立 GitHub Release（需 owner 確認實際檔案）。
+
 ### GitHub CI 失敗的更正（2026-09-14）
 
 - 2026-09-14 21:35 查 `gh run list`：從 commit `3238d70` 起，`3238d70`、`17be1f8`、`4353943`、`be5401c` 四次 CI 都是 failure。先前回報「push 成功、local == remote」只驗證了 commit 有推上去，沒有檢查 GitHub CI 結果；本機驗證只在 repo 外跑了 `tests/test_mcp_stdio.py`，沒有照 CI 在 repo 外跑全部測試。

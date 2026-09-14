@@ -63,6 +63,18 @@ def main(argv: list[str] | None = None) -> int:
     publish_parser.add_argument("--actor", required=True)
     publish_parser.add_argument("--data-dir", required=True, type=Path)
     publish_parser.add_argument("--json", action="store_true")
+    export_parser = subparsers.add_parser("export-snapshot")
+    export_parser.add_argument("source_id", choices=["nhi_fee"])
+    export_parser.add_argument("--data-dir", required=True, type=Path)
+    export_parser.add_argument("--output-dir", required=True, type=Path)
+    export_parser.add_argument("--json", action="store_true")
+    install_parser = subparsers.add_parser("install-snapshot")
+    install_parser.add_argument("source_id", choices=["nhi_fee"])
+    install_parser.add_argument("--bundle", required=True, type=Path)
+    install_parser.add_argument("--sha256")
+    install_parser.add_argument("--actor", required=True)
+    install_parser.add_argument("--data-dir", required=True, type=Path)
+    install_parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "status":
         if args.data_dir is not None:
@@ -308,8 +320,54 @@ def main(argv: list[str] | None = None) -> int:
             return _review_exit_code(exc)
         print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
         return 0
+    if args.command in {"export-snapshot", "install-snapshot"}:
+        from .publish import PublishError
+        from .snapshot_bundle import (
+            SnapshotBundleError,
+            export_nhi_snapshot_bundle,
+            install_nhi_snapshot_bundle,
+        )
+
+        try:
+            if args.command == "export-snapshot":
+                summary = export_nhi_snapshot_bundle(args.data_dir, output_dir=args.output_dir)
+            else:
+                summary = install_nhi_snapshot_bundle(
+                    args.data_dir,
+                    bundle_path=args.bundle,
+                    expected_sha256=args.sha256,
+                    actor=args.actor,
+                )
+        except (SnapshotBundleError, PublishError) as exc:
+            print(
+                json.dumps(
+                    {"operation": args.command, "result": "failed", "error_code": exc.code},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return _bundle_exit_code(exc)
+        print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
+        return 0
     parser.error("unsupported command")
     return 2
+
+
+def _bundle_exit_code(exc: Exception) -> int:
+    """SDD 12 exit codes for snapshot bundles: 2 usage, 4 bundle content, 5 gate, 6 integrity."""
+
+    from .snapshot_bundle import SnapshotBundleError
+
+    code = getattr(exc, "code", "")
+    if not isinstance(exc, SnapshotBundleError):
+        return 6
+    if code in {"BUNDLE_UNREADABLE", "BUNDLE_ACTOR_INVALID"}:
+        return 2
+    if code == "EXPORT_SERVING_STALE":
+        return 5
+    if code.startswith("EXPORT_") or code in {"BUNDLE_FILE_CONFLICT", "CURRENT_POINTER_INTEGRITY"}:
+        return 6
+    return 4
 
 
 _USAGE_ERROR_CODES = frozenset(
