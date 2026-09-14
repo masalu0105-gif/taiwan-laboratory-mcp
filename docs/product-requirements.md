@@ -363,8 +363,8 @@ Pilot result schema 只保存 participant pseudonymous ID、角色類型、scena
 | ID | 決定 | 落地要求 |
 | --- | --- | --- |
 | OD-01 | NHI curated snapshot 以 GitHub Release 下載包公開散布，附原始 CSV；公開審核紀錄的 reviewer 寫「專案負責人」代號。TFDA／CDC 另案決定 | `docs/adr/0001-nhi-snapshot-release-bundle.md`；review protocol `nhi-r1-owner-review` 第 2 版；每次建立 Release 前 owner 確認檔名、大小、SHA-256 |
-| OD-02 | scope reviewer 由 AI 擔任；allowlist 依據必須是健保署支付標準官方文件原文（章節／項目標題與代碼範圍，附 locator）。`29101231` 維持只顯示原值並標「可能表示未設定結束日」 | review record 的 reviewer 必須標明為 AI（不得寫成人工 reviewer）；AI 判斷不確定的代碼維持 `review_pending`。~~每筆正式結果的 notes 必須揭露「檢驗範圍由 AI 審核，未經人工複核」~~（2026-09-14 owner 決定：檢驗範圍結果不需要加這段備註） |
-| OD-03 | TFDA IVD registry reviewer 由 AI 擔任，依官方醫療器材分類分級附表原文逐碼判斷 | 同 OD-02 的揭露要求；不確定者維持 `ambiguous`／`unknown`，不得升格為 `included` |
+| OD-02 | scope reviewer 由 AI 擔任；allowlist 依據必須是健保署支付標準官方文件原文（章節／項目標題與代碼範圍，附 locator）。`29101231` 維持只顯示原值並標「可能表示未設定結束日」 | review record 的 reviewer 必須標明為 AI（不得寫成人工 reviewer）；~~AI 判斷不確定的代碼維持 `review_pending`~~（2026-09-14 owner 決定：「你找不出來的，或者是你不知道要判到底是不是的，你就給他放進去。我們寧可錯殺一百，也不要放過一個。」不確定的代碼一律 `in_scope`，判定依據須寫明是依此決定）。~~每筆正式結果的 notes 必須揭露「檢驗範圍由 AI 審核，未經人工複核」~~（2026-09-14 owner 決定：檢驗範圍結果不需要加這段備註） |
+| OD-03 | TFDA IVD registry reviewer 由 AI 擔任，依官方醫療器材分類分級附表原文逐碼判斷 | 同 OD-02 的揭露要求；~~不確定者維持 `ambiguous`／`unknown`，不得升格為 `included`~~（2026-09-14 owner 決定同 OD-02：附表逐碼判不出來或附表查無的 A/B/C 代碼一律 `included`，判定依據須寫明是依此決定；沒有 A–P 分類代碼或舊制編號的許可證列不在此決定範圍，仍為 `unknown`） |
 | OD-04 | 尚未決定 | — |
 | OD-05 | NHI 超過兩個宣告週期沒有成功檢查時標 `upstream_check_overdue`，不 hard-stop，持續回答並揭露；P1.1 支援 Windows 與 macOS | macOS 以 CI macos-latest 驗證；實機安裝流程尚未驗證前不得宣稱實機已驗證 |
 | REL-G5 | 取消 5–10 人 pilot，改為公開上線並由使用者回報收集回饋 | 見第 8.2 節修訂列與第 8.4 節註記 |

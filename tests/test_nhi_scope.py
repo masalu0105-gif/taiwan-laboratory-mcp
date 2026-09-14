@@ -37,7 +37,11 @@ def test_packaged_scope_bundle_is_versioned_and_names_the_ai_reviewer():
     assert rules["24009C"].scope_status == "in_scope"
     assert rules["30001C"].scope_status == "out_of_scope"
     assert rules["64"].scope_status == "in_scope"
-    assert "30011B" not in rules
+    # Owner decision 2026-09-14: codes the review could not decide count as laboratory.
+    assert rules["30011B"].scope_status == "in_scope"
+    assert rules["30505B"].scope_status == "in_scope"
+    assert bundle["status"] == "complete"
+    assert len(rules) == len(bundle["entries"])
     assert all(rule.basis_locator for rule in rules.values())
 
 
