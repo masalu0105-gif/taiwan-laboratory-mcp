@@ -401,6 +401,30 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 本機 serving build 與已發布的 `nhi-data-20260914` 仍是 v1 規則，全部 `review_pending`。
   - 用 v2 重建 serving、發新 Release，都需要 owner 確認。
   - 30011B、30505B 待有官方說明或 owner 知道內容後再判。
+- CI：commit `7a298a1` 的 GitHub Actions run `34863292781` 四個 job（ubuntu 3.10／3.13、windows 3.13、macos 3.13）皆 success。
+
+### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
+
+- owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。
+- 摘錄：
+  - 背景 agent 從附表 PDF 依表格框線抽出 A 237、B 105、C 206，共 548 項。
+  - 輸出 `taiwan-lab-mcp-data\tfda-ivd-research\annex-abc-items.json`，763,551 bytes，SHA-256 `d0c6db82…`，主 session 重算 hash 相同。
+  - 主類別標題附表沒有，留空不補字。
+  - 抽查 B.9225、B.9195、B.9245、A.1020、C.3400 的內容與 agent 回報一致；A.1020 名稱與許可證資料相同。
+- 規格解讀：
+  - 醫療器材管理法第 3 條只定義「醫療器材」，查過的條文中沒有「體外診斷醫療器材」定義。
+  - 所以判定依 SDD D-010「依官方分類分級附表原文逐碼判斷」，只看附表鑑別文字。
+- 審核紀錄：`docs/reviews/tfda-ivd-ai-review-2026-09-14.md`，含判定標準與不算／無法判定／查無清單。
+- 結果：
+  - 附表 548 項中，算 IVD 518、不算 13、無法判定 17。
+  - 許可證資料用到的 399 碼中，算 372、不算 12、無法判定 12、附表查無 3。
+- 產出（repo 外）：
+  - 決議檔 `tfda-ivd-research\tfda-ivd-decisions-2026-09-14.json`：460,315 bytes，SHA-256 `ffe88867…`，含 SDD registry 欄位中目前拿得到的部分。
+  - owner 清單 `owner-review\tfda-ivd-list-2026-09-14.csv`：UTF-8 BOM，264,089 bytes，SHA-256 `9253c2bc…`，551 列。
+  - 產生腳本 `tfda-ivd-research\build_ivd_decisions.py`：SHA-256 `68a8f664…`。
+- 尚未做：
+  - 決議檔還沒轉成 repo 內版本化 registry，也沒接進 MCP；TFDA curated build 與 adapter 尚未實作。
+  - `regulation_version`、`effective_from` 欄位沒有官方來源值，接入時需再確認。
 
 ## 目前驗證證據
 
