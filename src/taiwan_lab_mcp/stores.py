@@ -395,9 +395,12 @@ def read_nhi_state(data_root: Path) -> OfficialState:
         official_content_date = None
         official = manifest.get("official_version", {})
         if official.get("modified_at_raw"):
+            # The manifest keeps the raw precision (for example "second"); the public
+            # contract only allows day/month/year/unknown, so never claim more than that.
+            precision = official.get("modified_at_precision")
             official_content_date = OfficialContentDate(
                 value_raw=official["modified_at_raw"],
-                precision=official.get("modified_at_precision", "unknown"),
+                precision=precision if precision in {"day", "month", "year"} else "unknown",
                 timezone_known=bool(official.get("timezone_known", False)),
             )
         retrieved_at = datetime.fromisoformat(manifest["fetched_at"].replace("Z", "+00:00"))

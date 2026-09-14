@@ -1,9 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal, Union
+from pathlib import PurePosixPath
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 
 class LegacyProvenance(BaseModel):
@@ -239,6 +248,186 @@ class TFDARecord(BaseModel):
 
 
 Record = Union[NHIRecord, CDCSpecimenRecord, CDCLabRecord, TFDARecord]
+
+SourceId = Literal["cdc_manual", "cdc_recognized_labs", "nhi_fee", "tfda_device"]
+Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+_TRANSFORM_KEYS = frozenset({"parser", "schema", "normalization", "rules", "qualifier"})
+
+
+def _require_transform_keys(value: dict[str, Any]) -> dict[str, Any]:
+    if set(value) != _TRANSFORM_KEYS:
+        raise ValueError(
+            "transform must declare exactly parser, schema, normalization, rules and qualifier"
+        )
+    return value
+
+
+class GoldenCaseV1(BaseModel):
+    """Golden case definition; review fields describe the case, not a source gate."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    golden_case_schema_version: Literal[1]
+    case_id: str = Field(min_length=1)
+    source_id: SourceId
+    acceptance_id: str = Field(min_length=1)
+    source_title: str = Field(min_length=1)
+    official_landing_url: str = Field(min_length=1)
+    official_version_or_modified_at: str | None
+    official_source: StrictBool
+    artifact_id: str = Field(min_length=1)
+    raw_artifact_sha256: Sha256
+    evidence_data_root_relative_path: str | None
+    fixture_file: str | None
+    fixture_sha256: Sha256 | None
+    transform: dict[str, Any]
+    input: dict[str, str]
+    source_locator: Locator = Field(discriminator="locator_type")
+    source_row_sha256: Sha256
+    expected_status: Literal[
+        "ok",
+        "not_found",
+        "data_unavailable",
+        "invalid_request",
+        "historical_query_unsupported",
+        "candidate_matches_available",
+        "deprecated_unsupported",
+    ]
+    expected_fields: dict[str, Any]
+    expected_warnings: list[str]
+    reviewer_id: str | None
+    reviewer_role: str | None
+    identity_assurance: Literal["local_asserted", "cryptographically_signed"] | None
+    reviewed_at: datetime | None
+    review_status: Literal["review_pending", "approved", "rejected"]
+
+    @field_validator("transform")
+    @classmethod
+    def validate_transform(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return _require_transform_keys(value)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> GoldenCaseV1:
+        reviewer = (self.reviewer_id, self.reviewer_role, self.identity_assurance, self.reviewed_at)
+        if self.review_status == "review_pending":
+            if any(item is not None for item in reviewer):
+                raise ValueError("review_pending golden case must not carry reviewer evidence")
+        elif not self.reviewer_id or not self.reviewer_role or None in reviewer:
+            raise ValueError("reviewed golden case requires reviewer evidence")
+        if self.reviewed_at is not None and self.reviewed_at.utcoffset() is None:
+            raise ValueError("reviewed_at must include a timezone")
+        if (self.fixture_file is None) != (self.fixture_sha256 is None):
+            raise ValueError("fixture_file and fixture_sha256 must be set together")
+        if self.official_source:
+            path = self.evidence_data_root_relative_path or ""
+            parts = PurePosixPath(path).parts
+            if (
+                not path
+                or "\\" in path
+                or PurePosixPath(path).is_absolute()
+                or ".." in parts
+                or parts[:1] != ("raw",)
+            ):
+                raise ValueError("official golden case requires a raw evidence path")
+        return self
+
+
+class QualificationCaseResultV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    golden_case: GoldenCaseV1
+    golden_case_sha256: Sha256
+    evaluation_status: Literal["passed", "failed"]
+    failure_codes: list[str]
+
+    @model_validator(mode="after")
+    def validate_result(self) -> QualificationCaseResultV1:
+        if self.evaluation_status == "passed" and self.failure_codes:
+            raise ValueError("passed golden case must not carry failure codes")
+        if self.evaluation_status == "failed" and not self.failure_codes:
+            raise ValueError("failed golden case requires failure codes")
+        return self
+
+
+class ArtifactHashV1(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    artifact_id: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    sha256: Sha256
+
+
+class QualificationCandidateV1(BaseModel):
+    """Pre-review evaluation report; it can never carry official approval."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    qualification_candidate_schema_version: Literal[1]
+    source_id: SourceId
+    raw_revision_id: str = Field(min_length=1)
+    curated_build_id: str = Field(min_length=1)
+    case_ids: list[str]
+    case_count: int = Field(ge=0)
+    cases: list[QualificationCaseResultV1]
+    input_artifact_hashes: list[ArtifactHashV1] = Field(min_length=1)
+    curated_db_sha256: Sha256
+    active_transform: dict[str, Any]
+    automated_status: Literal["passed", "failed"]
+    synthetic_ci_status: Literal["not_run", "passed", "failed"]
+    official_qualification_status: Literal["not_qualified"]
+    note: str
+
+    @field_validator("active_transform")
+    @classmethod
+    def validate_transform(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return _require_transform_keys(value)
+
+    @model_validator(mode="after")
+    def validate_case_registry(self) -> QualificationCandidateV1:
+        if self.case_ids != [case.golden_case.case_id for case in self.cases]:
+            raise ValueError("case_ids must match cases in order")
+        if len(set(self.case_ids)) != len(self.case_ids):
+            raise ValueError("case_ids must be unique")
+        if self.case_count != len(self.cases):
+            raise ValueError("case_count must equal the number of cases")
+        if any(case.golden_case.source_id != self.source_id for case in self.cases):
+            raise ValueError("golden case source must match candidate source")
+        failed = [case for case in self.cases if case.evaluation_status == "failed"]
+        if failed and self.automated_status == "passed":
+            raise ValueError("failed golden case requires automated_status=failed")
+        if self.synthetic_ci_status == "passed" and any(
+            not case.golden_case.official_source for case in failed
+        ):
+            raise ValueError(
+                "failed synthetic golden case cannot report synthetic_ci_status=passed"
+            )
+        return self
+
+
+class QualificationCertificateV1(BaseModel):
+    """Post-review certificate; approval still requires audit readback of every case."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    qualification_certificate_schema_version: Literal[1]
+    source_id: SourceId
+    curated_build_id: str = Field(min_length=1)
+    subject_digest: Sha256
+    candidate_report_sha256: Sha256
+    accepted_review_hashes: list[Sha256]
+    approved_distinct_case_ids: list[str]
+    official_qualification_status: Literal["not_qualified", "approved"]
+
+    @model_validator(mode="after")
+    def validate_case_count(self) -> QualificationCertificateV1:
+        case_ids = self.approved_distinct_case_ids
+        if len(set(case_ids)) != len(case_ids) or not all(case_ids):
+            raise ValueError("approved_distinct_case_ids must be distinct non-empty ids")
+        if self.official_qualification_status == "not_qualified" and case_ids:
+            raise ValueError("not_qualified certificate must not list approved cases")
+        if self.official_qualification_status == "approved" and len(case_ids) < 10:
+            raise ValueError("approved certificate requires at least 10 distinct cases")
+        return self
 
 
 class ItemEnvelope(BaseModel):

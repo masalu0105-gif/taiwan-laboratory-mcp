@@ -6,7 +6,10 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from pydantic import ValidationError
+
 from .canonical import canonical_json_bytes, sha256_bytes
+from .models import QualificationCandidateV1, QualificationCertificateV1
 
 
 class AuditIntegrityError(ValueError):
@@ -223,14 +226,15 @@ def _validate_approved_qualification(
         raise AuditIntegrityError("approved qualification cases invalid")
     if set(approved_case_ids) - set(case_ids):
         raise AuditIntegrityError("approved qualification case coverage incomplete")
-    cases_by_id = {}
-    for case in cases:
-        if not isinstance(case, dict) or not isinstance(case.get("case_id"), str):
+    cases_by_id: dict[str, dict[str, Any]] = {}
+    for result in cases:
+        golden_case = result.get("golden_case") if isinstance(result, dict) else None
+        if not isinstance(golden_case, dict) or not isinstance(golden_case.get("case_id"), str):
             raise AuditIntegrityError("approved qualification case record invalid")
-        case_id = case["case_id"]
+        case_id = golden_case["case_id"]
         if case_id in cases_by_id:
             raise AuditIntegrityError("approved qualification case ids duplicated")
-        cases_by_id[case_id] = case
+        cases_by_id[case_id] = result
     if set(cases_by_id) != set(case_ids):
         raise AuditIntegrityError("qualification case id registry mismatch")
 
@@ -244,10 +248,16 @@ def _validate_approved_qualification(
         artifact_id = artifact.get("artifact_id")
         if isinstance(artifact_id, str):
             artifacts[artifact_id] = artifact
+    expected_transform = _active_transform(manifest)
     source_id = manifest.get("source_id")
     raw_prefix = f"raw/{source_id}/{manifest.get('raw_revision_id')}/"
     for case_id in approved_case_ids:
-        case = cases_by_id[case_id]
+        result = cases_by_id[case_id]
+        case = result["golden_case"]
+        if result.get("evaluation_status") != "passed" or result.get("failure_codes") != []:
+            raise AuditIntegrityError("approved qualification case did not pass evaluation")
+        if case.get("transform") != expected_transform:
+            raise AuditIntegrityError("approved qualification case transform is stale")
         artifact_id = case.get("artifact_id")
         raw_digest = case.get("raw_artifact_sha256")
         artifact = artifacts.get(artifact_id) if isinstance(artifact_id, str) else None
@@ -262,6 +272,7 @@ def _validate_approved_qualification(
             or artifact.get("local_artifact_available") is not True
             or not isinstance(artifact.get("data_root_relative_path"), str)
             or not artifact["data_root_relative_path"].startswith(raw_prefix)
+            or case.get("evidence_data_root_relative_path") != artifact["data_root_relative_path"]
             or case.get("official_source") is not True
             or case.get("review_status") != "approved"
             or not isinstance(case.get("source_locator"), dict)
@@ -282,6 +293,16 @@ def _validate_approved_qualification(
             raise AuditIntegrityError("approved qualification case timestamp invalid") from exc
         if reviewed_at.utcoffset() is None:
             raise AuditIntegrityError("approved qualification case timestamp lacks timezone")
+
+
+def _active_transform(manifest: dict[str, Any]) -> dict[str, Any]:
+    fingerprint = manifest.get("build_fingerprint")
+    if not isinstance(fingerprint, dict):
+        raise AuditIntegrityError("build fingerprint missing")
+    return {
+        key: fingerprint.get(key)
+        for key in ("parser", "schema", "normalization", "rules", "qualifier")
+    }
 
 
 def validate_audit_evidence(data_root: Path, manifest: dict[str, Any]) -> None:
@@ -357,14 +378,23 @@ def validate_audit_evidence(data_root: Path, manifest: dict[str, Any]) -> None:
     )
     if validation.get("artifact_hashes") != expected_artifacts:
         raise AuditIntegrityError("validation artifact coverage invalid")
+    try:
+        QualificationCandidateV1.model_validate_json(canonical_json_bytes(candidate))
+    except ValidationError as exc:
+        raise AuditIntegrityError("qualification candidate invalid") from exc
     if (
-        candidate.get("qualification_candidate_schema_version") != 1
-        or candidate.get("source_id") != source_id
-        or candidate.get("raw_revision_id") != manifest.get("raw_revision_id")
-        or candidate.get("curated_build_id") != build_id
-        or candidate.get("automated_status") != "passed"
-        or not isinstance(candidate.get("synthetic_ci_status"), str)
-        or candidate.get("synthetic_ci_status") not in {"not_run", "passed", "failed"}
+        candidate["source_id"] != source_id
+        or candidate["raw_revision_id"] != manifest.get("raw_revision_id")
+        or candidate["curated_build_id"] != build_id
+        or candidate["automated_status"] != "passed"
+        or candidate["input_artifact_hashes"] != expected_artifacts
+        or candidate["curated_db_sha256"] != publication.get("curated_sha256")
+        or candidate["active_transform"] != _active_transform(manifest)
+        or any(
+            sha256_bytes(canonical_json_bytes(result["golden_case"]))
+            != result["golden_case_sha256"]
+            for result in candidate["cases"]
+        )
     ):
         raise AuditIntegrityError("qualification candidate invalid")
     expected_subject = compute_review_subject_digest(
@@ -375,6 +405,10 @@ def validate_audit_evidence(data_root: Path, manifest: dict[str, Any]) -> None:
     )
     if manifest.get("review_subject_digest") != expected_subject:
         raise AuditIntegrityError("review subject digest mismatch")
+    try:
+        QualificationCertificateV1.model_validate_json(canonical_json_bytes(golden))
+    except ValidationError as exc:
+        raise AuditIntegrityError("qualification certificate invalid") from exc
     if (
         golden.get("qualification_certificate_schema_version") != 1
         or golden.get("source_id") != source_id
@@ -403,7 +437,7 @@ def validate_audit_evidence(data_root: Path, manifest: dict[str, Any]) -> None:
         or required_gates != completed_gates
         or len(evidence["reviews"]) != len(completed_gates)
         or review_meta.get("human_review_status") != "approved"
-        or not {"NHI-R1-SOURCE", "NHI-R1-SCHEMA"}.issubset(set(required_gates))
+        or not {"NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"}.issubset(set(required_gates))
     ):
         raise AuditIntegrityError("review gate set invalid")
     seen_gates: set[str] = set()

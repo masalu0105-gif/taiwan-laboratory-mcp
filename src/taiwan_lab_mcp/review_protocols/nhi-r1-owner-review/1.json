@@ -1,0 +1,62 @@
+{
+  "protocol_id": "nhi-r1-owner-review",
+  "protocol_version": "1",
+  "source_id": "nhi_fee",
+  "status": "owner_approved",
+  "approved_date": "2026-09-14",
+  "identity_assurance": "local_asserted",
+  "gates": {
+    "NHI-R1-SOURCE": {
+      "purpose": "The raw artifact is the dataset published by the National Health Insurance Administration.",
+      "checklist": [
+        "Dataset landing page https://data.gov.tw/dataset/174450 lists 衛生福利部中央健康保險署 as provider.",
+        "Landing page license is 政府資料開放授權條款-第1版; metadata license code is 1.",
+        "Artifact was fetched from an allowlisted info.nhi.gov.tw HTTPS resource URL discovered from metadata.",
+        "Metadata identifier is A21030000I-D20021.",
+        "Metadata publisherOID is 2.16.886.101.20003.20065.20022.",
+        "Attribution text is 資料提供機關：衛生福利部中央健康保險署."
+      ]
+    },
+    "NHI-R1-SCHEMA": {
+      "purpose": "The raw artifact matches the approved nhi-7-v1 schema and every source row is preserved.",
+      "checklist": [
+        "Header has the seven approved columns in order.",
+        "Codes are unique after normalization.",
+        "Points are non-negative base-10 integers and are never converted to money.",
+        "Dates are strict Gregorian YYYYMMDD values.",
+        "29101231 stays raw with an inference flag and is never described as permanent.",
+        "Blank English names and notes stay blank; non-blank notes are preserved in full.",
+        "Quoted line breaks stay inside one record.",
+        "Codes from two to seven characters are accepted."
+      ]
+    },
+    "PUB-R1-OWNER": {
+      "purpose": "The owner authorizes this build to be served by the local MCP runtime.",
+      "scope": "local_mcp_serving_only",
+      "excluded": "Redistributing curated artifacts, including GitHub Releases, requires a separate approval.",
+      "checklist": [
+        "Every official result carries provenance attribution and the license URL https://data.gov.tw/license.",
+        "Every official NHI result carries the note 非健保署官方服務，內容以健保署公告為準。"
+      ]
+    }
+  },
+  "golden_cases": {
+    "minimum_distinct_official_cases": 10,
+    "required_coverage": [
+      "leading zero code",
+      "zero points",
+      "quoted line break",
+      "date boundary",
+      "scope pending"
+    ],
+    "comparison": "Compare values and locators with the raw artifact and the official NHI payment standard query service."
+  },
+  "severity_policy": {
+    "critical": "reject",
+    "major": "reject_until_resolved_in_a_new_build",
+    "minor": "record_and_accept",
+    "minor_examples": [
+      "A note that differs from the official query service only by line breaks."
+    ]
+  }
+}

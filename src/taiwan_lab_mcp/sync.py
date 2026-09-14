@@ -50,12 +50,7 @@ def _utc_now(clock: SyncClock | None) -> datetime:
     return value.astimezone(timezone.utc).replace(microsecond=0)
 
 
-def _write_immutable_json(path: Path, value: dict[str, Any]) -> None:
-    payload = canonical_json_bytes(value)
-    if path.exists():
-        if path.read_bytes() != payload:
-            raise SyncError("IMMUTABLE_REPORT_CONFLICT", "write")
-        return
+def _write_new_file(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary_path = Path(temporary_name)
@@ -68,6 +63,69 @@ def _write_immutable_json(path: Path, value: dict[str, Any]) -> None:
     finally:
         if temporary_path.exists():
             temporary_path.unlink()
+
+
+def _write_immutable_json(path: Path, value: dict[str, Any]) -> None:
+    payload = canonical_json_bytes(value)
+    if path.exists():
+        if path.read_bytes() != payload:
+            raise SyncError("IMMUTABLE_REPORT_CONFLICT", "write")
+        return
+    _write_new_file(path, payload)
+
+
+def _write_raw_revision(
+    data_root: Path,
+    *,
+    raw_revision_id: str,
+    payload: bytes,
+    fetched_artifact: FetchedArtifact,
+    discovery: dict[str, Any] | None,
+    media_type_verified: str,
+) -> tuple[str, str]:
+    """Keep the fetched bytes and first fetch evidence under the immutable raw revision."""
+
+    if fetched_artifact.sha256 != sha256_bytes(payload):
+        raise SyncError("RAW_ARTIFACT_HASH_MISMATCH", "fetch")
+    revision_dir = PurePosixPath("raw", "nhi_fee", raw_revision_id)
+    artifact_relative = revision_dir / "artifacts" / "source.csv"
+    fetch_relative = revision_dir / "fetch.json"
+    artifact_path = data_root / artifact_relative
+    if artifact_path.exists():
+        if artifact_path.read_bytes() != payload:
+            raise SyncError("IMMUTABLE_RAW_CONFLICT", "fetch")
+    else:
+        _write_new_file(artifact_path, payload)
+        if sha256_bytes(artifact_path.read_bytes()) != fetched_artifact.sha256:
+            raise SyncError("RAW_ARTIFACT_READBACK_MISMATCH", "fetch")
+    fetch_path = data_root / fetch_relative
+    # The same raw revision can be fetched again later; volatile evidence from later
+    # attempts stays in their staged reports and never rewrites the first record.
+    if not fetch_path.exists():
+        _write_immutable_json(
+            fetch_path,
+            {
+                "fetch_record_schema_version": 1,
+                "source_id": "nhi_fee",
+                "raw_revision_id": raw_revision_id,
+                "discovery": discovery,
+                "artifact": {
+                    "artifact_id": "nhi-primary-csv",
+                    "role": "primary",
+                    "data_root_relative_path": str(artifact_relative),
+                    "requested_url": fetched_artifact.requested_url,
+                    "final_url": fetched_artifact.final_url,
+                    "status_code": fetched_artifact.status_code,
+                    "headers": fetched_artifact.headers,
+                    "redirect_trace": list(fetched_artifact.redirect_trace),
+                    "media_type_verified": media_type_verified,
+                    "bytes": len(payload),
+                    "sha256": fetched_artifact.sha256,
+                    "fetched_at": fetched_artifact.fetched_at,
+                },
+            },
+        )
+    return str(artifact_relative), str(fetch_relative)
 
 
 def _attempt_id(source_id: str, payload_sha256: str | None, started_at: datetime) -> str:
@@ -94,6 +152,8 @@ def _base_report(
     report_relative_path: str,
     discovery: dict[str, Any] | None = None,
     fetched_artifact: FetchedArtifact | None = None,
+    raw_artifact_relative_path: str | None = None,
+    raw_fetch_record_relative_path: str | None = None,
 ) -> dict[str, Any]:
     row_count = len(parsed.rows) if parsed else 0
     warnings = list(parsed.warnings) if parsed else []
@@ -104,7 +164,8 @@ def _base_report(
                 "artifact_id": "nhi-primary-csv",
                 "role": "primary",
                 "sha256": payload_sha256,
-                "local_artifact_available": False,
+                "local_artifact_available": raw_artifact_relative_path is not None,
+                "data_root_relative_path": raw_artifact_relative_path,
             }
         )
     report = {
@@ -123,6 +184,7 @@ def _base_report(
         "candidate_status": "review_pending" if candidate_build_id else "none",
         "subject_digest": None,
         "artifact_hashes": artifact_hashes,
+        "raw_fetch_record_data_root_relative_path": raw_fetch_record_relative_path,
         "transform": {
             "parser_version": "nhi-csv-v1",
             "schema_version": "nhi-7-v1",
@@ -170,7 +232,11 @@ def run_nhi_sync(
     discovery: dict[str, Any] | None = None,
     fetched_artifact: FetchedArtifact | None = None,
 ) -> dict[str, Any]:
-    """Run the offline NHI discover-to-validate path without auto-publish."""
+    """Run the NHI discover-to-validate path without auto-publish.
+
+    Only bytes fetched from the upstream source are kept as an immutable raw revision;
+    caller-supplied offline input has no upstream provenance and stays report-only.
+    """
 
     data_root = Path(data_root)
     if initial_stage not in {"discover", "fetch"}:
@@ -200,6 +266,8 @@ def run_nhi_sync(
         else None
     )
     candidate_build_id = _candidate_build_id(payload_sha256) if payload_sha256 else None
+    raw_artifact_relative: str | None = None
+    raw_fetch_record_relative: str | None = None
     stage = initial_stage
     status = "failed"
     error_code = initial_error
@@ -211,6 +279,18 @@ def run_nhi_sync(
         stage = "fetch"
         if fail_stage == "fetch":
             error_code = "FETCH_INJECTED_FAILURE"
+        elif fetched_artifact is not None and raw_revision_id is not None:
+            try:
+                raw_artifact_relative, raw_fetch_record_relative = _write_raw_revision(
+                    data_root,
+                    raw_revision_id=raw_revision_id,
+                    payload=payload,
+                    fetched_artifact=fetched_artifact,
+                    discovery=discovery,
+                    media_type_verified=media_type_verified,
+                )
+            except SyncError as exc:
+                error_code = exc.code
     if error_code is None:
         stage = "parse"
         if fail_stage == "parse":
@@ -247,6 +327,8 @@ def run_nhi_sync(
         report_relative_path=report_relative,
         discovery=discovery,
         fetched_artifact=fetched_artifact,
+        raw_artifact_relative_path=raw_artifact_relative,
+        raw_fetch_record_relative_path=raw_fetch_record_relative,
     )
     _write_immutable_json(data_root / PurePosixPath(report_relative), report)
     return report
@@ -264,7 +346,7 @@ def run_nhi_upstream_sync(
     opener=None,
     clock: SyncClock | None = None,
 ) -> dict[str, Any]:
-    """Fetch NHI metadata/CSV and stop at a review-pending candidate report."""
+    """Fetch NHI metadata/CSV, keep the raw revision and stop at a candidate report."""
 
     try:
         fetched = fetch_nhi_source(

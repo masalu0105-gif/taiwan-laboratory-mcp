@@ -126,9 +126,9 @@ def test_nhi_discovery_requires_exact_metadata_and_selects_one_csv():
         {
             "success": True,
             "result": {
-                "publisherOID": "A21030000I",
+                "publisherOID": "2.16.886.101.20003.20065.20022",
                 "identifier": NHI_SOURCE_IDENTIFIER,
-                "license": "政府資料開放授權條款－第 1 版",
+                "license": "1",
                 "modifiedDate": "2026-09-12 07:06:04",
                 "distribution": [
                     {
@@ -147,7 +147,9 @@ def test_nhi_discovery_requires_exact_metadata_and_selects_one_csv():
         ensure_ascii=False,
     ).encode()
 
-    discovery = discover_nhi_resource(payload, expected_publisher_oid="A21030000I")
+    discovery = discover_nhi_resource(
+        payload, expected_publisher_oid="2.16.886.101.20003.20065.20022"
+    )
 
     assert discovery["identifier"] == NHI_SOURCE_IDENTIFIER
     assert discovery["resource_url"] == "https://info.nhi.gov.tw/data.csv"
@@ -161,9 +163,9 @@ def test_nhi_source_fetches_metadata_then_allowed_csv_without_publishing():
         {
             "success": True,
             "result": {
-                "publisherOID": "A21030000I",
+                "publisherOID": "2.16.886.101.20003.20065.20022",
                 "identifier": "A21030000I-D20021",
-                "license": "政府資料開放授權條款－第 1 版",
+                "license": "1",
                 "modifiedDate": "2026-09-12 07:06:04",
                 "distribution": [
                     {
@@ -182,7 +184,7 @@ def test_nhi_source_fetches_metadata_then_allowed_csv_without_publishing():
     )
 
     fetched = fetch_nhi_source(
-        expected_publisher_oid="A21030000I",
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
         opener=opener,
         clock=lambda: datetime(2026, 9, 13, 1, 0, tzinfo=timezone.utc),
     )
@@ -203,9 +205,9 @@ def test_upstream_nhi_sync_records_transport_evidence_and_stays_candidate_only(t
         {
             "success": True,
             "result": {
-                "publisherOID": "A21030000I",
+                "publisherOID": "2.16.886.101.20003.20065.20022",
                 "identifier": "A21030000I-D20021",
-                "license": "政府資料開放授權條款－第 1 版",
+                "license": "1",
                 "modifiedDate": "2026-09-12 07:06:04",
                 "distribution": [
                     {
@@ -228,7 +230,7 @@ def test_upstream_nhi_sync_records_transport_evidence_and_stays_candidate_only(t
 
     report = run_nhi_upstream_sync(
         tmp_path,
-        expected_publisher_oid="A21030000I",
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
         opener=opener,
         clock=lambda: datetime(2026, 9, 13, 1, 0, tzinfo=timezone.utc),
     )
@@ -250,9 +252,9 @@ def test_upstream_nhi_raw_revision_binds_nonvolatile_discovery_identity(tmp_path
             {
                 "success": True,
                 "result": {
-                    "publisherOID": "A21030000I",
+                    "publisherOID": "2.16.886.101.20003.20065.20022",
                     "identifier": "A21030000I-D20021",
-                    "license": "政府資料開放授權條款－第 1 版",
+                    "license": "1",
                     "modifiedDate": modified_at,
                     "distribution": [
                         {
@@ -272,7 +274,7 @@ def test_upstream_nhi_raw_revision_binds_nonvolatile_discovery_identity(tmp_path
 
     first = run_nhi_upstream_sync(
         tmp_path / "first",
-        expected_publisher_oid="A21030000I",
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
         opener=QueueOpener(
             FakeResponse(
                 200, metadata("2026-09-12 07:06:04"), {"Content-Type": "application/json"}
@@ -283,7 +285,7 @@ def test_upstream_nhi_raw_revision_binds_nonvolatile_discovery_identity(tmp_path
     )
     second = run_nhi_upstream_sync(
         tmp_path / "second",
-        expected_publisher_oid="A21030000I",
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
         opener=QueueOpener(
             FakeResponse(
                 200, metadata("2026-09-13 07:06:04"), {"Content-Type": "application/json"}
@@ -307,7 +309,7 @@ def test_upstream_nhi_discovery_failure_keeps_partial_metadata_evidence(tmp_path
             "result": {
                 "publisherOID": "unexpected-publisher",
                 "identifier": "A21030000I-D20021",
-                "license": "政府資料開放授權條款－第 1 版",
+                "license": "1",
                 "distribution": [],
             },
         },
@@ -315,7 +317,7 @@ def test_upstream_nhi_discovery_failure_keeps_partial_metadata_evidence(tmp_path
     ).encode()
     report = run_nhi_upstream_sync(
         tmp_path,
-        expected_publisher_oid="A21030000I",
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
         opener=QueueOpener(FakeResponse(200, metadata, {"Content-Type": "application/json"})),
         clock=lambda: datetime(2026, 9, 13, 1, 0, tzinfo=timezone.utc),
     )
@@ -338,7 +340,7 @@ def test_nhi_raw_revision_excludes_fetch_volatile_discovery_fields(tmp_path):
     ).encode()
     discovery = {
         "landing_url": "https://DATA.GOV.TW/dataset/174450#fragment",
-        "publisher_oid": "A21030000I",
+        "publisher_oid": "2.16.886.101.20003.20065.20022",
         "dataset_id": "174450",
         "license_name": "政府資料開放授權條款－第 1 版",
         "license_url": "https://data.gov.tw/license#license",
@@ -384,9 +386,9 @@ def test_upstream_nhi_fetch_failure_preserves_verified_discovery_evidence(tmp_pa
         {
             "success": True,
             "result": {
-                "publisherOID": "A21030000I",
+                "publisherOID": "2.16.886.101.20003.20065.20022",
                 "identifier": "A21030000I-D20021",
-                "license": "政府資料開放授權條款－第 1 版",
+                "license": "1",
                 "distribution": [
                     {
                         "resourceFormat": "CSV",
@@ -405,7 +407,7 @@ def test_upstream_nhi_fetch_failure_preserves_verified_discovery_evidence(tmp_pa
 
     report = run_nhi_upstream_sync(
         tmp_path,
-        expected_publisher_oid="A21030000I",
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
         opener=opener,
         clock=lambda: datetime(2026, 9, 13, 1, 0, tzinfo=timezone.utc),
     )
@@ -446,7 +448,7 @@ def test_cli_upstream_requires_explicit_publisher_oid(tmp_path, monkeypatch, cap
             "sync",
             "nhi_fee",
             "--publisher-oid",
-            "A21030000I",
+            "2.16.886.101.20003.20065.20022",
             "--metadata-url",
             "https://data.gov.tw/api/v2/rest/dataset/174450",
             "--data-dir",
@@ -460,9 +462,197 @@ def test_cli_upstream_requires_explicit_publisher_oid(tmp_path, monkeypatch, cap
         (
             tmp_path,
             {
-                "expected_publisher_oid": "A21030000I",
+                "expected_publisher_oid": "2.16.886.101.20003.20065.20022",
                 "metadata_url": "https://data.gov.tw/api/v2/rest/dataset/174450",
             },
         )
     ]
     assert json.loads(capsys.readouterr().out) == {"status": "passed", "stage": "validate"}
+
+
+def _nhi_metadata_bytes() -> bytes:
+    return json.dumps(
+        {
+            "success": True,
+            "result": {
+                "publisherOID": "2.16.886.101.20003.20065.20022",
+                "identifier": "A21030000I-D20021",
+                "license": "1",
+                "modifiedDate": "2026-09-12 07:06:04",
+                "distribution": [
+                    {
+                        "resourceFormat": "CSV",
+                        "resourceCharacterEncoding": "UTF-8",
+                        "resourceDownloadUrl": "https://info.nhi.gov.tw/data.csv",
+                    }
+                ],
+            },
+        },
+        ensure_ascii=False,
+    ).encode()
+
+
+def _valid_nhi_csv() -> bytes:
+    from taiwan_lab_mcp.importers.nhi import NHI_COLUMNS
+
+    return (
+        chr(0xFEFF)
+        + ",".join(NHI_COLUMNS)
+        + "\n"
+        + "09006C,0,20120101,29101231,HbA1c,醣化血紅素,\n"
+    ).encode("utf-8")
+
+
+def _run_upstream(data_root, csv_payload: bytes, *, hour: int = 1) -> dict:
+    from taiwan_lab_mcp.sync import run_nhi_upstream_sync
+
+    return run_nhi_upstream_sync(
+        data_root,
+        expected_publisher_oid="2.16.886.101.20003.20065.20022",
+        opener=QueueOpener(
+            FakeResponse(200, _nhi_metadata_bytes(), {"Content-Type": "application/json"}),
+            FakeResponse(200, csv_payload, {"Content-Type": "application/csv"}),
+        ),
+        clock=lambda: datetime(2026, 9, 13, hour, 0, tzinfo=timezone.utc),
+    )
+
+
+def test_upstream_nhi_sync_keeps_immutable_raw_artifact_and_fetch_record(tmp_path):
+    from pathlib import Path
+
+    from taiwan_lab_mcp.canonical import canonical_json_bytes, sha256_bytes
+
+    csv_payload = _valid_nhi_csv()
+    report = _run_upstream(tmp_path, csv_payload)
+
+    assert report["status"] == "passed"
+    raw_relative = f"raw/nhi_fee/{report['raw_revision_id']}/artifacts/source.csv"
+    fetch_relative = f"raw/nhi_fee/{report['raw_revision_id']}/fetch.json"
+    assert (tmp_path / Path(raw_relative)).read_bytes() == csv_payload
+    [artifact] = report["artifact_hashes"]
+    assert artifact["local_artifact_available"] is True
+    assert artifact["data_root_relative_path"] == raw_relative
+    assert report["raw_fetch_record_data_root_relative_path"] == fetch_relative
+
+    fetch_bytes = (tmp_path / Path(fetch_relative)).read_bytes()
+    fetch_record = json.loads(fetch_bytes)
+    assert canonical_json_bytes(fetch_record) == fetch_bytes
+    assert fetch_record["raw_revision_id"] == report["raw_revision_id"]
+    assert fetch_record["discovery"]["identifier"] == "A21030000I-D20021"
+    assert fetch_record["artifact"]["data_root_relative_path"] == raw_relative
+    assert fetch_record["artifact"]["sha256"] == sha256_bytes(csv_payload)
+    assert fetch_record["artifact"]["bytes"] == len(csv_payload)
+    assert fetch_record["artifact"]["final_url"] == "https://info.nhi.gov.tw/data.csv"
+    assert fetch_record["artifact"]["fetched_at"]
+    assert str(tmp_path) not in fetch_bytes.decode("utf-8")
+    assert not (tmp_path / "manifests" / "current" / "nhi_fee.json").exists()
+    assert not (tmp_path / "curated").exists()
+
+
+def test_upstream_nhi_sync_keeps_raw_artifact_when_parse_fails(tmp_path):
+    from pathlib import Path
+
+    bad_payload = (chr(0xFEFF) + "代碼,點數\n09006C,0\n").encode("utf-8")
+    report = _run_upstream(tmp_path, bad_payload)
+
+    assert report["status"] == "failed"
+    assert report["stage"] == "parse"
+    assert report["candidate_curated_build_id"] is None
+    raw_path = tmp_path / Path(f"raw/nhi_fee/{report['raw_revision_id']}/artifacts/source.csv")
+    assert raw_path.read_bytes() == bad_payload
+
+
+def test_upstream_nhi_sync_same_revision_keeps_first_fetch_record(tmp_path):
+    from pathlib import Path
+
+    csv_payload = _valid_nhi_csv()
+    first = _run_upstream(tmp_path, csv_payload, hour=1)
+    fetch_path = tmp_path / Path(first["raw_fetch_record_data_root_relative_path"])
+    before = fetch_path.read_bytes()
+
+    second = _run_upstream(tmp_path, csv_payload, hour=2)
+
+    assert second["status"] == "passed"
+    assert second["raw_revision_id"] == first["raw_revision_id"]
+    assert second["fetch"]["fetched_at"] != first["fetch"]["fetched_at"]
+    assert fetch_path.read_bytes() == before
+
+
+def test_upstream_nhi_sync_refuses_to_overwrite_changed_raw_artifact(tmp_path):
+    from pathlib import Path
+
+    csv_payload = _valid_nhi_csv()
+    first = _run_upstream(tmp_path, csv_payload, hour=1)
+    raw_path = tmp_path / Path(first["artifact_hashes"][0]["data_root_relative_path"])
+    raw_path.write_bytes(b"tampered raw artifact")
+
+    second = _run_upstream(tmp_path, csv_payload, hour=2)
+
+    assert second["status"] == "failed"
+    assert second["stage"] == "fetch"
+    assert second["error_code"] == "IMMUTABLE_RAW_CONFLICT"
+    assert second["candidate_curated_build_id"] is None
+    assert second["artifact_hashes"][0]["local_artifact_available"] is False
+    assert raw_path.read_bytes() == b"tampered raw artifact"
+
+
+def test_offline_input_sync_does_not_create_raw_revision(tmp_path):
+    from taiwan_lab_mcp.sync import run_nhi_sync
+
+    report = run_nhi_sync(_valid_nhi_csv(), tmp_path)
+
+    assert report["status"] == "passed"
+    assert report["artifact_hashes"][0]["local_artifact_available"] is False
+    assert report["raw_fetch_record_data_root_relative_path"] is None
+    assert not (tmp_path / "raw").exists()
+
+
+LIVE_SHAPE_PUBLISHER_OID = "2.16.886.101.20003.20065.20022"
+
+
+def _live_shape_metadata(*, license_code: str = "1") -> bytes:
+    # Shape observed from data.gov.tw dataset 174450 on 2026-09-14: the machine-readable
+    # license is a code, while the landing page shows the human-readable license name.
+    return json.dumps(
+        {
+            "success": True,
+            "result": {
+                "publisherOID": LIVE_SHAPE_PUBLISHER_OID,
+                "identifier": "A21030000I-D20021",
+                "license": license_code,
+                "modifiedDate": "2026-09-14 07:05:47",
+                "distribution": [
+                    {
+                        "resourceFormat": "CSV",
+                        "resourceCharacterEncoding": "UTF-8",
+                        "resourceDownloadUrl": "https://info.nhi.gov.tw/data.csv",
+                    }
+                ],
+            },
+        },
+        ensure_ascii=False,
+    ).encode()
+
+
+def test_nhi_discovery_checks_license_code_and_records_page_license_name():
+    from taiwan_lab_mcp.nhi_source import discover_nhi_resource
+
+    discovery = discover_nhi_resource(
+        _live_shape_metadata(), expected_publisher_oid=LIVE_SHAPE_PUBLISHER_OID
+    )
+
+    assert discovery["publisher_oid"] == LIVE_SHAPE_PUBLISHER_OID
+    assert discovery["license_code"] == "1"
+    assert discovery["license_name"] == "政府資料開放授權條款-第1版"
+    assert discovery["license_url"] == "https://data.gov.tw/license"
+
+
+def test_nhi_discovery_rejects_changed_license_code():
+    from taiwan_lab_mcp.fetch import FetchError
+    from taiwan_lab_mcp.nhi_source import discover_nhi_resource
+
+    with pytest.raises(FetchError, match="DISCOVERY_LICENSE_MISMATCH"):
+        discover_nhi_resource(
+            _live_shape_metadata(license_code="2"),
+            expected_publisher_oid=LIVE_SHAPE_PUBLISHER_OID,
+        )

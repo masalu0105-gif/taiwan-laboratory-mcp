@@ -12,7 +12,10 @@ NHI_DATASET_ID = "174450"
 NHI_SOURCE_IDENTIFIER = "A21030000I-D20021"
 NHI_METADATA_URL = "https://data.gov.tw/api/v2/rest/dataset/174450"
 NHI_LANDING_URL = "https://data.gov.tw/dataset/174450"
-NHI_LICENSE = "政府資料開放授權條款－第 1 版"
+# data.gov.tw metadata exposes the license as a code; the landing page shows the name.
+NHI_LICENSE_CODE = "1"
+NHI_LICENSE = "政府資料開放授權條款-第1版"
+NHI_LICENSE_URL = "https://data.gov.tw/license"
 NHI_METADATA_HOSTS = frozenset({"data.gov.tw"})
 NHI_RESOURCE_HOSTS = frozenset({"info.nhi.gov.tw"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -132,7 +135,7 @@ def discover_nhi_resource(
     *,
     expected_publisher_oid: str,
     expected_identifier: str = NHI_SOURCE_IDENTIFIER,
-    expected_license: str = NHI_LICENSE,
+    expected_license_code: str = NHI_LICENSE_CODE,
 ) -> dict[str, Any]:
     try:
         document = json.loads(metadata_payload.decode("utf-8"))
@@ -149,7 +152,7 @@ def discover_nhi_resource(
         raise FetchError("DISCOVERY_PUBLISHER_MISMATCH")
     if result.get("identifier") != expected_identifier:
         raise FetchError("DISCOVERY_IDENTIFIER_MISMATCH")
-    if result.get("license") != expected_license:
+    if result.get("license") != expected_license_code:
         raise FetchError("DISCOVERY_LICENSE_MISMATCH")
 
     distributions = result.get("distribution")
@@ -181,8 +184,9 @@ def discover_nhi_resource(
         "publisher_oid": expected_publisher_oid,
         "landing_url": NHI_LANDING_URL,
         "metadata_url": NHI_METADATA_URL,
-        "license_name": expected_license,
-        "license_url": "https://data.gov.tw/license",
+        "license_code": expected_license_code,
+        "license_name": NHI_LICENSE,
+        "license_url": NHI_LICENSE_URL,
         "resource_format": "CSV",
         "resource_character_encoding": "UTF-8",
         "resource_url": resource_url,

@@ -19,6 +19,7 @@ from ..models import (
 )
 
 SAMPLE_WARNING = "sample_only：目前只有合成示範資料，不可用於採檢、健保申報或採購；正式資料需另行同步、驗證與發布。"
+NHI_NOT_OFFICIAL_NOTE = "非健保署官方服務，內容以健保署公告為準。"
 
 
 def data_mode() -> str:
@@ -132,6 +133,9 @@ def result_from_rows(
         notes.append(
             "NHI laboratory scope 尚未完成 reviewer 核准；目前可查全表，不宣稱完整檢驗子集。"
         )
+    if provenance.source_id == "nhi_fee" and provenance.snapshot_id is not None:
+        # Owner-approved PRD REL-G4 non-official service statement (2026-09-14).
+        notes.append(NHI_NOT_OFFICIAL_NOTE)
     if provenance.stale:
         warnings.extend(provenance.stale_reason_codes)
         notes.append("serving snapshot 已標記 stale；使用者應重新核對目前官方來源。")

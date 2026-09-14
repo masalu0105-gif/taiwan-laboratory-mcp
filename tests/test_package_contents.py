@@ -13,6 +13,7 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/publish.py",
     "taiwan_lab_mcp/sync.py",
     "taiwan_lab_mcp/importers/nhi.py",
+    "taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/1.json",
     "taiwan_lab_mcp/schemas/nhi_fee/nhi-7-v1.json",
 }
 
