@@ -448,7 +448,40 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 相容性：
   - 舊 Release `nhi-data-20260914` 的 tag 指向 `402246a`。那版程式把 `rule_bundle_version` 寫死為 v1、`coverage_status` 寫死為 `review_incomplete`。
   - 新下載包要搭配含 v2 程式的新 tag，安裝說明因此改寫為「程式與資料包都換成同一個新 Release」。
-- 尚未做：建立新的 GitHub Release，需 owner 確認 tag 名稱、檔名、大小、SHA-256。
+- ~~尚未做：建立新的 GitHub Release，需 owner 確認 tag 名稱、檔名、大小、SHA-256。~~ 已完成，見下節。
+
+### GitHub Release `nhi-data-20260914-lab-scope`（2026-09-14）
+
+- owner 看過 tag 名稱、對應 commit、檔名、大小、SHA-256 與說明草稿後，在對話中回覆「建立 Release」。
+- 發布內容：
+  - `gh release create nhi-data-20260914-lab-scope --target 0fbb58d…`，title「健保支付標準審核版資料：加上算不算檢驗判定（2026-09-14）」。
+  - 說明文字取自 `taiwan-lab-mcp-data\release\release-notes-nhi-data-20260914-lab-scope.md`。
+  - 附件：`nhi_fee-snapshot-4ecd71e74f3b.zip`（1,718,253 bytes）與 `.sha256`（100 bytes）。
+- 驗證：
+  - `gh release view`：非 draft，tag 指向 `0fbb58da7be0651022cbfe5eba9ab7e1d07ce845`（`git rev-parse` 相同）。`gh release list` 顯示此版為 Latest，舊版 `nhi-data-20260914` 保留。
+  - 重新下載到 session scratchpad：ZIP SHA-256 `9642f2ca0eb0b9a29d392072d8325cee00fd0c9e18457eb613341c8f9bd3e6d6`，與本機檔及 `.sha256` 內容一致。
+- 第一次執行時，同一串指令前段的 `gh release view --json isLatest` 欄位不存在而中止，Release 沒有建立。改用 `gh release list` 後重跑才建立，只建了一次。
+
+### 食藥署沒有分類代碼的許可證列：數量評估（2026-09-14）
+
+- owner 決定：舊制那些「維持現狀」，並要求先評估數量、是否影響搜尋。本節只統計，沒有改任何判定。
+- 統計對象：官方 ZIP `tfda-68-csv-20260914.zip` 共 104,619 列，其中 17,606 列三個「醫器次類別」都沒有 A–P 代碼。
+  - 17,605 列次類別空白。
+  - 1 列是小寫 `d.5630 噴霧器`。
+- 依「醫器主類別」分組：
+
+| 組別 | 列數 | 許可證字號數 | 仍有效（註銷狀態空白） | 品名像 IVD（關鍵字，僅供估計） | 其中仍有效 |
+|---|---:|---:|---:|---:|---:|
+| 主類別是 A／B／C | 2,211 | 1,951 | 641 | 1,783 | 525 |
+| 主類別是 D–P 其他大類 | 5,668 | 5,150 | 1,630 | 50 | 8 |
+| 舊制四位數字主類別 | 9,337 | 9,233 | 253 | 119 | 0 |
+| 主類別也沒有（或只有 `E000` 這類無名稱代碼） | 389 | 360 | 52 | 11 | 0 |
+
+- 例子：
+  - 主類別 A／B／C 的有效列：「“百得” 胃蛋白酶原Ⅰ酵素免疫檢測試劑」「亞培設計師總甲狀腺素檢驗試劑組」。
+  - D–P 的有效列：「“星歐”拋棄式軟性隱形眼鏡」「“先健科技公司”赫特爾心房間隔缺損封堵器」。
+  - 舊制的有效列：「牙科用注射針」「"柯惠" ＧＩＡ自動手術縫合器」。
+- 品名關鍵字只用來估計比例，不是判定依據。
 
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
