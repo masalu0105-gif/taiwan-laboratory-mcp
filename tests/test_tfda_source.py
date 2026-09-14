@@ -278,6 +278,53 @@ def test_tfda_upstream_sync_failures_before_download_keep_no_raw(
     assert (tmp_path / Path(report["report_data_root_relative_path"])).is_file()
 
 
+@pytest.mark.parametrize("failing_step", ["extract_tfda_csv", "summarize_tfda_csv"])
+def test_tfda_upstream_sync_reports_memory_exhaustion_instead_of_crashing(
+    tmp_path, monkeypatch, failing_step
+):
+    import taiwan_lab_mcp.tfda_source as tfda_source
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("Unable to allocate output buffer.")
+
+    monkeypatch.setattr(tfda_source, failing_step, exhausted)
+    archive = _zip_bytes()
+
+    report = tfda_source.run_tfda_upstream_sync(
+        tmp_path,
+        expected_publisher_oid=_OID,
+        opener=_Opener(_json(_metadata_bytes()), _zip_response(archive)),
+        clock=_clock,
+    )
+
+    assert report["status"] == "failed"
+    assert report["error_code"] == "RESOURCE_EXHAUSTED"
+    assert report["stage"] == ("archive" if failing_step == "extract_tfda_csv" else "parse")
+    assert (tmp_path / Path(report["raw_artifact_data_root_relative_path"])).read_bytes() == archive
+    assert (tmp_path / Path(report["report_data_root_relative_path"])).is_file()
+
+
+def test_cli_validate_tfda_reports_memory_exhaustion(tmp_path, monkeypatch, capsys):
+    import taiwan_lab_mcp.importers.tfda as tfda_importer
+    from taiwan_lab_mcp.data_cli import main
+
+    def exhausted(*args, **kwargs):
+        raise MemoryError("Unable to allocate output buffer.")
+
+    monkeypatch.setattr(tfda_importer, "extract_tfda_csv", exhausted)
+    archive_path = tmp_path / "68_csv.zip"
+    archive_path.write_bytes(_zip_bytes())
+
+    code = main(["validate", "tfda_devices", "--input", str(archive_path), "--json"])
+
+    assert code == 4
+    assert json.loads(capsys.readouterr().out) == {
+        "source_id": "tfda_devices",
+        "validation_status": "failed",
+        "error_code": "RESOURCE_EXHAUSTED",
+    }
+
+
 def test_cli_sync_tfda_upstream_uses_explicit_publisher_oid(tmp_path, monkeypatch, capsys):
     import taiwan_lab_mcp.tfda_source as tfda_source
     from taiwan_lab_mcp.data_cli import main

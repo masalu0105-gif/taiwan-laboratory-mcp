@@ -179,23 +179,22 @@ def main(argv: list[str] | None = None) -> int:
             return 4
         return 0
     if args.command == "validate" and args.source_id == "tfda_devices":
-        from .importers.tfda import (
-            TFDAImportError,
-            extract_tfda_csv,
-            parse_tfda_csv,
-            tfda_validation_summary,
-        )
+        from .importers import tfda as tfda_importer
 
         try:
-            entry = extract_tfda_csv(args.input.read_bytes())
-            summary = tfda_validation_summary(entry, parse_tfda_csv(entry.payload))
-        except (OSError, TFDAImportError) as exc:
+            entry = tfda_importer.extract_tfda_csv(args.input.read_bytes())
+            summary = tfda_importer.summarize_tfda_csv(entry)
+        except (OSError, MemoryError, tfda_importer.TFDAImportError) as exc:
+            if isinstance(exc, MemoryError):
+                error_code = "RESOURCE_EXHAUSTED"
+            else:
+                error_code = getattr(exc, "code", "INPUT_UNAVAILABLE")
             print(
                 json.dumps(
                     {
                         "source_id": args.source_id,
                         "validation_status": "failed",
-                        "error_code": getattr(exc, "code", "INPUT_UNAVAILABLE"),
+                        "error_code": error_code,
                     },
                     ensure_ascii=False,
                     separators=(",", ":"),

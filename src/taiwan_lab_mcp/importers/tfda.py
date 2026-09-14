@@ -6,6 +6,7 @@ keeps raw revisions and never builds or publishes a curated snapshot (SDD 10.2).
 
 from __future__ import annotations
 
+import codecs
 import csv
 import io
 import re
@@ -189,16 +190,25 @@ def _date_is_valid(value: str) -> bool:
     return True
 
 
-def parse_tfda_csv(payload: bytes) -> TFDAParseResult:
+_PERMIT_INDEX = TFDA_COLUMNS.index("許可證字號")
+_CANCELLATION_STATUS_INDEX = TFDA_COLUMNS.index("註銷狀態")
+_VALID_THROUGH_INDEX = TFDA_COLUMNS.index("有效日期")
+_DATE_INDEXES = tuple((column, TFDA_COLUMNS.index(column)) for column in TFDA_DATE_COLUMNS)
+_REPLACEMENT_CHARACTER = chr(0xFFFD)
+
+
+def _iter_tfda_records(payload: bytes):
+    """Yield (source_row_number, raw values) after the strict checks, one record at a time."""
+
     if not isinstance(payload, bytes) or not payload:
         raise TFDAImportError("EMPTY_INPUT")
-    if b"\x00" in payload:
+    if 0 in payload:
         raise TFDAImportError("NUL_BYTE")
     try:
         text = payload.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
         raise TFDAImportError("DECODE_ERROR") from exc
-    if "\ufffd" in text:
+    if _REPLACEMENT_CHARACTER in text:
         raise TFDAImportError("DECODE_REPLACEMENT_CHARACTER")
 
     reader = csv.reader(io.StringIO(text, newline=""), strict=True)
@@ -213,7 +223,6 @@ def parse_tfda_csv(payload: bytes) -> TFDAParseResult:
             raise TFDAImportError("SCHEMA_DUPLICATE_COLUMN")
         raise TFDAImportError("SCHEMA_HEADER_MISMATCH")
 
-    rows: list[TFDASourceRow] = []
     try:
         for source_row_number, values in enumerate(reader, start=2):
             location = f"source row {source_row_number}"
@@ -223,29 +232,75 @@ def parse_tfda_csv(payload: bytes) -> TFDAParseResult:
                 raise TFDAImportError("SCHEMA_DUPLICATE_HEADER", location)
             if len(values) != len(TFDA_COLUMNS):
                 raise TFDAImportError("ROW_WIDTH_MISMATCH", location)
-            record = dict(zip(TFDA_COLUMNS, values))
-            if not record["許可證字號"].strip() or record["有效日期"] == "":
+            if not values[_PERMIT_INDEX].strip() or values[_VALID_THROUGH_INDEX] == "":
                 raise TFDAImportError("REQUIRED_VALUE_MISSING", location)
-            for column in TFDA_DATE_COLUMNS:
-                if record[column] != "" and not _date_is_valid(record[column]):
+            for column, index in _DATE_INDEXES:
+                if values[index] != "" and not _date_is_valid(values[index]):
                     raise TFDAImportError("DATE_INVALID", f"{column} {location}")
-            rows.append(
-                TFDASourceRow(
-                    source_row_number=source_row_number,
-                    source_row_sha256=sha256_bytes(canonical_json_bytes(list(values))),
-                    values=record,
-                )
-            )
+            yield source_row_number, values
     except csv.Error as exc:
         raise TFDAImportError("CSV_PARSE_ERROR") from exc
+
+
+def _utf8_warnings(payload: bytes) -> tuple[str, ...]:
+    return () if payload.startswith(codecs.BOM_UTF8) else ("UTF8_BOM_ABSENT",)
+
+
+def parse_tfda_csv(payload: bytes) -> TFDAParseResult:
+    rows = [
+        TFDASourceRow(
+            source_row_number=source_row_number,
+            source_row_sha256=sha256_bytes(canonical_json_bytes(list(values))),
+            values=dict(zip(TFDA_COLUMNS, values)),
+        )
+        for source_row_number, values in _iter_tfda_records(payload)
+    ]
     if not rows:
         raise TFDAImportError("ZERO_ROWS")
-    warnings = () if payload.startswith(b"\xef\xbb\xbf") else ("UTF8_BOM_ABSENT",)
     return TFDAParseResult(
         rows=tuple(rows),
         header_sha256=sha256_bytes(canonical_json_bytes(list(TFDA_COLUMNS))),
-        warnings=warnings,
+        warnings=_utf8_warnings(payload),
     )
+
+
+def summarize_tfda_csv(entry: TFDAArchiveEntry) -> dict[str, Any]:
+    """Same checks and summary as parse + tfda_validation_summary, without keeping rows.
+
+    The official file has about 105,000 rows; holding every row as a dict failed with
+    MemoryError on a machine low on commit memory (2026-09-14).
+    """
+
+    permits: Counter[str] = Counter()
+    statuses: Counter[str] = Counter()
+    empty_counts = dict.fromkeys(TFDA_COLUMNS, 0)
+    rows = 0
+    for _, values in _iter_tfda_records(entry.payload):
+        rows += 1
+        permits[search_normalize(values[_PERMIT_INDEX])] += 1
+        statuses[values[_CANCELLATION_STATUS_INDEX]] += 1
+        for column, value in zip(TFDA_COLUMNS, values):
+            if value == "":
+                empty_counts[column] += 1
+    if rows == 0:
+        raise TFDAImportError("ZERO_ROWS")
+    return {
+        "rows": rows,
+        "distinct_license_numbers": len(permits),
+        "license_numbers_with_multiple_rows": sum(1 for count in permits.values() if count > 1),
+        "max_rows_per_license_number": max(permits.values()),
+        "cancellation_status_counts": dict(sorted(statuses.items())),
+        "empty_value_counts": empty_counts,
+        "header_sha256": sha256_bytes(canonical_json_bytes(list(TFDA_COLUMNS))),
+        "warnings": list(_utf8_warnings(entry.payload)),
+        "archive": {
+            "zip_bytes": entry.zip_bytes,
+            "zip_sha256": entry.zip_sha256,
+            "entry_name": entry.name,
+            "entry_bytes": entry.uncompressed_bytes,
+            "entry_sha256": entry.payload_sha256,
+        },
+    }
 
 
 def tfda_validation_summary(entry: TFDAArchiveEntry, parsed: TFDAParseResult) -> dict[str, Any]:
@@ -294,11 +349,12 @@ def run_tfda_offline_validation(payload: bytes, data_root: Path, *, clock=None) 
     try:
         entry = extract_tfda_csv(payload)
         stage = "parse"
-        parsed = parse_tfda_csv(entry.payload)
+        summary = summarize_tfda_csv(entry)
         stage = "validate"
-        summary = tfda_validation_summary(entry, parsed)
     except TFDAImportError as exc:
         error_code = exc.code
+    except MemoryError:
+        error_code = "RESOURCE_EXHAUSTED"
     completed_at = _utc_now(clock)
     report = {
         "sync_report_schema_version": 1,

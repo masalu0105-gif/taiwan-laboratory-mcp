@@ -22,8 +22,7 @@ from .importers.tfda import (
     TFDA_SOURCE_ID,
     TFDAImportError,
     extract_tfda_csv,
-    parse_tfda_csv,
-    tfda_validation_summary,
+    summarize_tfda_csv,
 )
 
 TFDA_DATASET_ID = "9576"
@@ -245,13 +244,15 @@ def run_tfda_upstream_sync(
         stage = "archive"
         entry = extract_tfda_csv(artifact.payload, max_zip_bytes=max_zip_bytes)
         stage = "parse"
-        parsed = parse_tfda_csv(entry.payload)
+        summary = summarize_tfda_csv(entry)
         stage = "validate"
-        summary = tfda_validation_summary(entry, parsed)
     except (FetchError, SyncError, TFDAImportError) as exc:
         error_code = exc.code
         if isinstance(exc, SyncError):
             raw_revision_id = None if artifact_relative is None else raw_revision_id
+    except MemoryError:
+        # Keep the stage and the already-saved raw ZIP; report instead of crashing.
+        error_code = "RESOURCE_EXHAUSTED"
     completed_at = _utc_now(clock)
     report = {
         "sync_report_schema_version": 1,

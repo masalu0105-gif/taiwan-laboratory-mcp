@@ -385,3 +385,32 @@ def test_cli_validate_and_sync_tfda_offline_zip(tmp_path, capsys):
                 str(data_root),
             ]
         )
+
+
+def test_streaming_summary_matches_full_parse_summary():
+    from taiwan_lab_mcp.importers.tfda import summarize_tfda_csv, tfda_validation_summary
+
+    entry = extract_tfda_csv(_valid_zip())
+
+    assert summarize_tfda_csv(entry) == tfda_validation_summary(
+        entry, parse_tfda_csv(entry.payload)
+    )
+
+
+@pytest.mark.parametrize(
+    ("rows", "expected_code"),
+    [
+        ([_row(有效日期="")], "REQUIRED_VALUE_MISSING"),
+        ([_row(發證日期="2027/02/30")], "DATE_INVALID"),
+        ([_row()[:-1]], "ROW_WIDTH_MISMATCH"),
+        ([], "ZERO_ROWS"),
+    ],
+)
+def test_streaming_summary_blocks_the_same_failures(rows, expected_code):
+    from taiwan_lab_mcp.importers.tfda import summarize_tfda_csv
+
+    entry = extract_tfda_csv(_zip([("68_2.csv", _csv_bytes(rows))]))
+
+    with pytest.raises(TFDAImportError) as error:
+        summarize_tfda_csv(entry)
+    assert error.value.code == expected_code
