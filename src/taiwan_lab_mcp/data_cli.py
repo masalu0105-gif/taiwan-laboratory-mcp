@@ -51,6 +51,18 @@ def main(argv: list[str] | None = None) -> int:
     recovery_parser.add_argument("--actor", required=True)
     recovery_parser.add_argument("--data-dir", required=True, type=Path)
     recovery_parser.add_argument("--json", action="store_true")
+    review_parser = subparsers.add_parser("prepare-review")
+    review_parser.add_argument("source_id", choices=["nhi_fee"])
+    review_parser.add_argument("--data-dir", required=True, type=Path)
+    review_parser.add_argument("--output-dir", required=True, type=Path)
+    review_parser.add_argument("--json", action="store_true")
+    publish_parser = subparsers.add_parser("publish")
+    publish_parser.add_argument("source_id", choices=["nhi_fee"])
+    publish_parser.add_argument("--packet", required=True, type=Path)
+    publish_parser.add_argument("--decision", required=True, type=Path)
+    publish_parser.add_argument("--actor", required=True)
+    publish_parser.add_argument("--data-dir", required=True, type=Path)
+    publish_parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "status":
         if args.data_dir is not None:
@@ -218,8 +230,65 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+    if args.command in {"prepare-review", "publish"}:
+        from .importers.nhi import NHIImportError
+        from .nhi_review import (
+            NHIReviewError,
+            prepare_nhi_review_packet,
+            publish_reviewed_nhi_candidate,
+        )
+        from .publish import PublishError
+
+        try:
+            if args.command == "prepare-review":
+                summary = prepare_nhi_review_packet(args.data_dir, output_dir=args.output_dir)
+            else:
+                summary = publish_reviewed_nhi_candidate(
+                    args.data_dir,
+                    packet_path=args.packet,
+                    decision_path=args.decision,
+                    actor=args.actor,
+                )
+        except (NHIReviewError, NHIImportError, PublishError) as exc:
+            print(
+                json.dumps(
+                    {"operation": args.command, "result": "failed", "error_code": exc.code},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return _review_exit_code(exc)
+        print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
+        return 0
     parser.error("unsupported command")
     return 2
+
+
+_USAGE_ERROR_CODES = frozenset(
+    {
+        "REVIEW_INPUT_UNREADABLE",
+        "APPLICATION_BUILD_IDENTITY_MISSING",
+        "PUBLISHER_ACTOR_INVALID",
+        "EVIDENCE_FILE_INVALID",
+        "REVIEW_PROTOCOL_INVALID",
+    }
+)
+_INTEGRITY_ERROR_CODES = frozenset({"SERVING_INTEGRITY_FAILURE", "NO_SERVING_SNAPSHOT"})
+
+
+def _review_exit_code(exc: Exception) -> int:
+    """SDD 12 exit codes: 2 usage/config, 5 review gate, 6 publish/integrity."""
+
+    from .nhi_review import NHIReviewError
+
+    code = getattr(exc, "code", "")
+    if code in _USAGE_ERROR_CODES:
+        return 2
+    if isinstance(exc, NHIReviewError):
+        return 6 if code in _INTEGRITY_ERROR_CODES else 5
+    if code.startswith(("OWNER_REVIEW_", "GOLDEN_")):
+        return 5
+    return 6
 
 
 if __name__ == "__main__":

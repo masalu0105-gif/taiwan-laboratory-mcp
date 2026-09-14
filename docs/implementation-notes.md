@@ -191,6 +191,16 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
 - `adapters/nhi.py`、`server.py` 的 `get_data_status` 都傳入 context clock。
 - 測試：`tests/test_freshness.py` 新增 4 個（48 小時邊界、8 天後仍可查、與 `upstream_verification_failed` 合併順序、adapter 經 context clock 產生 warning、naive clock 拒絕）。
 
+### 新版審核包與發布指令（2026-09-14）
+
+- 新增 `src/taiwan_lab_mcp/nhi_review.py` 與 CLI：
+  - `taiwan-lab-data prepare-review nhi_fee --data-dir <path> --output-dir <path> [--json]`：只讀 data root。descriptor 必須有 serving build 且 `latest_candidate_status=review_pending`，否則回 `NO_PENDING_CANDIDATE`（exit 5）。重新驗 serving build（`read_nhi_state`）與候選 raw revision（`_load_official_raw_revision`），把 serving build 已核准的 golden cases 重新綁到候選原始檔：raw SHA-256、evidence path、目前 transform、row locator／row hash、expected fields 改為新版實際值，reviewer 欄清空、`review_pending`。逐題比對舊值與新值，分成沒變／有變／新版找不到（找不到的題目不放進 proposed cases）。輸出三個檔：canonical 審核包 `nhi-review-<候選前 12 碼>.json`、白話審核頁 `.md`（含逐題比對、上游 `diff-summary.md`、review protocol 清單、核准步驟）、decision 範本（`decision`、`reviewer_id`、`reviewed_at` 為 null）。
+  - `taiwan-lab-data publish nhi_fee --packet <json> --decision <json> --actor <id> --data-dir <path> [--json]`：decision 檔 strict 驗證（固定 10 個 key、帶時區 `reviewed_at`、三關順序、非負整數 finding counts）；`packet_sha256` 必須等於審核包實際 bytes 的 SHA-256；`decision` 必須是 `approved`；核准題號必須都在審核包；descriptor 的 serving 與候選仍須等於審核包（否則 `REVIEW_PACKET_STALE`）。通過後把核准題目與三關 review 交給既有 `build_official_nhi_snapshot`（重新檢查 raw、installed distribution、owner review 無 critical／major、至少 10 題通過），審核包與 decision 檔以 `nhi-review-packet`／`nhi-review-decision` 放進 build 的 `audit/evidence/`。
+  - exit code 依 SDD §12：2 輸入／設定、5 review gate、6 integrity／publish。
+- 規格解讀（SDD §12 只列 planned `review`／`publish`）：`review` 在 SDD 的語意是驗 `ReviewRecordV1`；本輪的審核包產生器不產生 review record，所以命名為 `prepare-review`，不佔用 `review`。`publish` 沿用 SDD 名稱，並透過既有 builder 重跑全部 preconditions。reviewer 身分只來自 decision 檔，不從互動文字產生。
+- 未做：owner 拒絕新版（`decision=rejected`）目前只回 `REVIEW_DECISION_NOT_APPROVED`、不寫任何狀態，候選會維持 `review_pending`；把候選標成 `rejected` 的流程尚未實作。新版找不到的題目需要人工補題，工具不自動挑新題。
+- 測試：`tests/test_nhi_review.py` 16 個（審核包逐題比對與只讀、找不到題目、無候選、發布後 serving 切換並查到新點數、7 種無效 decision 在任何寫入前擋下、審核包被改、審核包產生後又出現更新候選、major finding 由 builder 擋下、CLI 成功與 exit 5）。
+
 ## 目前驗證證據
 
 以下為 2026-09-14 同步保留原始檔與授權代碼核對修改後、基於 commit `a14b1da` 加上未提交 worktree 變更的重跑結果（前兩版記錄為 `155 passed`、`177 passed`）：
