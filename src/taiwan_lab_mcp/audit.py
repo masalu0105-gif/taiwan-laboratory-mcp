@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime
@@ -21,6 +22,22 @@ _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 def _is_hex64(value: Any) -> bool:
     return isinstance(value, str) and _HEX64.fullmatch(value) is not None
+
+
+# Serving gates per internal source id (PRD 8.2); PUB-R1-OWNER is shared.
+_SERVING_GATES = {
+    "nhi_fee": frozenset({"NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"}),
+    "tfda_devices": frozenset({"TFDA-R1-SOURCE", "TFDA-R1-SCHEMA", "PUB-R1-OWNER"}),
+}
+
+
+def _sha256_file(path: Path) -> str:
+    # The TFDA curated database is about 100 MB; hash it without holding it in memory.
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 _REVIEW_KEYS = frozenset(
@@ -127,7 +144,7 @@ def _validate_review(
     if (
         review["review_schema_version"] != 1
         or not isinstance(review["gate_id"], str)
-        or review["gate_id"] not in {"NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"}
+        or review["gate_id"] not in _SERVING_GATES.get(source_id, frozenset())
         or not isinstance(review["decision"], str)
         or review["decision"] != "approved"
         or review["source_id"] != source_id
@@ -177,7 +194,7 @@ def _validate_review(
         root = Path(data_root).resolve()
         if root not in candidate.parents or not candidate.is_file():
             raise AuditIntegrityError(f"review evidence {index} path unavailable")
-        if sha256_bytes(candidate.read_bytes()) != digest:
+        if _sha256_file(candidate) != digest:
             raise AuditIntegrityError(f"review evidence {index} hash mismatch")
     finding_counts = review["finding_counts"]
     if not isinstance(finding_counts, dict) or set(finding_counts) != {
@@ -437,7 +454,8 @@ def validate_audit_evidence(data_root: Path, manifest: dict[str, Any]) -> None:
         or required_gates != completed_gates
         or len(evidence["reviews"]) != len(completed_gates)
         or review_meta.get("human_review_status") != "approved"
-        or not {"NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"}.issubset(set(required_gates))
+        or source_id not in _SERVING_GATES
+        or not _SERVING_GATES[source_id].issubset(set(required_gates))
     ):
         raise AuditIntegrityError("review gate set invalid")
     seen_gates: set[str] = set()

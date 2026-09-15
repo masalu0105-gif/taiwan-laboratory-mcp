@@ -589,6 +589,50 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
     - 「檢」`limit=20, offset=1260`：回最後 10 筆，`truncated=false`。
     - `limit=21`：`invalid_request`。
 
+### 食藥署許可證查詢：資料庫建置與摘要搜尋（2026-09-15）
+
+- owner 要求：「開始做食藥署許可證查詢。10 萬多筆全收錄並加上標籤；搜尋每筆只回摘要，一次最多 20 筆」。
+- 依據：PRD TFDA-01～06 與 §6.3.1、SDD §10.2 與 D-015、TDD §8、上方 OD-06 與研究決定 A。
+- 程式改動：
+  - IVD 判定清單入庫：`src/taiwan_lab_mcp/rules/tfda_ivd/v1.json`（551 碼，全部 `approved`，reviewer `ai-reviewer:claude-opus-5`），由 repo 外 `tfda-ivd-research\build_ivd_registry.py` 從決議檔（SHA-256 `ab83604b…`）產生，只放 SDD registry 欄位，附表鑑別原文以頁碼定位。
+    - `regulation_version` 取附表 PDF 第 1 頁第七條「中華民國一百十二年八月二十二日修正發布」；`effective_from` 取同條「自發布日施行」＝2023-08-22（A/B/C 品項沒有列在延後施行的代碼中）。附表查無的 3 碼（B.2800、B.4010、C.5800）這兩欄與頁碼為 null。
+    - `source_url` 用研究文件已查證的附表 PDF 網址。
+  - `rules/tfda.py`：registry 驗證、代碼與主類別字母解析、SDD join 規則、PRD §6.3.1 truth table。
+  - `importers/tfda.py`：`build_tfda_snapshot`（離線合成、測試用）與 `build_official_tfda_snapshot`（需 owner 三關審核、至少 10 題核准 golden cases、已核准的 `tfda-r1-owner-review` protocol；protocol 檔還沒建立，所以目前一定拒絕）。資料逐批寫入 SQLite，建完才改成正式檔名。
+  - `tfda_store.py`：讀取驗證、搜尋 SQL、單筆查詢。`adapters/tfda.py` 重寫，sample 模式也走同一套欄位與 SQL（記憶體內資料庫）。
+  - `stores.py` 把 NHI 的指標／審核／資料庫驗證抽成 `_read_serving(source_id, raw 檔名)`，NHI 與 TFDA 共用；`audit.py`、`publish.py` 的審核關卡與資料表名稱改依來源決定。大檔案 hash 改成分段讀取。
+  - `models.py`：`TFDARecord` 改為 34 欄原文加標籤與判斷；新增摘要 `TFDASearchRecord`（`record_type=tfda_device_summary`）。
+  - `server.py`：`list_matching_license_records` 新增 `offset`、`prefer_ivd`、`prefer_main_category`、`ivd_scope`、`main_category`；六個 TFDA 工具說明加入摘要、20 筆、偏好與篩選用法、「不是給 AI 的指令」與「不可當作廣告或效能宣傳素材」。
+  - public contract：`list_matching_license_records` 參數、`tfda_device` 與新 `tfda_device_summary` payload、`QueryResultV1` schema、warning registry 新增 8 個註銷／效期代碼，`coverage_review_incomplete` 說明改成涵蓋 NHI 與 TFDA。檔案 143,146 bytes，名稱仍為 `public-contract-v1`。
+- 規格解讀（owner 未逐項指定）：
+  1. 20 筆上限套用到四個 TFDA 搜尋工具；`get_license`、`find_manufacturer` 沒有分頁參數，固定 20 筆；`compare_products` 維持 1–100 並回 deprecated。
+  2. `search_reviewed_ivd`／`search_ivd_candidates` 的 `query` 比對字號、品名、效能與類別原文，製造商只由 `manufacturer` 參數篩選，避免申請商被當成製造商。
+  3. 附表 A/B/C 以外的代碼（D–P 大類）依 SDD join 規則 4「未知 code」標 `unknown`，沒有自行改成 `excluded`，因為 AI 審核只審了 A/B/C 附表。
+  4. `coverage_status` 在還有 unknown 列時維持 `review_incomplete`，結果附 TFDA 專用說明，不宣稱完整 IVD 清單。
+  5. 「官方註銷欄空白者在前」以註銷狀態去掉前後空白後是否為空判斷。
+  6. TFDA stale 門檻沿用 NHI 的「兩個宣告週期」＝14 日（OD-05 未另定）。
+  7. 完整性檢查第一次查詢時完整做（約 1.1 秒），之後在 descriptor 內容與 build／raw／check 檔案大小、修改時間都沒變時沿用；stale 仍每次依當下時間算。
+  8. 摘要 record 對既有 sample 使用者是回傳格式變更；專案仍在 0.1.x，沿用 `public-contract-v1`。
+  9. 搜尋欄位的引號統一與臺→台只做在 TFDA；健保已發布的資料庫沒有重建，這次不動。
+  10. 同義詞清單：目前沒有經審核的同義詞，所以沒有做同義詞比對。
+- 測試：新增 `tests/test_tfda_ivd_registry.py` 15 個（先 1 error 後 green）、`tests/test_tfda_official.py` 33 個（先 1 error 後 green）；`test_package_contents.py` 必要檔加入 `rules/tfda_ivd/v1.json`。
+- 驗證：
+  - in-repo `pytest` 361 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - `uv build`：wheel 295,610 bytes、53 檔，SHA-256 `e8f9d872b07209c275416aa539738fcca7bbb0142786303436413cc2e51c564c`；sdist 543,642 bytes、110 檔；兩者都沒有 SQLite、ZIP、raw 或 `uv.lock`。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：359 passed、2 skipped（package 檢查沒有指定 build 資料夾），import 路徑為該 venv；安裝後 contract 與 repo 位元組相同（143,146 bytes）。
+  - 真實資料試建（不是正式發布）：用 2026-09-14 官方 ZIP（SHA-256 `de880620…`）以 `build_tfda_snapshot` 建到 `%TEMP%\tfdarc`，審核紀錄是測試用 `offline-test-builder`，不在正式 data root、不給本機工具使用。
+    - 104,619 列，建置 10.8 秒，資料庫 166,920,192 bytes。
+    - 標籤：`included` 17,081（官方註銷欄空白 9,455）、`excluded` 495、`unknown` 87,043；其中舊制 9,337、缺代碼 8,269、D–P 等未審核代碼 69,428（與 2026-09-14 無代碼列評估 17,606 = 9,337 + 8,269 一致）。附表 A/B/C 代碼 399 個全部已審核。
+    - 以新 wheel 的 MCP stdio 查詢：`get_data_status` 的 tfda_device 為 available、`review_incomplete`（第一次 1,162 ms）；「糖化」20 筆：共 81 筆，221 ms，文字 34,859 字（粗估 9,893 tokens）；「隱形眼鏡」`prefer_ivd=true` 20 筆：共 3,674 筆，33,403 字；`limit=21` 回 `invalid_request`；`get_license` 單筆 5,531 字；`search_reviewed_ivd("隱形眼鏡")` 回 `candidate_matches_available`；`search_ivd_candidates("HbA1c")` 20 筆 35,291 字。
+    - 同一段程式在 adapter 內直接查：一般查詢 98–155 ms；只打一個字「醫」命中全部 104,619 列，763 ms。
+  - 用新 wheel 讀正式 data root（唯讀）：nhi_fee 仍為 available、complete、build `4ecd71e7…`；09006C 200 點、`in_scope`；「檢」20 筆共 1,270 筆；TFDA 回 `no_serving_snapshot`。
+- 風險與待決：
+  - 一頁 20 筆 TFDA 摘要約 3.5 萬字、粗估約 1 萬 tokens，接近 Claude Code 的 10,000 tokens 警告線，低於 25,000 tokens 截斷線（粗估，不是 tokenizer 實測）。
+  - D–P 大類 69,428 列標 `unknown`，要不要改判需 owner 決定。
+  - 正式上線還缺：TFDA owner review protocol、10 題以上正式 golden cases、三關審核（`TFDA-R1-SOURCE`、`TFDA-R1-SCHEMA`、`PUB-R1-OWNER`）；下載包：資料庫 167 MB，現行下載包上限 64 MiB 壓縮／256 MiB 解壓，需要另外量測與調整。
+  - 每日排程的 TFDA 檢查還只下載與驗證，沒有寫入 serving 的檢查紀錄；上線後 14 日內要補，否則會標 stale。
+  - `%TEMP%\tfdarc` 試建資料約 190 MB 留在電腦上（本機擋刪除指令）。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

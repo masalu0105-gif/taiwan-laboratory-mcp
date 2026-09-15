@@ -338,6 +338,9 @@ Validity table 也逐列測：`evaluated_as_of <= valid_through` 為 `true`（�
   - 輸出不含 score／similarity 欄位。
 
   舊 `compare_products` 固定 `deprecated_unsupported`、0 items，不輸出比較表、相似度、優劣、可替代性或採購排序。
+- 實作測試（2026-09-15）：
+  - `tests/test_tfda_ivd_registry.py`：packaged registry 版本、551 碼、AI reviewer、B.9225／B.9195／B.9245、缺 reviewer 或版本不一致拒絕、重複代碼、代碼只取大寫 A–P、主類別字母、join 規則、引號與臺台正規化。
+  - `tests/test_tfda_official.py`（9 列合成資料）：建置標籤、五級排序與 tie-break、偏好不改總數、篩選、8 種非法參數、翻頁到最後一頁、引號／臺台／兩個字查詢、完整單筆與多製造廠、有效日期當日與次日、truth table 9 列、製造商不命中申請商、reviewed 與 candidate 差異、`candidate_matches_available`、搜尋 `limit=21` 拒絕、狀態與顯名、竄改資料庫不服務。
 - registry 未含 reviewer、reviewed_at、官方頁碼／版本、source hash 或 rule version 時，不能成為 production-approved registry。
 
 ## 9. CDC PDF 與 ODS 測試案例

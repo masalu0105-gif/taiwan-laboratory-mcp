@@ -20,6 +20,14 @@ from ..models import (
 
 SAMPLE_WARNING = "sample_only：目前只有合成示範資料，不可用於採檢、健保申報或採購；正式資料需另行同步、驗證與發布。"
 NHI_NOT_OFFICIAL_NOTE = "非健保署官方服務，內容以健保署公告為準。"
+TFDA_NOT_OFFICIAL_NOTE = "非食藥署官方服務，內容以食藥署公告為準。"
+_COVERAGE_NOTES = {
+    "nhi_fee": "NHI laboratory scope 尚未完成 reviewer 核准；目前可查全表，不宣稱完整檢驗子集。",
+    "tfda_device": (
+        "體外診斷（IVD）標籤只依官方分類分級附表 A、B、C 類代碼逐碼判定；缺分類代碼、舊制分類"
+        "與其他大類的許可證列標為 unknown，結果不宣稱是完整 IVD 清單。"
+    ),
+}
 
 
 def data_mode() -> str:
@@ -101,9 +109,17 @@ def result_from_rows(
     evaluated_timezone: str | None = None,
     replacement_operation: str | None = None,
     source_status: SourceStatus | None = None,
+    total_matches: int | None = None,
+    item_warnings: Callable[[dict[str, Any]], list[str]] | None = None,
+    coverage_detail: dict[str, Any] | None = None,
 ) -> ToolResult:
-    total = len(rows)
-    page = list(rows[offset : offset + limit])
+    # total_matches means the caller already paged the rows (TFDA pages inside SQLite).
+    if total_matches is None:
+        total = len(rows)
+        page = list(rows[offset : offset + limit])
+    else:
+        total = total_matches
+        page = list(rows)
     items = [
         ItemEnvelope(
             record=record_factory(row),
@@ -118,7 +134,7 @@ def result_from_rows(
                     raw_value_available=True,
                 )
             ],
-            item_warnings=[],
+            item_warnings=item_warnings(row) if item_warnings else [],
             safety=make_safety(operation),
         )
         for index, row in enumerate(page, start=offset)
@@ -130,12 +146,12 @@ def result_from_rows(
         notes.insert(0, SAMPLE_WARNING)
     if provenance.coverage_status == "review_incomplete":
         warnings.append("coverage_review_incomplete")
-        notes.append(
-            "NHI laboratory scope 尚未完成 reviewer 核准；目前可查全表，不宣稱完整檢驗子集。"
-        )
+        notes.append(_COVERAGE_NOTES[provenance.source_id])
     if provenance.source_id == "nhi_fee" and provenance.snapshot_id is not None:
         # Owner-approved PRD REL-G4 non-official service statement (2026-09-14).
         notes.append(NHI_NOT_OFFICIAL_NOTE)
+    if provenance.source_id == "tfda_device" and provenance.snapshot_id is not None:
+        notes.append(TFDA_NOT_OFFICIAL_NOTE)
     if provenance.stale:
         warnings.extend(provenance.stale_reason_codes)
         notes.append("serving snapshot 已標記 stale；使用者應重新核對目前官方來源。")
@@ -160,7 +176,7 @@ def result_from_rows(
             stale_reason_codes=provenance.stale_reason_codes,
         ),
         coverage_status=provenance.coverage_status,
-        coverage_detail=None,
+        coverage_detail=coverage_detail,
         items=items,
         total_matches=total,
         returned_count=len(items),

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
 
-from .audit import validate_audit_evidence
+from .audit import _sha256_file, validate_audit_evidence
 from .canonical import canonical_json_bytes, sha256_bytes
 
 
@@ -19,6 +19,11 @@ class PublishError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
         super().__init__(code)
+
+
+# Per internal source id: the raw artifact file name and the curated row table.
+_RAW_ARTIFACT_NAMES = {"nhi_fee": "source.csv", "tfda_devices": "source.zip"}
+_CURATED_TABLES = {"nhi_fee": "nhi_fee", "tfda_devices": "tfda_source_row"}
 
 
 _DESCRIPTOR_KEYS = frozenset(
@@ -302,7 +307,8 @@ def _target_manifest(
         or manifest.get("curated_build_id") != target_curated_build_id
     ):
         raise PublishError("ROLLBACK_TARGET_INTEGRITY")
-    if source_id == "nhi_fee":
+    raw_artifact_name = _RAW_ARTIFACT_NAMES.get(source_id)
+    if raw_artifact_name is not None:
         artifacts = manifest.get("artifacts")
         raw_revision_id = manifest.get("raw_revision_id")
         if (
@@ -313,7 +319,7 @@ def _target_manifest(
         ):
             raise PublishError("ROLLBACK_TARGET_INTEGRITY")
         artifact = artifacts[0]
-        expected_raw_relative = f"raw/{source_id}/{raw_revision_id}/artifacts/source.csv"
+        expected_raw_relative = f"raw/{source_id}/{raw_revision_id}/artifacts/{raw_artifact_name}"
         if (
             not isinstance(artifact, dict)
             or artifact.get("role") != "primary"
@@ -326,7 +332,7 @@ def _target_manifest(
             raise PublishError("ROLLBACK_TARGET_INTEGRITY")
         if artifact["local_artifact_available"]:
             raw_path = Path(data_root) / PurePosixPath(expected_raw_relative)
-            if not raw_path.is_file() or sha256_bytes(raw_path.read_bytes()) != artifact["sha256"]:
+            if not raw_path.is_file() or _sha256_file(raw_path) != artifact["sha256"]:
                 raise PublishError("ROLLBACK_TARGET_INTEGRITY")
     publication = manifest.get("publication")
     if not isinstance(publication, dict):
@@ -336,9 +342,10 @@ def _target_manifest(
     if db_relative != expected_db_relative:
         raise PublishError("ROLLBACK_TARGET_INTEGRITY")
     db_path = Path(data_root) / PurePosixPath(db_relative)
-    if not db_path.is_file() or sha256_bytes(db_path.read_bytes()) != publication.get(
-        "curated_sha256"
-    ):
+    if not db_path.is_file() or _sha256_file(db_path) != publication.get("curated_sha256"):
+        raise PublishError("ROLLBACK_TARGET_INTEGRITY")
+    table = _CURATED_TABLES.get(source_id)
+    if table is None:
         raise PublishError("ROLLBACK_TARGET_INTEGRITY")
     uri = f"file:{db_path.as_posix()}?mode=ro&immutable=1"
     try:
@@ -347,7 +354,7 @@ def _target_manifest(
             if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise PublishError("ROLLBACK_TARGET_INTEGRITY")
             counts = manifest.get("counts")
-            count = connection.execute("SELECT COUNT(*) FROM nhi_fee").fetchone()[0]
+            count = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             if (
                 not isinstance(counts, dict)
                 or set(counts) != {"input_rows", "curated_rows", "quarantined_rows"}

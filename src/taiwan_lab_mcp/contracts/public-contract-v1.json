@@ -732,6 +732,41 @@
           "required": false,
           "nullable": false,
           "default": 10
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 0
+        },
+        {
+          "name": "prefer_ivd",
+          "type": "boolean",
+          "required": false,
+          "nullable": false,
+          "default": false
+        },
+        {
+          "name": "prefer_main_category",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "ivd_scope",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
+        },
+        {
+          "name": "main_category",
+          "type": "string",
+          "required": false,
+          "nullable": true,
+          "default": null
         }
       ],
       "response_schema": "QueryResultV1",
@@ -750,6 +785,47 @@
           "limit": {
             "type": "integer",
             "default": 10
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
+          },
+          "prefer_ivd": {
+            "type": "boolean",
+            "default": false
+          },
+          "prefer_main_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "ivd_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "main_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "type": "object",
@@ -1015,9 +1091,17 @@
   },
   "warning_registry": {
     "sample_only": "Synthetic package fixture; not official source data.",
-    "coverage_review_incomplete": "NHI laboratory scope review is incomplete.",
+    "coverage_review_incomplete": "Domain coverage review is incomplete (NHI laboratory scope or TFDA IVD classification).",
     "historical_query_unsupported": "The serving NHI snapshot is current-only and cannot answer historical points.",
-    "deprecated_unsupported": "Use list_matching_license_records; comparison and equivalence are not supported."
+    "deprecated_unsupported": "Use list_matching_license_records; comparison and equivalence are not supported.",
+    "cancellation_date_without_status": "TFDA source row has a cancellation date but a blank cancellation status.",
+    "cancellation_status_without_date": "TFDA source row is marked cancelled or revoked without a cancellation date.",
+    "unknown_cancellation_status": "TFDA cancellation status is not blank, 已註銷 or 已廢止.",
+    "cancellation_recorded_within_validity_window": "A cancellation is recorded while the validity date has not passed; this is not a valid-permit claim.",
+    "cancellation_recorded_and_validity_period_elapsed": "A cancellation is recorded and the validity date has passed.",
+    "validity_period_elapsed": "The evaluated date is after the source validity date.",
+    "cancellation_record_ambiguous": "The cancellation record cannot be read as recorded or not recorded.",
+    "validity_date_unavailable": "The source validity date is missing or invalid."
   },
   "source_payload_schemas": {
     "nhi_fee": {
@@ -1712,24 +1796,51 @@
     "tfda_device": {
       "required": [
         "record_type",
-        "license_no",
-        "name_zh",
-        "name_en",
-        "effect",
-        "applicant",
-        "manufacturer",
-        "factory_address",
-        "country",
-        "process",
-        "source_cancellation_status_raw",
-        "source_cancellation_date_raw",
+        "license_no_raw",
+        "cancellation_status_raw",
+        "cancellation_date_raw",
+        "cancellation_reason_raw",
         "valid_through_raw",
+        "issued_on_raw",
+        "license_kind_raw",
+        "legacy_license_no_raw",
+        "risk_class_raw",
+        "customs_document_no_raw",
+        "name_zh_raw",
+        "name_en_raw",
+        "effect_raw",
+        "dosage_form_raw",
+        "package_raw",
+        "main_category_1_raw",
+        "sub_category_1_raw",
+        "main_category_2_raw",
+        "sub_category_2_raw",
+        "main_category_3_raw",
+        "sub_category_3_raw",
+        "main_ingredient_raw",
+        "specification_raw",
+        "restriction_raw",
+        "applicant_name_raw",
+        "applicant_address_raw",
+        "applicant_tax_id_raw",
+        "manufacturer_name_raw",
+        "factory_address_raw",
+        "manufacturer_company_address_raw",
+        "manufacturer_country_raw",
+        "process_raw",
+        "changed_on_raw",
+        "manufacturing_registration_no_raw",
+        "main_category_letters",
+        "classification_codes",
         "ivd_scope",
-        "classification_code"
+        "ivd_rule_version",
+        "cancellation_recorded_in_source",
+        "within_validity_period_as_of"
       ],
       "model": "taiwan_lab_mcp.models.TFDARecord",
       "schema": {
         "additionalProperties": false,
+        "description": "One TFDA source row: all 34 official columns (blank as null) plus query-time labels.",
         "properties": {
           "record_type": {
             "const": "tfda_device",
@@ -1737,11 +1848,11 @@
             "title": "Record Type",
             "type": "string"
           },
-          "license_no": {
-            "title": "License No",
+          "license_no_raw": {
+            "title": "License No Raw",
             "type": "string"
           },
-          "name_zh": {
+          "cancellation_status_raw": {
             "anyOf": [
               {
                 "type": "string"
@@ -1750,9 +1861,9 @@
                 "type": "null"
               }
             ],
-            "title": "Name Zh"
+            "title": "Cancellation Status Raw"
           },
-          "name_en": {
+          "cancellation_date_raw": {
             "anyOf": [
               {
                 "type": "string"
@@ -1761,9 +1872,9 @@
                 "type": "null"
               }
             ],
-            "title": "Name En"
+            "title": "Cancellation Date Raw"
           },
-          "effect": {
+          "cancellation_reason_raw": {
             "anyOf": [
               {
                 "type": "string"
@@ -1772,84 +1883,7 @@
                 "type": "null"
               }
             ],
-            "title": "Effect"
-          },
-          "applicant": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Applicant"
-          },
-          "manufacturer": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Manufacturer"
-          },
-          "factory_address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Factory Address"
-          },
-          "country": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country"
-          },
-          "process": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Process"
-          },
-          "source_cancellation_status_raw": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Cancellation Status Raw"
-          },
-          "source_cancellation_date_raw": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Cancellation Date Raw"
+            "title": "Cancellation Reason Raw"
           },
           "valid_through_raw": {
             "anyOf": [
@@ -1862,6 +1896,339 @@
             ],
             "title": "Valid Through Raw"
           },
+          "issued_on_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued On Raw"
+          },
+          "license_kind_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Kind Raw"
+          },
+          "legacy_license_no_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy License No Raw"
+          },
+          "risk_class_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Class Raw"
+          },
+          "customs_document_no_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customs Document No Raw"
+          },
+          "name_zh_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name Zh Raw"
+          },
+          "name_en_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En Raw"
+          },
+          "effect_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Raw"
+          },
+          "dosage_form_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dosage Form Raw"
+          },
+          "package_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Raw"
+          },
+          "main_category_1_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Category 1 Raw"
+          },
+          "sub_category_1_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Category 1 Raw"
+          },
+          "main_category_2_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Category 2 Raw"
+          },
+          "sub_category_2_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Category 2 Raw"
+          },
+          "main_category_3_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Category 3 Raw"
+          },
+          "sub_category_3_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Category 3 Raw"
+          },
+          "main_ingredient_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Main Ingredient Raw"
+          },
+          "specification_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specification Raw"
+          },
+          "restriction_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Restriction Raw"
+          },
+          "applicant_name_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicant Name Raw"
+          },
+          "applicant_address_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicant Address Raw"
+          },
+          "applicant_tax_id_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicant Tax Id Raw"
+          },
+          "manufacturer_name_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer Name Raw"
+          },
+          "factory_address_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factory Address Raw"
+          },
+          "manufacturer_company_address_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer Company Address Raw"
+          },
+          "manufacturer_country_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer Country Raw"
+          },
+          "process_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process Raw"
+          },
+          "changed_on_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed On Raw"
+          },
+          "manufacturing_registration_no_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturing Registration No Raw"
+          },
+          "main_category_letters": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Main Category Letters",
+            "type": "array"
+          },
+          "classification_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classification Codes",
+            "type": "array"
+          },
           "ivd_scope": {
             "enum": [
               "included",
@@ -1872,7 +2239,138 @@
             "title": "Ivd Scope",
             "type": "string"
           },
-          "classification_code": {
+          "ivd_rule_version": {
+            "minLength": 1,
+            "title": "Ivd Rule Version",
+            "type": "string"
+          },
+          "cancellation_recorded_in_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "unknown",
+                "type": "string"
+              }
+            ],
+            "title": "Cancellation Recorded In Source"
+          },
+          "within_validity_period_as_of": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "unknown",
+                "type": "string"
+              }
+            ],
+            "title": "Within Validity Period As Of"
+          }
+        },
+        "required": [
+          "license_no_raw",
+          "cancellation_status_raw",
+          "cancellation_date_raw",
+          "cancellation_reason_raw",
+          "valid_through_raw",
+          "issued_on_raw",
+          "license_kind_raw",
+          "legacy_license_no_raw",
+          "risk_class_raw",
+          "customs_document_no_raw",
+          "name_zh_raw",
+          "name_en_raw",
+          "effect_raw",
+          "dosage_form_raw",
+          "package_raw",
+          "main_category_1_raw",
+          "sub_category_1_raw",
+          "main_category_2_raw",
+          "sub_category_2_raw",
+          "main_category_3_raw",
+          "sub_category_3_raw",
+          "main_ingredient_raw",
+          "specification_raw",
+          "restriction_raw",
+          "applicant_name_raw",
+          "applicant_address_raw",
+          "applicant_tax_id_raw",
+          "manufacturer_name_raw",
+          "factory_address_raw",
+          "manufacturer_company_address_raw",
+          "manufacturer_country_raw",
+          "process_raw",
+          "changed_on_raw",
+          "manufacturing_registration_no_raw",
+          "main_category_letters",
+          "classification_codes",
+          "ivd_scope",
+          "ivd_rule_version",
+          "cancellation_recorded_in_source",
+          "within_validity_period_as_of"
+        ],
+        "title": "TFDARecord",
+        "type": "object"
+      }
+    },
+    "tfda_device_summary": {
+      "required": [
+        "record_type",
+        "matched_by",
+        "license_no_raw",
+        "name_zh_raw",
+        "name_en_raw",
+        "applicant_name_raw",
+        "manufacturer_name_raw",
+        "manufacturer_country_raw",
+        "risk_class_raw",
+        "license_kind_raw",
+        "main_category_letters",
+        "classification_codes",
+        "ivd_scope",
+        "cancellation_status_raw",
+        "cancellation_recorded_in_source",
+        "valid_through_raw",
+        "within_validity_period_as_of",
+        "effect_preview",
+        "effect_chars",
+        "effect_truncated"
+      ],
+      "model": "taiwan_lab_mcp.models.TFDASearchRecord",
+      "schema": {
+        "additionalProperties": false,
+        "description": "Search-list summary of a TFDA row; get_license returns the full TFDARecord.",
+        "properties": {
+          "record_type": {
+            "const": "tfda_device_summary",
+            "default": "tfda_device_summary",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "license_no",
+                "name_zh",
+                "name_en",
+                "applicant",
+                "manufacturer",
+                "effect",
+                "classification"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Matched By",
+            "type": "array"
+          },
+          "license_no_raw": {
+            "title": "License No Raw",
+            "type": "string"
+          },
+          "name_zh_raw": {
             "anyOf": [
               {
                 "type": "string"
@@ -1881,26 +2379,188 @@
                 "type": "null"
               }
             ],
-            "title": "Classification Code"
+            "title": "Name Zh Raw"
+          },
+          "name_en_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name En Raw"
+          },
+          "applicant_name_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicant Name Raw"
+          },
+          "manufacturer_name_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer Name Raw"
+          },
+          "manufacturer_country_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manufacturer Country Raw"
+          },
+          "risk_class_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Class Raw"
+          },
+          "license_kind_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License Kind Raw"
+          },
+          "main_category_letters": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Main Category Letters",
+            "type": "array"
+          },
+          "classification_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Classification Codes",
+            "type": "array"
+          },
+          "ivd_scope": {
+            "enum": [
+              "included",
+              "excluded",
+              "ambiguous",
+              "unknown"
+            ],
+            "title": "Ivd Scope",
+            "type": "string"
+          },
+          "cancellation_status_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancellation Status Raw"
+          },
+          "cancellation_recorded_in_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "unknown",
+                "type": "string"
+              }
+            ],
+            "title": "Cancellation Recorded In Source"
+          },
+          "valid_through_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid Through Raw"
+          },
+          "within_validity_period_as_of": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "unknown",
+                "type": "string"
+              }
+            ],
+            "title": "Within Validity Period As Of"
+          },
+          "effect_preview": {
+            "anyOf": [
+              {
+                "maxLength": 60,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Preview"
+          },
+          "effect_chars": {
+            "minimum": 0,
+            "title": "Effect Chars",
+            "type": "integer"
+          },
+          "effect_truncated": {
+            "title": "Effect Truncated",
+            "type": "boolean"
           }
         },
         "required": [
-          "license_no",
-          "name_zh",
-          "name_en",
-          "effect",
-          "applicant",
-          "manufacturer",
-          "factory_address",
-          "country",
-          "process",
-          "source_cancellation_status_raw",
-          "source_cancellation_date_raw",
-          "valid_through_raw",
+          "matched_by",
+          "license_no_raw",
+          "name_zh_raw",
+          "name_en_raw",
+          "applicant_name_raw",
+          "manufacturer_name_raw",
+          "manufacturer_country_raw",
+          "risk_class_raw",
+          "license_kind_raw",
+          "main_category_letters",
+          "classification_codes",
           "ivd_scope",
-          "classification_code"
+          "cancellation_status_raw",
+          "cancellation_recorded_in_source",
+          "valid_through_raw",
+          "within_validity_period_as_of",
+          "effect_preview",
+          "effect_chars",
+          "effect_truncated"
         ],
-        "title": "TFDARecord",
+        "title": "TFDASearchRecord",
         "type": "object"
       }
     }
@@ -2519,7 +3179,8 @@
                     "cdc_specimen": "#/$defs/CDCSpecimenRecord",
                     "nhi_fee": "#/$defs/NHIRecord",
                     "nhi_fee_summary": "#/$defs/NHISearchRecord",
-                    "tfda_device": "#/$defs/TFDARecord"
+                    "tfda_device": "#/$defs/TFDARecord",
+                    "tfda_device_summary": "#/$defs/TFDASearchRecord"
                   },
                   "propertyName": "record_type"
                 },
@@ -2538,6 +3199,9 @@
                   },
                   {
                     "$ref": "#/$defs/TFDARecord"
+                  },
+                  {
+                    "$ref": "#/$defs/TFDASearchRecord"
                   }
                 ],
                 "title": "Record"
@@ -3278,6 +3942,7 @@
           },
           "TFDARecord": {
             "additionalProperties": false,
+            "description": "One TFDA source row: all 34 official columns (blank as null) plus query-time labels.",
             "properties": {
               "record_type": {
                 "const": "tfda_device",
@@ -3285,11 +3950,11 @@
                 "title": "Record Type",
                 "type": "string"
               },
-              "license_no": {
-                "title": "License No",
+              "license_no_raw": {
+                "title": "License No Raw",
                 "type": "string"
               },
-              "name_zh": {
+              "cancellation_status_raw": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -3298,9 +3963,9 @@
                     "type": "null"
                   }
                 ],
-                "title": "Name Zh"
+                "title": "Cancellation Status Raw"
               },
-              "name_en": {
+              "cancellation_date_raw": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -3309,9 +3974,9 @@
                     "type": "null"
                   }
                 ],
-                "title": "Name En"
+                "title": "Cancellation Date Raw"
               },
-              "effect": {
+              "cancellation_reason_raw": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -3320,84 +3985,7 @@
                     "type": "null"
                   }
                 ],
-                "title": "Effect"
-              },
-              "applicant": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Applicant"
-              },
-              "manufacturer": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Manufacturer"
-              },
-              "factory_address": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Factory Address"
-              },
-              "country": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Country"
-              },
-              "process": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Process"
-              },
-              "source_cancellation_status_raw": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Source Cancellation Status Raw"
-              },
-              "source_cancellation_date_raw": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Source Cancellation Date Raw"
+                "title": "Cancellation Reason Raw"
               },
               "valid_through_raw": {
                 "anyOf": [
@@ -3410,6 +3998,339 @@
                 ],
                 "title": "Valid Through Raw"
               },
+              "issued_on_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Issued On Raw"
+              },
+              "license_kind_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "License Kind Raw"
+              },
+              "legacy_license_no_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Legacy License No Raw"
+              },
+              "risk_class_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Risk Class Raw"
+              },
+              "customs_document_no_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Customs Document No Raw"
+              },
+              "name_zh_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name Zh Raw"
+              },
+              "name_en_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name En Raw"
+              },
+              "effect_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effect Raw"
+              },
+              "dosage_form_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Dosage Form Raw"
+              },
+              "package_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Package Raw"
+              },
+              "main_category_1_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Main Category 1 Raw"
+              },
+              "sub_category_1_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sub Category 1 Raw"
+              },
+              "main_category_2_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Main Category 2 Raw"
+              },
+              "sub_category_2_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sub Category 2 Raw"
+              },
+              "main_category_3_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Main Category 3 Raw"
+              },
+              "sub_category_3_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sub Category 3 Raw"
+              },
+              "main_ingredient_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Main Ingredient Raw"
+              },
+              "specification_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Specification Raw"
+              },
+              "restriction_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Restriction Raw"
+              },
+              "applicant_name_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Applicant Name Raw"
+              },
+              "applicant_address_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Applicant Address Raw"
+              },
+              "applicant_tax_id_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Applicant Tax Id Raw"
+              },
+              "manufacturer_name_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturer Name Raw"
+              },
+              "factory_address_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Factory Address Raw"
+              },
+              "manufacturer_company_address_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturer Company Address Raw"
+              },
+              "manufacturer_country_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturer Country Raw"
+              },
+              "process_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Process Raw"
+              },
+              "changed_on_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Changed On Raw"
+              },
+              "manufacturing_registration_no_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturing Registration No Raw"
+              },
+              "main_category_letters": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Main Category Letters",
+                "type": "array"
+              },
+              "classification_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Classification Codes",
+                "type": "array"
+              },
               "ivd_scope": {
                 "enum": [
                   "included",
@@ -3420,7 +4341,113 @@
                 "title": "Ivd Scope",
                 "type": "string"
               },
-              "classification_code": {
+              "ivd_rule_version": {
+                "minLength": 1,
+                "title": "Ivd Rule Version",
+                "type": "string"
+              },
+              "cancellation_recorded_in_source": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "const": "unknown",
+                    "type": "string"
+                  }
+                ],
+                "title": "Cancellation Recorded In Source"
+              },
+              "within_validity_period_as_of": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "const": "unknown",
+                    "type": "string"
+                  }
+                ],
+                "title": "Within Validity Period As Of"
+              }
+            },
+            "required": [
+              "license_no_raw",
+              "cancellation_status_raw",
+              "cancellation_date_raw",
+              "cancellation_reason_raw",
+              "valid_through_raw",
+              "issued_on_raw",
+              "license_kind_raw",
+              "legacy_license_no_raw",
+              "risk_class_raw",
+              "customs_document_no_raw",
+              "name_zh_raw",
+              "name_en_raw",
+              "effect_raw",
+              "dosage_form_raw",
+              "package_raw",
+              "main_category_1_raw",
+              "sub_category_1_raw",
+              "main_category_2_raw",
+              "sub_category_2_raw",
+              "main_category_3_raw",
+              "sub_category_3_raw",
+              "main_ingredient_raw",
+              "specification_raw",
+              "restriction_raw",
+              "applicant_name_raw",
+              "applicant_address_raw",
+              "applicant_tax_id_raw",
+              "manufacturer_name_raw",
+              "factory_address_raw",
+              "manufacturer_company_address_raw",
+              "manufacturer_country_raw",
+              "process_raw",
+              "changed_on_raw",
+              "manufacturing_registration_no_raw",
+              "main_category_letters",
+              "classification_codes",
+              "ivd_scope",
+              "ivd_rule_version",
+              "cancellation_recorded_in_source",
+              "within_validity_period_as_of"
+            ],
+            "title": "TFDARecord",
+            "type": "object"
+          },
+          "TFDASearchRecord": {
+            "additionalProperties": false,
+            "description": "Search-list summary of a TFDA row; get_license returns the full TFDARecord.",
+            "properties": {
+              "record_type": {
+                "const": "tfda_device_summary",
+                "default": "tfda_device_summary",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "matched_by": {
+                "items": {
+                  "enum": [
+                    "license_no",
+                    "name_zh",
+                    "name_en",
+                    "applicant",
+                    "manufacturer",
+                    "effect",
+                    "classification"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "title": "Matched By",
+                "type": "array"
+              },
+              "license_no_raw": {
+                "title": "License No Raw",
+                "type": "string"
+              },
+              "name_zh_raw": {
                 "anyOf": [
                   {
                     "type": "string"
@@ -3429,26 +4456,188 @@
                     "type": "null"
                   }
                 ],
-                "title": "Classification Code"
+                "title": "Name Zh Raw"
+              },
+              "name_en_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Name En Raw"
+              },
+              "applicant_name_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Applicant Name Raw"
+              },
+              "manufacturer_name_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturer Name Raw"
+              },
+              "manufacturer_country_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Manufacturer Country Raw"
+              },
+              "risk_class_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Risk Class Raw"
+              },
+              "license_kind_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "License Kind Raw"
+              },
+              "main_category_letters": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Main Category Letters",
+                "type": "array"
+              },
+              "classification_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Classification Codes",
+                "type": "array"
+              },
+              "ivd_scope": {
+                "enum": [
+                  "included",
+                  "excluded",
+                  "ambiguous",
+                  "unknown"
+                ],
+                "title": "Ivd Scope",
+                "type": "string"
+              },
+              "cancellation_status_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Cancellation Status Raw"
+              },
+              "cancellation_recorded_in_source": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "const": "unknown",
+                    "type": "string"
+                  }
+                ],
+                "title": "Cancellation Recorded In Source"
+              },
+              "valid_through_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Valid Through Raw"
+              },
+              "within_validity_period_as_of": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "const": "unknown",
+                    "type": "string"
+                  }
+                ],
+                "title": "Within Validity Period As Of"
+              },
+              "effect_preview": {
+                "anyOf": [
+                  {
+                    "maxLength": 60,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Effect Preview"
+              },
+              "effect_chars": {
+                "minimum": 0,
+                "title": "Effect Chars",
+                "type": "integer"
+              },
+              "effect_truncated": {
+                "title": "Effect Truncated",
+                "type": "boolean"
               }
             },
             "required": [
-              "license_no",
-              "name_zh",
-              "name_en",
-              "effect",
-              "applicant",
-              "manufacturer",
-              "factory_address",
-              "country",
-              "process",
-              "source_cancellation_status_raw",
-              "source_cancellation_date_raw",
-              "valid_through_raw",
+              "matched_by",
+              "license_no_raw",
+              "name_zh_raw",
+              "name_en_raw",
+              "applicant_name_raw",
+              "manufacturer_name_raw",
+              "manufacturer_country_raw",
+              "risk_class_raw",
+              "license_kind_raw",
+              "main_category_letters",
+              "classification_codes",
               "ivd_scope",
-              "classification_code"
+              "cancellation_status_raw",
+              "cancellation_recorded_in_source",
+              "valid_through_raw",
+              "within_validity_period_as_of",
+              "effect_preview",
+              "effect_chars",
+              "effect_truncated"
             ],
-            "title": "TFDARecord",
+            "title": "TFDASearchRecord",
             "type": "object"
           },
           "TfdaLocator": {

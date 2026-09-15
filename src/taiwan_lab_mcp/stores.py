@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .audit import validate_audit_evidence
+from .audit import _sha256_file, validate_audit_evidence
 from .canonical import canonical_json_bytes, sha256_bytes
 from .models import (
     ArtifactReference,
@@ -64,7 +64,7 @@ OPEN_DATA_LICENSE_STATEMENT = (
 _TAIPEI = timezone(timedelta(hours=8))
 
 
-def nhi_attribution_text(
+def open_data_attribution_text(
     *,
     provider: str,
     dataset_name: str,
@@ -80,6 +80,9 @@ def nhi_attribution_text(
         year = str(retrieved_at.astimezone(_TAIPEI).year)
     version = f" 官方標示更新時間 {modified}" if modified else ""
     return f"{provider} {year} {dataset_name}{version}。{OPEN_DATA_LICENSE_STATEMENT}"
+
+
+nhi_attribution_text = open_data_attribution_text
 
 
 def _nhi_scope_rule_version(manifest: dict[str, Any]) -> str:
@@ -103,14 +106,15 @@ def _nhi_coverage_status(manifest: dict[str, Any], rows: tuple[dict[str, Any], .
     return "review_incomplete"
 
 
-def _effective_stale_reason_codes(descriptor: dict[str, Any], now: datetime) -> list[str]:
+def _effective_stale_reason_codes(
+    descriptor: dict[str, Any], now: datetime, overdue_after: timedelta = NHI_CHECK_OVERDUE_AFTER
+) -> list[str]:
     stored = list(descriptor["stale_reason_codes"])
     codes = set(stored)
     last_success = descriptor["last_successful_check_at"]
     if (
         last_success is None
-        or now - datetime.fromisoformat(last_success.replace("Z", "+00:00"))
-        > NHI_CHECK_OVERDUE_AFTER
+        or now - datetime.fromisoformat(last_success.replace("Z", "+00:00")) > overdue_after
     ):
         codes.add("upstream_check_overdue")
     ordered = [code for code in _STALE_REASON_ORDER if code in codes]
@@ -146,7 +150,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _file_hash(path: Path) -> str:
-    return sha256_bytes(path.read_bytes())
+    return _sha256_file(path)
 
 
 def _contained(root: Path, relative: str) -> Path:
@@ -258,13 +262,13 @@ _OPERATIONAL_KEYS = frozenset(
 )
 
 
-def _validate_descriptor_shape(descriptor: dict[str, Any]) -> None:
+def _validate_descriptor_shape(descriptor: dict[str, Any], source_id: str = "nhi_fee") -> None:
     missing = _DESCRIPTOR_KEYS - descriptor.keys()
     if missing & _OPERATIONAL_KEYS:
         raise _OperationalIntegrityError("descriptor operational fields missing")
     if set(descriptor) != _DESCRIPTOR_KEYS:
         raise ValueError("descriptor schema mismatch")
-    if descriptor["descriptor_schema_version"] != 1 or descriptor["source_id"] != "nhi_fee":
+    if descriptor["descriptor_schema_version"] != 1 or descriptor["source_id"] != source_id:
         raise ValueError("descriptor schema/source mismatch")
     if type(descriptor["generation"]) is not int or descriptor["generation"] < 1:
         raise ValueError("descriptor generation mismatch")
@@ -303,11 +307,14 @@ def _validate_descriptor_shape(descriptor: dict[str, Any]) -> None:
 
 
 def _validate_check_record(
-    data_root: Path, descriptor: dict[str, Any], check: dict[str, Any]
+    data_root: Path,
+    descriptor: dict[str, Any],
+    check: dict[str, Any],
+    source_id: str = "nhi_fee",
 ) -> None:
     if set(check) != _CHECK_KEYS:
         raise _OperationalIntegrityError("check schema mismatch")
-    if check["check_schema_version"] != 1 or check["source_id"] != "nhi_fee":
+    if check["check_schema_version"] != 1 or check["source_id"] != source_id:
         raise _OperationalIntegrityError("check source/schema mismatch")
     if type(check["generation"]) is not int or check["generation"] != descriptor["generation"]:
         raise _OperationalIntegrityError("check generation mismatch")
@@ -347,7 +354,7 @@ def _validate_check_record(
     posix_path = PurePosixPath(relative)
     if (
         posix_path.is_absolute()
-        or posix_path.parts[:2] != ("checks", "nhi_fee")
+        or posix_path.parts[:2] != ("checks", source_id)
         or len(posix_path.parts) != 3
     ):
         raise _OperationalIntegrityError("check path outside source checks")
@@ -364,77 +371,104 @@ def read_nhi_state(
     return _read_nhi_state(data_root, _now(clock))
 
 
-def _read_nhi_state(data_root: Path, now: datetime) -> OfficialState:
-    descriptor_path = Path(data_root) / "manifests" / "current" / "nhi_fee.json"
+def _read_serving(
+    data_root: Path, source_id: str, raw_artifact_name: str
+) -> OfficialState | tuple[dict[str, Any], dict[str, Any], Path]:
+    """Validate pointer, check record, manifest, audit bundle, database and raw artifact hashes.
+
+    Returns an unavailable state when nothing is served; integrity problems raise.
+    """
+
+    descriptor_path = Path(data_root) / "manifests" / "current" / f"{source_id}.json"
     if not descriptor_path.is_file():
         try:
-            if has_successful_publish_event(Path(data_root), "nhi_fee"):
+            if has_successful_publish_event(Path(data_root), source_id):
                 return _unavailable("serving_integrity_failure")
         except PublishError:
             return _unavailable("serving_integrity_failure")
         return _unavailable("no_serving_snapshot")
+    descriptor = _read_json(descriptor_path)
+    _validate_descriptor_shape(descriptor, source_id)
+    snapshot_id = descriptor.get("serving_snapshot_id")
+    build_id = descriptor.get("serving_curated_build_id")
+    check_relative = descriptor["latest_check_data_root_relative_path"]
+    if check_relative is not None:
+        check_posix = PurePosixPath(check_relative)
+        if (
+            check_posix.is_absolute()
+            or check_posix.parts[:2] != ("checks", source_id)
+            or len(check_posix.parts) != 3
+        ):
+            raise _OperationalIntegrityError("check path outside source checks")
+        check_path = _contained(Path(data_root), check_relative)
+        if not check_path.is_file():
+            raise _OperationalIntegrityError("check record missing")
+        try:
+            check = _read_json(check_path)
+        except (KeyError, TypeError, ValueError, OSError) as exc:
+            raise _OperationalIntegrityError("check record cannot be read") from exc
+        _validate_check_record(Path(data_root), descriptor, check, source_id)
+    if snapshot_id is None or build_id is None:
+        return _unavailable(
+            "no_serving_snapshot",
+            _status_from_descriptor(descriptor, available=False),
+            descriptor["latest_candidate_id"],
+        )
+    manifest_rel = descriptor["manifest_data_root_relative_path"]
+    if manifest_rel != f"curated/{source_id}/{build_id}/manifest.json":
+        raise ValueError("manifest path outside curated source")
+    manifest_path = _contained(Path(data_root), manifest_rel)
+    if not manifest_path.is_file() or _file_hash(manifest_path) != descriptor["manifest_sha256"]:
+        raise ValueError("manifest hash mismatch")
+    manifest = _read_json(manifest_path)
+    if (
+        manifest.get("state") != "approved"
+        or manifest.get("source_id") != source_id
+        or manifest.get("snapshot_id") != snapshot_id
+        or manifest.get("curated_build_id") != build_id
+    ):
+        raise ValueError("manifest identity mismatch")
+    validate_audit_evidence(Path(data_root), manifest)
+    fingerprint = manifest["build_fingerprint"]
+    fingerprint_hash = manifest["build_fingerprint_sha256"]
+    if (
+        sha256_bytes(canonical_json_bytes(fingerprint)) != fingerprint_hash
+        or build_id != f"{source_id}-build-{fingerprint_hash}"
+        or fingerprint.get("source_id") != source_id
+        or fingerprint.get("raw_revision_id") != manifest.get("raw_revision_id")
+    ):
+        raise ValueError("build fingerprint mismatch")
+    publication = manifest["publication"]
+    expected_db_relative = f"curated/{source_id}/{build_id}/data.sqlite3"
+    if publication.get("curated_build_relative_path") != expected_db_relative:
+        raise ValueError("database path outside curated source")
+    db_path = _contained(Path(data_root), publication["curated_build_relative_path"])
+    if not db_path.is_file() or _file_hash(db_path) != publication["curated_sha256"]:
+        raise ValueError("database hash mismatch")
+    artifact = manifest["artifacts"][0]
+    expected_raw_relative = (
+        f"raw/{source_id}/{manifest['raw_revision_id']}/artifacts/{raw_artifact_name}"
+    )
+    if (
+        artifact.get("storage_scope") != "data_root"
+        or artifact.get("data_root_relative_path") != expected_raw_relative
+    ):
+        raise ValueError("raw artifact path outside raw source")
+    if artifact.get("local_artifact_available"):
+        raw_path = _contained(Path(data_root), artifact["data_root_relative_path"])
+        if not raw_path.is_file() or _file_hash(raw_path) != artifact["sha256"]:
+            raise ValueError("raw artifact hash mismatch")
+    return descriptor, manifest, db_path
+
+
+def _read_nhi_state(data_root: Path, now: datetime) -> OfficialState:
     try:
-        descriptor = _read_json(descriptor_path)
-        _validate_descriptor_shape(descriptor)
-        snapshot_id = descriptor.get("serving_snapshot_id")
-        build_id = descriptor.get("serving_curated_build_id")
-        check_relative = descriptor["latest_check_data_root_relative_path"]
-        if check_relative is not None:
-            check_posix = PurePosixPath(check_relative)
-            if (
-                check_posix.is_absolute()
-                or check_posix.parts[:2] != ("checks", "nhi_fee")
-                or len(check_posix.parts) != 3
-            ):
-                raise _OperationalIntegrityError("check path outside source checks")
-            check_path = _contained(Path(data_root), check_relative)
-            if not check_path.is_file():
-                raise _OperationalIntegrityError("check record missing")
-            try:
-                check = _read_json(check_path)
-            except (KeyError, TypeError, ValueError, OSError) as exc:
-                raise _OperationalIntegrityError("check record cannot be read") from exc
-            _validate_check_record(Path(data_root), descriptor, check)
-        if snapshot_id is None or build_id is None:
-            return _unavailable(
-                "no_serving_snapshot",
-                _status_from_descriptor(descriptor, available=False),
-                descriptor["latest_candidate_id"],
-            )
-        manifest_rel = descriptor["manifest_data_root_relative_path"]
-        if manifest_rel != f"curated/nhi_fee/{build_id}/manifest.json":
-            raise ValueError("manifest path outside curated source")
-        manifest_path = _contained(Path(data_root), manifest_rel)
-        if (
-            not manifest_path.is_file()
-            or _file_hash(manifest_path) != descriptor["manifest_sha256"]
-        ):
-            raise ValueError("manifest hash mismatch")
-        manifest = _read_json(manifest_path)
-        if (
-            manifest.get("state") != "approved"
-            or manifest.get("source_id") != "nhi_fee"
-            or manifest.get("snapshot_id") != snapshot_id
-            or manifest.get("curated_build_id") != build_id
-        ):
-            raise ValueError("manifest identity mismatch")
-        validate_audit_evidence(Path(data_root), manifest)
-        fingerprint = manifest["build_fingerprint"]
-        fingerprint_hash = manifest["build_fingerprint_sha256"]
-        if (
-            sha256_bytes(canonical_json_bytes(fingerprint)) != fingerprint_hash
-            or build_id != f"nhi_fee-build-{fingerprint_hash}"
-            or fingerprint.get("source_id") != "nhi_fee"
-            or fingerprint.get("raw_revision_id") != manifest.get("raw_revision_id")
-        ):
-            raise ValueError("build fingerprint mismatch")
-        publication = manifest["publication"]
-        expected_db_relative = f"curated/nhi_fee/{build_id}/data.sqlite3"
-        if publication.get("curated_build_relative_path") != expected_db_relative:
-            raise ValueError("database path outside curated source")
-        db_path = _contained(Path(data_root), publication["curated_build_relative_path"])
-        if not db_path.is_file() or _file_hash(db_path) != publication["curated_sha256"]:
-            raise ValueError("database hash mismatch")
+        serving = _read_serving(Path(data_root), "nhi_fee", "source.csv")
+        if isinstance(serving, OfficialState):
+            return serving
+        descriptor, manifest, db_path = serving
+        snapshot_id = descriptor["serving_snapshot_id"]
+        build_id = descriptor["serving_curated_build_id"]
 
         uri = f"file:{db_path.as_posix()}?mode=ro&immutable=1"
         connection = sqlite3.connect(uri, uri=True)
@@ -474,16 +508,6 @@ def _read_nhi_state(data_root: Path, now: datetime) -> OfficialState:
 
         source = manifest["source"]
         artifact = manifest["artifacts"][0]
-        expected_raw_relative = f"raw/nhi_fee/{manifest['raw_revision_id']}/artifacts/source.csv"
-        if (
-            artifact.get("storage_scope") != "data_root"
-            or artifact.get("data_root_relative_path") != expected_raw_relative
-        ):
-            raise ValueError("raw artifact path outside raw source")
-        if artifact.get("local_artifact_available"):
-            raw_path = _contained(Path(data_root), artifact["data_root_relative_path"])
-            if not raw_path.is_file() or _file_hash(raw_path) != artifact["sha256"]:
-                raise ValueError("raw artifact hash mismatch")
         official_content_date = None
         official = manifest.get("official_version", {})
         if official.get("modified_at_raw"):
@@ -560,6 +584,11 @@ def read_source_status(
     if source_id == "nhi_fee":
         state = _read_nhi_state(data_root, now)
         descriptor_path = Path(data_root) / "manifests" / "current" / "nhi_fee.json"
+    elif source_id == "tfda_device":
+        from .tfda_store import read_tfda_state
+
+        state = read_tfda_state(data_root, clock=lambda: now)
+        descriptor_path = Path(data_root) / "manifests" / "current" / "tfda_devices.json"
     else:
         state = _unavailable("no_serving_snapshot")
         descriptor_path = Path(data_root) / "manifests" / "current" / f"{source_id}.json"

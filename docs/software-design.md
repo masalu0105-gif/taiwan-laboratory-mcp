@@ -628,6 +628,14 @@ Query capabilities分開：
   - `ivd_scope`／`main_category` 篩選先於排序套用。`main_category` 只比對三組主類別開頭的A–P字母，舊制四碼不命中任何字母。
   - 每列回 `ivd_scope`、主類別字母陣列、級數與許可證種類原文、`cancellation_recorded_in_source`、`matched_by`。
   - 不輸出分數、相似度、優劣或可替代性；只並列原始欄位與來源。
+- 實作（2026-09-15）：
+  - SQLite `tfda_source_row` 保存34欄原文、`source_row_sha256`、`source_row_number`，另存正規化搜尋欄（NFKC、casefold、空白壓縮，再把各種引號統一、「臺」改「台」；原文不變）、ISO日期、主類別字母、分類代碼、`ivd_scope`與rule version。`tfda_classification`每個有值的主／次類別一列；`tfda_permit_group`為view。
+  - 比對用SQLite `instr()`子字串，兩個字的查詢也能命中（FTS5 trigram查不到少於3字）；排序、`total_matches`與分頁都在SQLite內完成，不把十萬列讀進記憶體。
+  - `search_reviewed_ivd`／`search_ivd_candidates`的`query`比對字號、品名、效能與類別原文，製造商只由`manufacturer`參數篩選。
+  - 四個搜尋operation每筆回`tfda_device_summary`摘要、`limit` 1–20；`get_license`回完整`tfda_device`。
+  - 附表A/B/C以外代碼、缺代碼與舊制列為`unknown`，所以正式build的`coverage_status`維持`review_incomplete`，結果附TFDA專用coverage說明。
+  - 完整性檢查（descriptor、manifest、audit、資料庫與raw hash）第一次查詢時完整執行；之後在descriptor bytes與build／raw／check檔案大小、修改時間都沒變時沿用結果，stale仍每次依當下時間計算。
+  - TFDA stale依官方每7日更新、兩個週期（14日）未成功檢查即`upstream_check_overdue`，沿用NHI規則，待OD-05另定。
 - `compare_products` 在P1.1只回 `result_status=deprecated_unsupported`、0 items與中性tool指引；不得回可被host整理成比較表的資料。
 
 在當期出現的399個A/B/C code未逐碼review、舊制coverage未說明或owner未核准前，`coverage_status=review_incomplete`，產品不得宣稱「完整台灣IVD清單」。`B.9225`、`B.9195`、`B.9245`必須是regression cases。

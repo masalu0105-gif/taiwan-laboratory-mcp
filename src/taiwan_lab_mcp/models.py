@@ -260,29 +260,98 @@ class CDCLabRecord(BaseModel):
     latest_annual_pt_review_raw: str | None
 
 
+# PRD 6.3.1: true, false or the literal "unknown"; never merged into one validity state.
+TriState = Union[StrictBool, Literal["unknown"]]
+TfdaIvdScope = Literal["included", "excluded", "ambiguous", "unknown"]
+TfdaMatchedField = Literal[
+    "license_no", "name_zh", "name_en", "applicant", "manufacturer", "effect", "classification"
+]
+
+
 class TFDARecord(BaseModel):
+    """One TFDA source row: all 34 official columns (blank as null) plus query-time labels."""
+
     model_config = ConfigDict(extra="forbid")
 
     record_type: Literal["tfda_device"] = "tfda_device"
-    license_no: str
-    name_zh: str | None
-    name_en: str | None
-    effect: str | None
-    applicant: str | None
-    manufacturer: str | None
-    factory_address: str | None
-    country: str | None
-    process: str | None
-    source_cancellation_status_raw: str | None
-    source_cancellation_date_raw: str | None
+    license_no_raw: str
+    cancellation_status_raw: str | None
+    cancellation_date_raw: str | None
+    cancellation_reason_raw: str | None
     valid_through_raw: str | None
-    ivd_scope: Literal["included", "excluded", "ambiguous", "unknown"]
-    classification_code: str | None
+    issued_on_raw: str | None
+    license_kind_raw: str | None
+    legacy_license_no_raw: str | None
+    risk_class_raw: str | None
+    customs_document_no_raw: str | None
+    name_zh_raw: str | None
+    name_en_raw: str | None
+    effect_raw: str | None
+    dosage_form_raw: str | None
+    package_raw: str | None
+    main_category_1_raw: str | None
+    sub_category_1_raw: str | None
+    main_category_2_raw: str | None
+    sub_category_2_raw: str | None
+    main_category_3_raw: str | None
+    sub_category_3_raw: str | None
+    main_ingredient_raw: str | None
+    specification_raw: str | None
+    restriction_raw: str | None
+    applicant_name_raw: str | None
+    applicant_address_raw: str | None
+    applicant_tax_id_raw: str | None
+    manufacturer_name_raw: str | None
+    factory_address_raw: str | None
+    manufacturer_company_address_raw: str | None
+    manufacturer_country_raw: str | None
+    process_raw: str | None
+    changed_on_raw: str | None
+    manufacturing_registration_no_raw: str | None
+    main_category_letters: list[str]
+    classification_codes: list[str]
+    ivd_scope: TfdaIvdScope
+    ivd_rule_version: str = Field(min_length=1)
+    cancellation_recorded_in_source: TriState
+    within_validity_period_as_of: TriState
 
 
-Record = Union[NHIRecord, NHISearchRecord, CDCSpecimenRecord, CDCLabRecord, TFDARecord]
+TFDA_EFFECT_PREVIEW_CHARS = 60
 
-SourceId = Literal["cdc_manual", "cdc_recognized_labs", "nhi_fee", "tfda_device"]
+
+class TFDASearchRecord(BaseModel):
+    """Search-list summary of a TFDA row; get_license returns the full TFDARecord."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: Literal["tfda_device_summary"] = "tfda_device_summary"
+    matched_by: list[TfdaMatchedField] = Field(min_length=1)
+    license_no_raw: str
+    name_zh_raw: str | None
+    name_en_raw: str | None
+    applicant_name_raw: str | None
+    manufacturer_name_raw: str | None
+    manufacturer_country_raw: str | None
+    risk_class_raw: str | None
+    license_kind_raw: str | None
+    main_category_letters: list[str]
+    classification_codes: list[str]
+    ivd_scope: TfdaIvdScope
+    cancellation_status_raw: str | None
+    cancellation_recorded_in_source: TriState
+    valid_through_raw: str | None
+    within_validity_period_as_of: TriState
+    effect_preview: str | None = Field(max_length=TFDA_EFFECT_PREVIEW_CHARS)
+    effect_chars: int = Field(ge=0)
+    effect_truncated: StrictBool
+
+
+Record = Union[
+    NHIRecord, NHISearchRecord, CDCSpecimenRecord, CDCLabRecord, TFDARecord, TFDASearchRecord
+]
+
+# Audit records use internal source ids; tfda_devices projects to public tfda_device (SDD 11).
+SourceId = Literal["cdc_manual", "cdc_recognized_labs", "nhi_fee", "tfda_device", "tfda_devices"]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 _TRANSFORM_KEYS = frozenset({"parser", "schema", "normalization", "rules", "qualifier"})
 

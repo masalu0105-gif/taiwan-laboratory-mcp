@@ -17,6 +17,7 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/2.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v1.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v2.json",
+    "taiwan_lab_mcp/rules/tfda_ivd/v1.json",
     "taiwan_lab_mcp/schemas/nhi_fee/nhi-7-v1.json",
 }
 
