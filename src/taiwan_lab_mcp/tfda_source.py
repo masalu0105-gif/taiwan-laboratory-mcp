@@ -9,7 +9,6 @@ candidate, curated build or current descriptor.
 from __future__ import annotations
 
 import json
-from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
@@ -18,6 +17,7 @@ from .canonical import canonical_json_bytes, sha256_bytes, sha256_json
 from .fetch import FetchedArtifact, FetchError, fetch_https_bytes
 from .importers.tfda import (
     MAX_ZIP_BYTES,
+    TFDA_COLUMNS,
     TFDA_PARSER_VERSION,
     TFDA_SCHEMA_VERSION,
     TFDA_SOURCE_ID,
@@ -288,6 +288,13 @@ def run_tfda_upstream_sync(
 _DIFF_LIST_LIMIT = 50
 
 
+def _short(value: str, limit: int = 80) -> str:
+    text = " ".join((value or "").split())
+    if not text:
+        return "（空白）"
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
 def _read_tfda_serving(data_root: Path) -> dict[str, Any] | None:
     from .sync import SyncError
 
@@ -325,15 +332,43 @@ def _read_hashed_raw(data_root: Path, relative: str, expected_sha256: str) -> by
     return payload
 
 
-def _permit_rows(payload: bytes) -> tuple[Counter[str], set[str]]:
-    """Rows per normalized permit number and every source row hash of one raw ZIP."""
+_VALID_THROUGH_INDEX = TFDA_COLUMNS.index("有效日期")
+_DIFF_FIELD_LIMIT = 5
 
-    permits: Counter[str] = Counter()
-    hashes: set[str] = set()
+
+def _permit_rows(payload: bytes) -> dict[str, list[str]]:
+    """Source row hashes per normalized permit number, in file order."""
+
+    permits: dict[str, list[str]] = {}
     for _, values in _iter_tfda_records(extract_tfda_csv(payload).payload):
-        permits[search_normalize(values[0])] += 1
-        hashes.add(sha256_bytes(canonical_json_bytes(list(values))))
-    return permits, hashes
+        permits.setdefault(search_normalize(values[0]), []).append(
+            sha256_bytes(canonical_json_bytes(list(values)))
+        )
+    return permits
+
+
+def _permit_values(payload: bytes, permits: set[str]) -> dict[str, list[list[str]]]:
+    rows: dict[str, list[list[str]]] = {}
+    for _, values in _iter_tfda_records(extract_tfda_csv(payload).payload):
+        key = search_normalize(values[0])
+        if key in permits:
+            rows.setdefault(key, []).append(list(values))
+    return rows
+
+
+def _changed_fields(before_rows: list[list[str]], after_rows: list[list[str]]) -> list[dict]:
+    if len(before_rows) != len(after_rows):
+        return [
+            {"column": "資料列數", "before": str(len(before_rows)), "after": str(len(after_rows))}
+        ]
+    changes: list[dict[str, Any]] = []
+    several_rows = len(before_rows) > 1
+    for row_number, (before, after) in enumerate(zip(before_rows, after_rows), start=1):
+        for column, old, new in zip(TFDA_COLUMNS, before, after):
+            if old != new:
+                change: dict[str, Any] = {"column": column, "before": old, "after": new}
+                changes.append({"row": row_number, **change} if several_rows else change)
+    return changes
 
 
 def _exceeds_ten_percent(before: int, after: int) -> bool:
@@ -342,15 +377,40 @@ def _exceeds_ten_percent(before: int, after: int) -> bool:
 
 def _tfda_upstream_diff(serving_payload: bytes, candidate_payload: bytes) -> dict[str, Any]:
     # Parse one file at a time; each official file is about 70 MB of CSV text.
-    serving_permits, serving_hashes = _permit_rows(serving_payload)
-    candidate_permits, candidate_hashes = _permit_rows(candidate_payload)
-    serving_rows = sum(serving_permits.values())
-    candidate_rows = sum(candidate_permits.values())
+    serving_permits = _permit_rows(serving_payload)
+    candidate_permits = _permit_rows(candidate_payload)
+    serving_hashes = {row for rows in serving_permits.values() for row in rows}
+    candidate_hashes = {row for rows in candidate_permits.values() for row in rows}
+    serving_rows = sum(len(rows) for rows in serving_permits.values())
+    candidate_rows = sum(len(rows) for rows in candidate_permits.values())
+    # A renewal keeps the permit number and the row count but changes row content, so compare
+    # each permit's rows; the order of rows inside one permit does not count as a change.
+    changed = sorted(
+        permit
+        for permit in serving_permits.keys() & candidate_permits.keys()
+        if sorted(serving_permits[permit]) != sorted(candidate_permits[permit])
+    )
+    before_values = _permit_values(serving_payload, set(changed))
+    after_values = _permit_values(candidate_payload, set(changed))
+    changed_permits = []
+    validity_extended = []
+    for permit in changed:
+        before_rows, after_rows = before_values[permit], after_values[permit]
+        license_no = after_rows[0][0]
+        changed_permits.append(
+            {"license_no": license_no, "fields": _changed_fields(before_rows, after_rows)}
+        )
+        if max(row[_VALID_THROUGH_INDEX] for row in after_rows) > max(
+            row[_VALID_THROUGH_INDEX] for row in before_rows
+        ):
+            validity_extended.append(license_no)
     return {
         "row_counts": {"serving": serving_rows, "candidate": candidate_rows},
         "permit_counts": {"serving": len(serving_permits), "candidate": len(candidate_permits)},
         "added_permits": sorted(candidate_permits.keys() - serving_permits.keys()),
         "removed_permits": sorted(serving_permits.keys() - candidate_permits.keys()),
+        "changed_permits": changed_permits,
+        "validity_extended_permits": validity_extended,
         "rows_only_in_candidate": len(candidate_hashes - serving_hashes),
         "rows_only_in_serving": len(serving_hashes - candidate_hashes),
         "review_gate": {
@@ -366,21 +426,38 @@ def _tfda_upstream_diff(serving_payload: bytes, candidate_payload: bytes) -> dic
 
 def _tfda_diff_markdown(diff: dict[str, Any], *, checked_at: str, serving_id: str) -> str:
     gate = diff["review_gate"]
+    changed = diff["changed_permits"]
     lines = [
-        "# 食藥署醫療器材許可證資料：上游有新版（等待審核）",
+        "# 食藥署醫療器材許可證資料：上游有新版",
         "",
         f"- 檢查時間（UTC）：{checked_at}",
-        f"- 目前 MCP 服務中的版本：`{serving_id}`",
+        f"- 比對的服務中版本：`{serving_id}`",
         f"- 資料列：服務中 {diff['row_counts']['serving']:,} 列 → 新版 {diff['row_counts']['candidate']:,} 列",
         f"- 許可證字號：服務中 {diff['permit_counts']['serving']:,} 個 → 新版 {diff['permit_counts']['candidate']:,} 個",
-        f"- 新增字號 {len(diff['added_permits']):,} 個、消失字號 {len(diff['removed_permits']):,} 個",
+        f"- 新增字號 {len(diff['added_permits']):,} 個、消失字號 {len(diff['removed_permits']):,} 個、"
+        f"內容有改的字號 {len(changed):,} 個",
+        f"- 有效日期往後延（通常是展延）：{len(diff['validity_extended_permits']):,} 個",
         f"- 內容不同的資料列：新版有、舊版沒有 {diff['rows_only_in_candidate']:,} 列；"
         f"舊版有、新版沒有 {diff['rows_only_in_serving']:,} 列",
         "- 資料列變動超過 10%：" + ("是" if gate["row_count_change_exceeds_10_percent"] else "否"),
         "",
-        "新版審核並發布之前，MCP 會繼續回目前的版本，並標示「有新版等待審核」。",
-        "",
     ]
+    lines.extend([f"## 內容有改的許可證字號（{len(changed):,} 個）", ""])
+    for item in changed[:_DIFF_LIST_LIMIT]:
+        details = "；".join(
+            (f"第 {field['row']} 列 " if "row" in field else "")
+            + f"{field['column']} {_short(field['before'])} → {_short(field['after'])}"
+            for field in item["fields"][:_DIFF_FIELD_LIMIT]
+        )
+        extra = len(item["fields"]) - _DIFF_FIELD_LIMIT
+        lines.append(
+            f"- {item['license_no']}：{details}" + (f"；另 {extra} 個欄位" if extra > 0 else "")
+        )
+    if not changed:
+        lines.append("（無）")
+    elif len(changed) > _DIFF_LIST_LIMIT:
+        lines.append(f"- …另外 {len(changed) - _DIFF_LIST_LIMIT:,} 個，完整清單見 diff.json")
+    lines.append("")
     for title, permits in (
         ("新增的許可證字號", diff["added_permits"]),
         ("消失的許可證字號", diff["removed_permits"]),

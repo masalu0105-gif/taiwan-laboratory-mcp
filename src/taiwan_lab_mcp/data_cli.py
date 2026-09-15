@@ -42,6 +42,11 @@ def main(argv: list[str] | None = None) -> int:
         help="tfda_devices only: publish a changed version when every automated check passes.",
     )
     check_parser.add_argument("--json", action="store_true")
+    retention_parser = subparsers.add_parser("retention-plan")
+    retention_parser.add_argument("source_id", choices=["tfda_devices"])
+    retention_parser.add_argument("--keep", type=int, default=3)
+    retention_parser.add_argument("--data-dir", required=True, type=Path)
+    retention_parser.add_argument("--json", action="store_true")
     rollback_parser = subparsers.add_parser("rollback")
     rollback_parser.add_argument("source_id", choices=["nhi_fee"])
     rollback_parser.add_argument("target_curated_build_id")
@@ -387,6 +392,26 @@ def main(argv: list[str] | None = None) -> int:
             )
             return _bundle_exit_code(exc)
         print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
+        return 0
+    if args.command == "retention-plan":
+        from .tfda_autoupdate import plan_tfda_retention
+
+        if args.keep < 1:
+            parser.error("retention-plan --keep must be at least 1")
+        try:
+            plan = plan_tfda_retention(args.data_dir, keep_versions=args.keep)
+        except ValueError as exc:
+            print(
+                json.dumps(
+                    {"operation": "retention-plan", "result": "failed", "error_code": exc.code}
+                    if hasattr(exc, "code")
+                    else {"operation": "retention-plan", "result": "failed"},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 6
+        print(json.dumps(plan, ensure_ascii=False, separators=(",", ":")))
         return 0
     parser.error("unsupported command")
     return 2

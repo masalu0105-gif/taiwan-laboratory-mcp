@@ -366,3 +366,32 @@ def test_cli_check_routes_tfda(tmp_path, monkeypatch, capsys):
     assert exit_code == 0
     assert calls == [(tmp_path, {"expected_publisher_oid": OID, "actor": "unit-test-checker"})]
     assert json.loads(capsys.readouterr().out)["result"] == "unchanged"
+
+
+def test_check_diff_lists_renewals_even_when_the_row_count_is_unchanged(tmp_path):
+    build_tfda_snapshot(_zip(), tmp_path)
+    renewed = [list(row) for row in ROWS]
+    renewed[1][TFDA_COLUMNS.index("有效日期")] = "2032/01/31"
+    renewed[2][TFDA_COLUMNS.index("中文品名")] = "改過的品名"
+    summary = _check(tmp_path, _metadata(), _zip_response(_zip(renewed)))
+    assert summary["result"] == "changed"
+    diff = json.loads((tmp_path / Path(summary["diff_data_root_relative_path"])).read_bytes())
+    assert diff["row_counts"] == {"serving": 11, "candidate": 11}
+    assert (diff["added_permits"], diff["removed_permits"]) == ([], [])
+    assert diff["changed_permits"] == [
+        {
+            "license_no": "衛部醫器輸字第000002號",
+            "fields": [{"column": "有效日期", "before": "2027/01/31", "after": "2032/01/31"}],
+        },
+        {
+            "license_no": "衛部醫器輸字第000003號",
+            "fields": [{"column": "中文品名", "before": "合成品項3", "after": "改過的品名"}],
+        },
+    ]
+    assert diff["validity_extended_permits"] == ["衛部醫器輸字第000002號"]
+    text = (tmp_path / Path(summary["diff_summary_data_root_relative_path"])).read_text(
+        encoding="utf-8"
+    )
+    assert "內容有改的許可證字號（2 個）" in text
+    assert "有效日期往後延（通常是展延）：1 個" in text
+    assert "衛部醫器輸字第000002號：有效日期 2027/01/31 → 2032/01/31" in text

@@ -253,3 +253,70 @@ def test_cli_auto_publish_routes_tfda_only(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["result"] == "published"
     with pytest.raises(SystemExit):
         data_cli.main(["check", "nhi_fee", *arguments, "--auto-publish", "--json"])
+
+
+def test_renewal_with_the_same_row_count_is_published(tmp_path, distribution):
+    build_tfda_snapshot(_zip(ROWS), tmp_path)
+    renewed = [list(row) for row in ROWS]
+    renewed[4][TFDA_COLUMNS.index("有效日期")] = "2032/01/31"
+    summary = _auto(tmp_path, _zip(renewed))
+    assert summary["result"] == "published"
+    diff = json.loads((tmp_path / summary["diff_data_root_relative_path"]).read_bytes())
+    assert diff["validity_extended_permits"] == ["衛部醫器輸字第000005號"]
+    adapter = TFDAAdapter(DataContext(mode="official_snapshot", data_root=tmp_path))
+    adapter.context = DataContext(mode="official_snapshot", data_root=tmp_path, clock=lambda: CLOCK)
+    record = adapter.get_license("衛部醫器輸字第000005號").items[0].record
+    assert (record.valid_through_raw, record.within_validity_period_as_of) == ("2032/01/31", True)
+
+
+def _version(number):
+    rows = [list(row) for row in ROWS]
+    rows[0][TFDA_COLUMNS.index("中文品名")] = f"第{number}版品名"
+    return _zip(rows)
+
+
+def test_retention_plan_keeps_three_versions_and_the_pending_candidate(tmp_path, distribution):
+    from taiwan_lab_mcp.tfda_autoupdate import plan_tfda_retention
+
+    first = build_tfda_snapshot(_zip(ROWS), tmp_path)
+    published = [_auto(tmp_path, _version(number)) for number in (2, 3, 4)]
+    assert [item["result"] for item in published] == ["published"] * 3
+    held = _auto(tmp_path, _zip(ROWS[:9]))
+    assert held["result"] == "blocked"
+    orphan = tmp_path / "curated" / "tfda_devices" / ("tfda_devices-build-" + "e" * 64)
+    orphan.mkdir()
+
+    plan = plan_tfda_retention(tmp_path, keep_versions=3)
+
+    newest = [item["published_snapshot_id"] for item in reversed(published)]
+    assert plan["serving_snapshot_id"] == newest[0]
+    assert plan["keep_builds"] == newest
+    assert plan["remove_paths"] == sorted(
+        [
+            f"curated/tfda_devices/{first['snapshot_id']}",
+            f"curated/tfda_devices/{orphan.name}",
+            f"raw/tfda_devices/{first['raw_revision_id']}",
+        ]
+    )
+    assert held["candidate_raw_revision_id"] in plan["keep_raw_revisions"]
+    # Planning never removes anything.
+    assert all((tmp_path / path).exists() for path in plan["remove_paths"])
+
+
+def test_retention_plan_removes_nothing_with_three_or_fewer_versions(tmp_path, distribution):
+    from taiwan_lab_mcp.tfda_autoupdate import plan_tfda_retention
+
+    build_tfda_snapshot(_zip(ROWS), tmp_path)
+    _auto(tmp_path, _version(2))
+    assert plan_tfda_retention(tmp_path, keep_versions=3)["remove_paths"] == []
+
+
+def test_cli_retention_plan_prints_without_removing(tmp_path, distribution, capsys):
+    import taiwan_lab_mcp.data_cli as data_cli
+
+    build_tfda_snapshot(_zip(ROWS), tmp_path)
+    exit_code = data_cli.main(
+        ["retention-plan", "tfda_devices", "--keep", "3", "--data-dir", str(tmp_path), "--json"]
+    )
+    assert exit_code == 0
+    assert json.loads(capsys.readouterr().out)["remove_paths"] == []

@@ -398,6 +398,72 @@ def drift_block_reasons(serving: dict[str, Any], candidate: dict[str, Any]) -> l
     return reasons
 
 
+_BUILD_NAME = re.compile(rf"^{TFDA_SOURCE_ID}-build-[0-9a-f]{{64}}$")
+_RAW_NAME = re.compile(r"^[0-9a-f]{64}$")
+
+
+def plan_tfda_retention(data_root: Path, *, keep_versions: int = 3) -> dict[str, Any]:
+    """List old TFDA builds and raw revisions that may go to the Recycle Bin; removes nothing.
+
+    Owner 2026-09-15 chose to keep the latest three versions. A build stays when it is serving
+    or among the most recently served versions; a raw revision stays when a kept build uses it
+    or it is the pending candidate. If the history cannot be read, nothing is listed.
+    """
+
+    if type(keep_versions) is not int or keep_versions < 1:
+        raise ValueError("keep_versions must be a positive integer")
+    data_root = Path(data_root)
+    plan: dict[str, Any] = {
+        "serving_snapshot_id": None,
+        "keep_builds": [],
+        "keep_raw_revisions": [],
+        "remove_paths": [],
+    }
+    serving = _read_tfda_serving(data_root)
+    if serving is None:
+        return plan
+    plan["serving_snapshot_id"] = serving["serving_id"]
+    curated = data_root / "curated" / TFDA_SOURCE_ID
+    raw = data_root / "raw" / TFDA_SOURCE_ID
+    try:
+        served = []
+        events = data_root / "publish-events" / f"{TFDA_SOURCE_ID}.jsonl"
+        for line in events.read_bytes().splitlines():
+            event = json.loads(line) if line else {}
+            if event.get("result") == "success" and event.get("event_type") in {
+                "publish",
+                "rollback",
+            }:
+                served.append(event["snapshot_id"])
+        keep = [serving["serving_id"]]
+        for snapshot_id in reversed(served):
+            if len(keep) >= keep_versions:
+                break
+            if snapshot_id not in keep:
+                keep.append(snapshot_id)
+        keep_raw = {
+            json.loads((curated / build_id / "manifest.json").read_bytes())["raw_revision_id"]
+            for build_id in keep
+        }
+    except (OSError, KeyError, TypeError, ValueError):
+        return plan
+    candidate = serving["descriptor"].get("latest_candidate_id")
+    if candidate:
+        keep_raw.add(candidate)
+    remove = [
+        f"curated/{TFDA_SOURCE_ID}/{path.name}"
+        for path in curated.iterdir()
+        if path.is_dir() and _BUILD_NAME.fullmatch(path.name) and path.name not in keep
+    ]
+    remove += [
+        f"raw/{TFDA_SOURCE_ID}/{path.name}"
+        for path in (raw.iterdir() if raw.is_dir() else ())
+        if path.is_dir() and _RAW_NAME.fullmatch(path.name) and path.name not in keep_raw
+    ]
+    plan.update(keep_builds=keep, keep_raw_revisions=sorted(keep_raw), remove_paths=sorted(remove))
+    return plan
+
+
 def run_tfda_auto_update(
     data_root: Path,
     *,
