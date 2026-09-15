@@ -1210,6 +1210,9 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 限制：新版能不能自動換上，靠的是 Word 標記比對這一道獨立檢查；驗收題是從新手冊本身挑的。真正的自動換版要等疾管署出新版才會跑到；目前是合成手冊測過。
 - 測試：先寫 `tests/test_cdc_manual_autoupdate.py`（8 個），跑出 8 failed；實作後全過。`tests/test_package_contents.py` 必含檔加上新的審核規則檔。
 - 驗證：全部測試 559 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 559 passed，contract 與 repo 位元組相同（144,136 bytes）。
+- 提交：commit `73c1889`，CI 通過（run 35000113562）。
+- 接進本機：CI 通過後，把同一個 wheel（SHA-256 `4e18143f…`，含 `cdc-manual` extra）以 `uv pip install --python <uv tool 環境>` 就地裝進 uv tool 環境；安裝身分 `distribution`，安裝檔與 repo 逐檔相同。
+- 真實手冊檢查（只跑手冊這一段，沒有手動跑整份排程；整份排程還會跑健保、食藥署檢查與 GitHub 下載包發布）：`taiwan-lab-data check cdc_specimen_manual --actor claude-code-cdc-manual-launch --data-dir <data-root> --auto-publish --json` exit 0、`result=unchanged`、1150826、generation 1→2、`stale=false`。`taiwan-lab-data status`：手冊、名冊、健保、食藥署四個來源都 available、沒有過期。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
