@@ -21,7 +21,8 @@ def main(argv: list[str] | None = None) -> int:
     validate_parser.add_argument("--json", action="store_true")
     sync_parser = subparsers.add_parser("sync")
     sync_parser.add_argument(
-        "source_id", choices=["nhi_fee", "tfda_devices", "cdc_authorized_labs"]
+        "source_id",
+        choices=["nhi_fee", "tfda_devices", "cdc_authorized_labs", "cdc_specimen_manual"],
     )
     sync_parser.add_argument("--input", type=Path)
     sync_parser.add_argument(
@@ -32,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     sync_parser.add_argument(
         "--upstream",
         action="store_true",
-        help="Explicitly fetch the CDC roster from the official page; never implied.",
+        help="Explicitly fetch the CDC roster or manual from the official page; never implied.",
     )
     sync_parser.add_argument("--data-dir", required=True, type=Path)
     sync_parser.add_argument(
@@ -112,23 +113,28 @@ def main(argv: list[str] | None = None) -> int:
         result: DataStatusResult = get_data_status()
         print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")))
         return 0
-    if args.command == "sync" and args.source_id == "cdc_authorized_labs":
+    if args.command == "sync" and args.source_id in {"cdc_authorized_labs", "cdc_specimen_manual"}:
         if not args.upstream:
-            parser.error("sync cdc_authorized_labs requires --upstream")
+            parser.error(f"sync {args.source_id} requires --upstream")
         if any(
             value is not None
             for value in (args.input, args.publisher_oid, args.metadata_url, args.fail_stage)
         ):
-            parser.error("sync cdc_authorized_labs only supports --upstream")
-        from . import cdc_source
+            parser.error(f"sync {args.source_id} only supports --upstream")
+        if args.source_id == "cdc_specimen_manual":
+            from . import cdc_manual_source
 
-        report = cdc_source.run_cdc_labs_upstream_sync(args.data_dir)
+            report = cdc_manual_source.run_cdc_manual_upstream_sync(args.data_dir)
+        else:
+            from . import cdc_source
+
+            report = cdc_source.run_cdc_labs_upstream_sync(args.data_dir)
         print(json.dumps(report, ensure_ascii=False, separators=(",", ":")))
         if report["status"] == "passed":
             return 0
         return 3 if report["stage"] in {"discover", "fetch"} else 4
     if args.command == "sync" and args.upstream:
-        parser.error("--upstream is only available for cdc_authorized_labs")
+        parser.error("--upstream is only available for CDC sources")
     if args.command == "sync" and args.source_id == "tfda_devices":
         if args.metadata_url is not None:
             parser.error("sync tfda_devices does not support --metadata-url")

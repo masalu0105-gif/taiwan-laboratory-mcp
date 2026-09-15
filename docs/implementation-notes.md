@@ -1050,6 +1050,20 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   5. 每日自動更新。
   6. 第 7 章送驗地點與修訂對照表。
 
+### 疾管署採檢手冊第二步：手冊與修訂對照表自動下載（2026-09-15）
+
+- `cdc_manual_source.py`：
+  - 從手冊頁依附件名稱找「衛生福利部疾病管制署傳染病檢體採檢手冊-<版本>版.pdf」與「傳染病檢體採檢手冊修訂對照表-<版本>.pdf」，兩份都要有、各只有一份、版本相同。
+  - 打開各自的 viewer 網頁，取唯一的 `/Uploads/*.pdf`；viewer 的下載檔名要和附件名稱相同。
+  - 兩份 PDF 都下載成功才寫 raw：`raw/cdc_specimen_manual/<raw revision>/artifacts/manual.pdf`、`revision.pdf` 與 `fetch.json`（含頁面、viewer 的 SHA-256 與 PDF 網址）。raw revision 只看附件名稱、版本與兩份 PDF bytes，上傳檔名（uuid）改變不算新版。
+  - 驗證只查 PDF 開頭 `%PDF-` 與結尾 `%%EOF`；版次、核定日期與文字層要等版面讀取切片。
+- CLI：`taiwan-lab-data sync cdc_specimen_manual --upstream --data-dir … --json`，exit 0／3／4。
+- 測試：先寫 `tests/test_cdc_manual_source.py`（20 個，含參數化），跑出 20 failed；實作後全過。
+- 驗證：
+  - 全部測試 491 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：491 passed，import 路徑為該 venv；安裝後 contract 143,636 bytes 與 repo 相同。
+  - 對真實官網跑一次（寫到 scratchpad，未進正式 data root）：passed；1150826 版；手冊 4,046,218 bytes `988654c0…`、修訂表 780,660 bytes `67326852…`，和版面試驗是同一份；raw revision `d9d84c9d0c351915…`。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

@@ -362,6 +362,7 @@ PDF extraction 與資料語意解析分層測試。CI 的 parser unit test 使�
 - 對外固定使用官方欄名「應保存種類（應保存時間）」並回 `not_pre_submission_storage=true`；不得出現泛稱 storage／保存條件。運送溫度與時間只留在「送驗方式」／注意事項原文，感染性物質分類與 P620／P650 文字保持同一條件。
 - 第 2 章採檢規定與第 7 章送驗地點／檢驗方法分成不同 entity；第 7.7、7.9 的不同表格另走各自 schema，不在 extraction 階段直接 join。
 - 版面讀法依 ADR 0003：欄位只照表頭文字對應，第 2.6 節 7 欄表格沒有「應保存種類（應保存時間）」時該欄回 `null`；紅字修訂底線（紅色、端點沒有貼齊格線）不能當列界線；同一行相鄰兩欄的字要依字元位置分回各欄；頁首溢出文字依 TR 內 TD 順序接回上一頁同一格，TD 數不符、頁中溢出或找不到可接格子時整批擋下。
+- 已實作（2026-09-15，手冊自動下載）：`tests/test_cdc_manual_source.py` 以仿官方手冊頁與 viewer 的 synthetic HTML 驗：手冊與修訂對照表依附件名稱「衛生福利部疾病管制署傳染病檢體採檢手冊-<7 碼版本>版.pdf」「傳染病檢體採檢手冊修訂對照表-<7 碼版本>.pdf」挑選（旁邊的站內連結不會被選中）；少一份、同一份出現兩個、兩份版本不同、連到其他網站、不是 `File/Get` 連結都擋下；viewer 裡只能有一個 `/Uploads/*.pdf`，沒有、有兩個、下載檔名和附件名稱不同、連到其他網站都擋下；成功時兩份 PDF 存成同一個 raw revision（`manual.pdf`、`revision.pdf`、`fetch.json` 含頁面與 viewer 的 SHA-256 和 PDF 網址），寫 staged 報告，不建立 curated 或 current；只有頁面日期或上傳檔名改變、兩份 PDF bytes 相同時沿用同一 raw revision 且不改寫 `fetch.json`；任一份 PDF 下載失敗（HTTP 失敗、下載到網頁）在 fetch 階段失敗且不留 raw；不是 PDF（`PDF_NOT_PDF`）或結尾缺 `%%EOF`（`PDF_TRUNCATED`）時保留 raw、驗證失敗；官方頁打不開在 discover 階段失敗；CLI `sync cdc_specimen_manual` 必須帶 `--upstream`，exit 0／3／4。PDF 版次、核定日期與文字層檢查要等版面讀取切片（ADR 0003）。
 - provenance 同時保存 PDF 實體頁與印刷頁；末頁 `pdf_page=130`、`printed_page=120` 及文件顯示共 119 頁的矛盾，仍能被定位且不能只留單一頁碼。
 - 新版只可在 row diff、變更列全檢、未變更列抽樣與醫檢 reviewer gate 完成後 approved；`review_pending` 不可切 current。
 
