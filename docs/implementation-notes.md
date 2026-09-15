@@ -929,6 +929,29 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：428 passed、2 skipped；安裝後 contract 與 repo 位元組相同；repo 外安裝版對真實名冊執行 `validate cdc_authorized_labs` exit 0。
 - 尚未做：自動找附件與下載、保存原始檔、資料庫建置、AI 代審與上線、MCP 查詢、每日自動更新、採檢手冊 PDF。疾管署資料能不能放進 GitHub 下載包還沒問 owner（研究第 8 節列為未查證）。
 
+### 疾管署第二步：認可檢驗機構名冊自動下載（2026-09-15）
+
+- 前一段 commit `31c3559` 的 GitHub CI run `34974048901` 成功。
+- 程式：`src/taiwan_lab_mcp/cdc_source.py`，CLI `taiwan-lab-data sync cdc_authorized_labs --upstream --data-dir <path> --json`（exit 0 通過、3 discover／fetch 失敗、4 解析／驗證失敗）。
+  - 必須明確帶 `--upstream` 才會連官網；其他 sync 參數不能一起用；其他資料來源帶 `--upstream` 會被拒絕。
+  - 找附件（discover）：抓官方認可機構頁（只允許 `www.cdc.gov.tw`、`text/html`、2 MiB 以內），用 HTML parser 讀所有連結，只挑文字剛好是「傳染病認可檢驗機構名冊<7 碼版本>.ods」且路徑是 `/File/Get/` 的連結。沒有、兩份不同的名冊、或連到其他網站都擋下。同時記下頁面 SHA-256 與頁面上的「最後更新日期」（只作紀錄）。
+  - 下載（fetch）：只允許 `www.cdc.gov.tw`、`application/octet-stream` 或 ODS 媒體類型、16 MiB 以內；下載回應的檔名（Content-Disposition）必須和附件名稱相同，否則 `DISCOVERY_ATTACHMENT_MISMATCH`，不保存。
+  - 保存：`raw/cdc_authorized_labs/<raw revision>/artifacts/source.ods` 與 `fetch.json`。raw revision ID 用官方頁網址、附件名稱、版本、授權與檔案大小／SHA-256 計算，不含會變動的頁面雜湊與下載 token；同一份檔案重抓沿用同一個 raw revision，不改寫第一份 `fetch.json`。
+  - 驗證：用上一段的解析器；工作表名稱必須是「<版本>名冊」，和附件名稱上的版本不同就 `ODS_VERSION_MISMATCH`（保留 raw、驗證失敗）。
+  - 只寫 `staged/cdc_authorized_labs/<attempt>/validation.json`，不建立 candidate、curated 或 current。
+  - 授權欄位：`衛生福利部疾病管制署政府網站資料開放宣告`，網址 `https://www.cdc.gov.tw/Category/FPage/TxkBIR9agw_IBRRmvn9TcQ`（2026-09-13 研究第 8 節已查證宣告內容）。
+- 規格解讀：研究與 SDD 沒有寫附件要怎麼從頁面挑出來；官方頁同時有全站共用的 `File/Get` 連結（第一次試抓就拿錯），所以用附件文字精確比對，並加上下載檔名與工作表版本兩道核對。
+- 測試：先寫 `tests/test_cdc_ods_source.py` 13 個（含參數化），跑出 13 failed；實作後全過。
+- 官網實際試跑（2026-09-15 21:22 台北時間，寫進 session scratchpad 的暫存 data root，不是正式資料夾）：
+  - `passed`、1.0 秒；附件「傳染病認可檢驗機構名冊1150914.ods」、版本 `1150914`、下載網址 `/File/Get/35jzmDYRqYO_xsXgEqAivA`；頁面最後更新日期 `2023/9/27`。
+  - 名冊 176,078 bytes，SHA-256 `199d8a7c…` 與前一段手動抓的相同；raw revision `7e8f133cfda02d86b3fe1fb18a220eca0ebe79c7c308dcf9d24a844d5ecb9e64`。
+  - 解析結果 3,584 列、344 張證號、29 組疾病、12 組重複鍵，能力試驗日期 3,513／無需 40／空白 31。
+- 驗證：
+  - in-repo `pytest` 443 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 338,998 bytes，SHA-256 `068a90de977332e0884d8c84cbe8b6009fb8788c3638dccbb490ba1dd5167731`，63 個檔案，含 `cdc_source.py` 與 `importers/cdc_ods.py`；sdist 616,816 bytes。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：441 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
+- 尚未做：資料庫建置、AI 代審與上線、MCP 查詢、每日檢查與自動更新、採檢手冊 PDF。正式 data root 裡還沒有疾管署資料。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。
