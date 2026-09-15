@@ -21,6 +21,11 @@ from ..models import (
 SAMPLE_WARNING = "sample_only：目前只有合成示範資料，不可用於採檢、健保申報或採購；正式資料需另行同步、驗證與發布。"
 NHI_NOT_OFFICIAL_NOTE = "非健保署官方服務，內容以健保署公告為準。"
 TFDA_NOT_OFFICIAL_NOTE = "非食藥署官方服務，內容以食藥署公告為準。"
+CDC_NOT_OFFICIAL_NOTE = "非疾管署官方服務，內容以疾管署公告為準。"
+CDC_LABS_ACCEPTANCE_NOTE = (
+    "名冊命中只表示名冊上有這筆認可項目，不保證當次收件、送驗資格或服務可用；"
+    "疾管署未公告名冊固定更新頻率，請以 last_check_at 與名冊版本判斷資料新舊。"
+)
 _COVERAGE_NOTES = {
     "nhi_fee": "NHI laboratory scope 尚未完成 reviewer 核准；目前可查全表，不宣稱完整檢驗子集。",
     "tfda_device": (
@@ -91,6 +96,14 @@ def _default_locator(source_id: str, row_number: int) -> Any:
     return OdsLocator(sheet_name="sample", expanded_row_number=row_number)
 
 
+def _row_locator(source_id: str, row: dict[str, Any], index: int) -> Any:
+    if source_id == "cdc_recognized_labs" and "expanded_row_number" in row:
+        return OdsLocator(
+            sheet_name=row["sheet_name"], expanded_row_number=int(row["expanded_row_number"])
+        )
+    return _default_locator(source_id, int(row.get("source_row_number", index + 1)))
+
+
 def result_from_rows(
     *,
     operation: str,
@@ -127,10 +140,7 @@ def result_from_rows(
                 Evidence(
                     artifact_id=provenance.artifacts[0].artifact_id,
                     source_row_sha256=row.get("source_row_sha256", row_digest(row)),
-                    locator=_default_locator(
-                        source_id,
-                        int(row.get("source_row_number", index + 1)),
-                    ),
+                    locator=_row_locator(source_id, row, index),
                     raw_value_available=True,
                 )
             ],
@@ -152,6 +162,8 @@ def result_from_rows(
         notes.append(NHI_NOT_OFFICIAL_NOTE)
     if provenance.source_id == "tfda_device" and provenance.snapshot_id is not None:
         notes.append(TFDA_NOT_OFFICIAL_NOTE)
+    if provenance.source_id == "cdc_recognized_labs" and provenance.snapshot_id is not None:
+        notes.extend([CDC_NOT_OFFICIAL_NOTE, CDC_LABS_ACCEPTANCE_NOTE])
     if provenance.stale:
         warnings.extend(provenance.stale_reason_codes)
         notes.append("serving snapshot 已標記 stale；使用者應重新核對目前官方來源。")

@@ -17,6 +17,11 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 from .canonical import sha256_bytes, sha256_json
 from .fetch import FetchedArtifact, FetchError, fetch_https_bytes
+from .importers.cdc_labs import (
+    CDC_LABS_DATASET_NAME,
+    CDC_LABS_PRIMARY_ARTIFACT_ID,
+    CDC_LABS_PROVIDER,
+)
 from .importers.cdc_ods import (
     CDC_LABS_PARSER_VERSION,
     CDC_LABS_SCHEMA_VERSION,
@@ -27,13 +32,11 @@ from .importers.cdc_ods import (
     parse_cdc_labs_ods,
 )
 
-CDC_PROVIDER = "衛生福利部疾病管制署"
+CDC_PROVIDER = CDC_LABS_PROVIDER
 CDC_HOSTS = frozenset({"www.cdc.gov.tw"})
 CDC_LICENSE_NAME = "衛生福利部疾病管制署政府網站資料開放宣告"
 CDC_LICENSE_URL = "https://www.cdc.gov.tw/Category/FPage/TxkBIR9agw_IBRRmvn9TcQ"
 CDC_LABS_LANDING_URL = "https://www.cdc.gov.tw/Category/Page/02d-tR1nzB8QuflX-NmM_w"
-CDC_LABS_DATASET_NAME = "傳染病認可檢驗機構名冊"
-CDC_LABS_PRIMARY_ARTIFACT_ID = "cdc-labs-primary-ods"
 ODS_MEDIA_TYPE = ODS_MIMETYPE.decode("ascii")
 _ROSTER_LABEL_RE = re.compile(r"^傳染病認可檢驗機構名冊([0-9]{7})\.ods$")
 _LAST_UPDATED_RE = re.compile(r"最後更新日期\s*([0-9]{4}/[0-9]{1,2}/[0-9]{1,2})")

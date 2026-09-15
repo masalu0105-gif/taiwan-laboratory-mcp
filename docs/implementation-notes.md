@@ -952,6 +952,33 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：441 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
 - 尚未做：資料庫建置、AI 代審與上線、MCP 查詢、每日檢查與自動更新、採檢手冊 PDF。正式 data root 裡還沒有疾管署資料。
 
+### 疾管署第三步：認可檢驗機構名冊建資料庫、正式建置與 MCP 查詢（2026-09-15）
+
+- 前一段 commit `095338f` 的 GitHub CI run `34974892267` 成功。
+- 程式：
+  - `src/taiwan_lab_mcp/importers/cdc_labs.py`：
+    - 資料表 `cdc_lab_row`：每個方法子列一筆，`expanded_row_number` 唯一，另存 `sheet_name`、12 欄原值與 8 個搜尋欄（NFKC、casefold、空白收斂、引號與「臺→台」統一，和食藥署同一套）。
+    - `build_official_cdc_labs_snapshot`：原始檔與 `fetch.json` 相符、正式安裝版、四關審核（`ODS-R1-SOURCE`、`ODS-R1-STRUCTURE`、`ODS-R1-CONTENT`、`PUB-R1-OWNER`）都由審核規則指定的 reviewer 簽且沒有 critical／major、工作表版本等於附件版本、至少 10 題驗收題通過；任何一項不成立都不寫 curated 檔。
+    - 驗收題：輸入證號，定位 `ods_row`（工作表名稱＋列號），比對 row hash 與指定欄位。
+    - `build_cdc_labs_snapshot`：只給測試用的合成建置。
+  - 審核規則 `src/taiwan_lab_mcp/review_protocols/cdc-labs-r1-ai-review/1.json`：`status=owner_delegated`，記錄 owner 原話「Ai全程代審 不用特別備注未經人工審核」（`2026-09-15T10:54:18.876Z`）與「A 開始做疾管署」（`2026-09-15T13:02:51.597Z`）；reviewer `ai-reviewer:claude-opus-5`；`PUB-R1-OWNER` 範圍只限本機 MCP 服務，GitHub 下載包要 owner 另外決定。
+  - `src/taiwan_lab_mcp/cdc_labs_store.py`：讀服務中的名冊，沿用健保／食藥署的 pointer、manifest、audit、資料庫與原始檔 hash 驗證，再核對資料庫列數與列號；搜尋。
+  - `src/taiwan_lab_mcp/adapters/cdc.py`：正式模式的 `find_authorized_lab`／`get_lab_scope` 查名冊；採檢手冊工具在正式模式仍回 `data_unavailable`。`server.py` 的 `get_lab_scope` 改呼叫 adapter。
+  - 查詢結果每筆帶 12 欄原值與 `ods_row` 定位；notes 加「非疾管署官方服務，內容以疾管署公告為準。」與「名冊命中只表示名冊上有這筆認可項目，不保證當次收件、送驗資格或服務可用；疾管署未公告名冊固定更新頻率，請以 last_check_at 與名冊版本判斷資料新舊。」
+  - 出處說明依疾管署政府網站資料開放宣告寫提供機關、名冊名稱、版本、擷取日期、授權網址與「本服務非疾管署官方服務，未獲疾管署推薦或認可」。
+  - `get_data_status` 的 `cdc_recognized_labs` 讀名冊狀態；audit 審核關卡、publish 原始檔名 `source.ods` 與資料表、`SourceId` 加入內部來源代號 `cdc_authorized_labs`。
+- 規格解讀：
+  1. 比對順序：證號或疾病代碼完全相同 → 機構名稱或疾病名稱完全相同 → 證號、疾病代碼、機構、部門、疾病名稱、檢驗目的、檢驗方法任一欄包含查詢字；同一層依證號、列號排序。PRD 只寫「依疾病／目的／方法／證號／機構」，沒有規定排序。
+  2. 一頁筆數：public contract 的 `find_authorized_lab` 沒有 `limit`／`offset` 參數，沿用預設 20 筆並回 `total_matches` 與 `truncated`。owner 2026-09-15「一次 5 筆」的決定是針對有翻頁參數的健保、食藥署搜尋；使用者可以加縣市縮小範圍。
+  3. 過期：疾管署沒有公告名冊更新頻率（研究列為 UNVERIFIED），本專案每日檢查，超過 2 天沒有成功檢查標 `upstream_check_overdue`。這是 OD-05 另定門檻前的暫定值。
+  4. `coverage_status=complete`：名冊每一列都收錄，沒有需要逐碼判定的標籤。`rule_bundle_version` 寫 `none`，因為名冊沒有判定規則。
+- 測試：先寫 `tests/test_cdc_labs_official.py`（18 個，含參數化），跑出 17 failed、1 passed（「沒有正式名冊時回不可用」舊程式本來就成立）；實作後全過。
+- 驗證：
+  - in-repo `pytest` 461 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 355,215 bytes，SHA-256 `e95ef427f99822388af1de945d5ba80a57805c2abb303021dbde7b7ef708f677`，67 個檔案，含 `cdc_labs_store.py`、`importers/cdc_labs.py` 與新審核規則；sdist 633,970 bytes。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：459 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
+- 尚未做：真實名冊 AI 代審與本機上線（repo 外 `taiwan-lab-mcp-data\automation\publish_cdc_labs_official.py` 已寫好、還沒執行）、每日自動更新、採檢手冊 PDF。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

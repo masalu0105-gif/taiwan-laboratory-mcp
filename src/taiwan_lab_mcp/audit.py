@@ -28,6 +28,9 @@ def _is_hex64(value: Any) -> bool:
 _SERVING_GATES = {
     "nhi_fee": frozenset({"NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER"}),
     "tfda_devices": frozenset({"TFDA-R1-SOURCE", "TFDA-R1-SCHEMA", "PUB-R1-OWNER"}),
+    "cdc_authorized_labs": frozenset(
+        {"ODS-R1-SOURCE", "ODS-R1-STRUCTURE", "ODS-R1-CONTENT", "PUB-R1-OWNER"}
+    ),
 }
 
 

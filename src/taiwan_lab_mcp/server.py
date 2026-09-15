@@ -80,11 +80,7 @@ def find_authorized_lab(query: str, city: str | None = None) -> ToolResult:
 @mcp.tool()
 def get_lab_scope(query: str) -> ToolResult:
     """CDC recognized-lab compatibility alias. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; does_not_confirm_current_acceptance=true. 不得輸入病人資料。"""
-    result = cdc.find_authorized_lab(query)
-    payload = result.model_dump(mode="python")
-    payload["operation"] = "get_lab_scope"
-    payload["query"] = {"query": query}
-    return ToolResult.model_validate(payload)
+    return cdc.get_lab_scope(query)
 
 
 @mcp.tool()

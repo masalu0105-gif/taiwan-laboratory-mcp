@@ -589,6 +589,11 @@ def read_source_status(
 
         state = read_tfda_state(data_root, clock=lambda: now)
         descriptor_path = Path(data_root) / "manifests" / "current" / "tfda_devices.json"
+    elif source_id == "cdc_recognized_labs":
+        from .cdc_labs_store import read_cdc_labs_state
+
+        state = read_cdc_labs_state(data_root, clock=lambda: now)
+        descriptor_path = Path(data_root) / "manifests" / "current" / "cdc_authorized_labs.json"
     else:
         state = _unavailable("no_serving_snapshot")
         descriptor_path = Path(data_root) / "manifests" / "current" / f"{source_id}.json"

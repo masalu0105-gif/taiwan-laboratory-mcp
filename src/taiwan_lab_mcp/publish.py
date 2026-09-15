@@ -22,8 +22,16 @@ class PublishError(ValueError):
 
 
 # Per internal source id: the raw artifact file name and the curated row table.
-_RAW_ARTIFACT_NAMES = {"nhi_fee": "source.csv", "tfda_devices": "source.zip"}
-_CURATED_TABLES = {"nhi_fee": "nhi_fee", "tfda_devices": "tfda_source_row"}
+_RAW_ARTIFACT_NAMES = {
+    "nhi_fee": "source.csv",
+    "tfda_devices": "source.zip",
+    "cdc_authorized_labs": "source.ods",
+}
+_CURATED_TABLES = {
+    "nhi_fee": "nhi_fee",
+    "tfda_devices": "tfda_source_row",
+    "cdc_authorized_labs": "cdc_lab_row",
+}
 
 
 _DESCRIPTOR_KEYS = frozenset(

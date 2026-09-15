@@ -351,7 +351,14 @@ Record = Union[
 ]
 
 # Audit records use internal source ids; tfda_devices projects to public tfda_device (SDD 11).
-SourceId = Literal["cdc_manual", "cdc_recognized_labs", "nhi_fee", "tfda_device", "tfda_devices"]
+SourceId = Literal[
+    "cdc_manual",
+    "cdc_recognized_labs",
+    "cdc_authorized_labs",
+    "nhi_fee",
+    "tfda_device",
+    "tfda_devices",
+]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 _TRANSFORM_KEYS = frozenset({"parser", "schema", "normalization", "rules", "qualifier"})
 
