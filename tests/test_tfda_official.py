@@ -152,9 +152,11 @@ def test_build_keeps_every_source_row_with_labels(built):
 
 
 def test_list_matching_ranks_by_match_tier_then_blank_cancellation(built):
-    result = _adapter(built[0]).list_matching_license_records("糖化血色素", 20)
+    result = _adapter(built[0]).list_matching_license_records("糖化血色素")
     assert result.result_status == "ok"
-    assert _rows(result) == [8, 7, 4, 2, 3, 9]
+    assert (result.limit, result.truncated) == (5, True)
+    assert _rows(result) == [8, 7, 4, 2, 3]
+    assert _rows(_adapter(built[0]).list_matching_license_records("糖化血色素", 5, 5)) == [9]
     assert result.total_matches == 6
     assert result.evaluated_as_of == date(2026, 9, 15)
     assert result.evaluated_timezone == "Asia/Taipei"
@@ -179,8 +181,9 @@ def test_list_matching_ranks_by_match_tier_then_blank_cancellation(built):
 def test_preferences_change_order_but_not_totals(built):
     adapter = _adapter(built[0])
     for kwargs in ({"prefer_ivd": True}, {"prefer_main_category": "B"}):
-        result = adapter.list_matching_license_records("糖化血色素", 20, 0, **kwargs)
-        assert _rows(result) == [8, 4, 7, 2, 3, 9], kwargs
+        result = adapter.list_matching_license_records("糖化血色素", 5, 0, **kwargs)
+        second = adapter.list_matching_license_records("糖化血色素", 5, 5, **kwargs)
+        assert _rows(result) + _rows(second) == [8, 4, 7, 2, 3, 9], kwargs
         assert result.total_matches == 6
 
 
@@ -201,7 +204,7 @@ def test_filters_narrow_only_when_requested(built):
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"limit": 21},
+        {"limit": 6},
         {"limit": 0},
         {"offset": -1},
         {"ivd_scope": "yes"},
@@ -406,7 +409,8 @@ def test_reviewed_search_points_to_candidates_instead_of_not_found(built):
 
 def test_candidate_search_excludes_excluded_rows_and_reports_coverage(built):
     result = _adapter(built[0]).search_ivd_candidates("糖化血色素")
-    assert _rows(result) == [8, 7, 4, 2, 3, 9]
+    second = _adapter(built[0]).search_ivd_candidates("糖化血色素", None, 5, 5)
+    assert _rows(result) + _rows(second) == [8, 7, 4, 2, 3, 9]
     assert result.coverage_detail == {
         "reviewed_codes": 3,
         "total_codes": 3,
@@ -419,11 +423,29 @@ def test_candidate_search_excludes_excluded_rows_and_reports_coverage(built):
     assert blood.result_status == "not_found"
 
 
-def test_search_tools_share_the_twenty_row_page_limit(built):
+def test_search_tools_share_the_five_row_page_limit(built):
+    # Owner 2026-09-15: 20 rows were still too many; 5 rows, page further when needed.
     adapter = _adapter(built[0])
-    assert adapter.search_reviewed_ivd("糖化", None, 21).result_status == "invalid_request"
-    assert adapter.search_ivd_candidates("糖化", None, 21).result_status == "invalid_request"
-    assert adapter.search_ivd_candidates("糖化", None, 20).result_status == "ok"
+    assert adapter.search_reviewed_ivd("糖化", None, 6).result_status == "invalid_request"
+    assert adapter.search_ivd_candidates("糖化", None, 6).result_status == "invalid_request"
+    assert adapter.find_manufacturer("Synthetic", 6).result_status == "invalid_request"
+    assert adapter.search_ivd_candidates("糖化", None, 5).result_status == "ok"
+    assert adapter.search_ivd("糖化").limit == 5
+    assert adapter.search_reviewed_ivd("糖化").limit == 5
+
+
+def test_find_manufacturer_pages_like_the_other_searches(built):
+    adapter = _adapter(built[0])
+    first = adapter.find_manufacturer("Synthetic Maker")
+    rest = adapter.find_manufacturer("Synthetic Maker", 5, 5)
+    assert (first.limit, first.returned_count, first.total_matches, first.truncated) == (
+        5,
+        5,
+        9,
+        True,
+    )
+    assert (rest.returned_count, rest.truncated) == (4, False)
+    assert set(_rows(first)) | set(_rows(rest)) == {2, 3, 4, 5, 6, 7, 8, 9, 10}
 
 
 def test_official_status_attribution_and_deprecated_compare(built):

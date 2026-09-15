@@ -40,8 +40,9 @@ from ..tfda_store import (
 from ..util import norm
 from .base import invalid_result, load_sample, result_from_rows, unavailable_result
 
-# Owner decisions 2026-09-15: search results are summaries and one page has at most 20 rows.
-SEARCH_PAGE_MAX = 20
+# Owner decisions 2026-09-15: search results are summaries; one page first held 20 rows,
+# then 「20筆好像還是有點太多，還是給5筆 有需要的話可以再進一步找」.
+SEARCH_PAGE_MAX = 5
 _IVD_SCOPES = ("included", "excluded", "ambiguous", "unknown")
 _CANDIDATE_SCOPES = ("included", "ambiguous", "unknown")
 _MAIN_CATEGORIES = frozenset("ABCDEFGHIJKLMNOP")
@@ -57,9 +58,9 @@ _ALL_FIELDS = (
 # IVD tools filter manufacturers through their own parameter, so the query skips both roles.
 _IVD_FIELDS = ("license_no", "name_zh", "name_en", "effect", "classification")
 _SAMPLE_CLASSIFICATION = ("B 血液學及病理學", "B.9225 示範品項")
-_SEARCH_NOTE = "query 與 manufacturer 必須是非空字串；limit 為 1–20 的整數，offset 不得小於 0。"
+_SEARCH_NOTE = "query 與 manufacturer 必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0。"
 _LIST_NOTE = (
-    "query 必須是非空字串；limit 為 1–20 的整數，offset 不得小於 0；prefer_ivd 為布林值；"
+    "query 必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0；prefer_ivd 為布林值；"
     "prefer_main_category 與 main_category 為 A–P 單一大寫字母或 null；"
     "ivd_scope 為 included、excluded、ambiguous、unknown 或 null。"
 )
@@ -347,21 +348,21 @@ class TFDAAdapter:
         )
 
     def search_reviewed_ivd(
-        self, query: Any, manufacturer: Any = None, limit: Any = 20, offset: Any = 0
+        self, query: Any, manufacturer: Any = None, limit: Any = 5, offset: Any = 0
     ) -> ToolResult:
         return self._ivd_search(
             "search_reviewed_ivd", query, manufacturer, limit, offset, reviewed=True
         )
 
     def search_ivd_candidates(
-        self, query: Any, manufacturer: Any = None, limit: Any = 20, offset: Any = 0
+        self, query: Any, manufacturer: Any = None, limit: Any = 5, offset: Any = 0
     ) -> ToolResult:
         return self._ivd_search(
             "search_ivd_candidates", query, manufacturer, limit, offset, reviewed=False
         )
 
     def search_ivd(self, query: Any, manufacturer: Any = None) -> ToolResult:
-        result = self.search_reviewed_ivd(query, manufacturer, 20, 0)
+        result = self.search_reviewed_ivd(query, manufacturer, 5, 0)
         payload = result.model_dump(mode="python")
         payload["operation"] = "search_ivd"
         payload["query"] = {"query": query, "manufacturer": manufacturer}
@@ -385,25 +386,31 @@ class TFDAAdapter:
             "get_license", request, source, total, rows, _full_record, limit=20, offset=0
         )
 
-    def find_manufacturer(self, name: Any) -> ToolResult:
-        request = {"name": name}
-        if not _valid_text(name):
+    def find_manufacturer(self, name: Any, limit: Any = 5, offset: Any = 0) -> ToolResult:
+        request = {"name": name, "limit": limit, "offset": offset}
+        if not _valid_text(name) or not _valid_page(limit, offset):
             return invalid_result(
                 operation="find_manufacturer",
                 query=request,
                 data_mode=self.context.mode,
-                note="name 必須是非空字串。",
+                note="name 必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0。",
             )
         return self._summaries(
             "find_manufacturer",
             request,
-            SearchRequest(query=name, fields=("manufacturer",), rank_by_manufacturer=True),
+            SearchRequest(
+                query=name,
+                fields=("manufacturer",),
+                rank_by_manufacturer=True,
+                limit=limit,
+                offset=offset,
+            ),
         )
 
     def list_matching_license_records(
         self,
         query: Any,
-        limit: Any = 10,
+        limit: Any = 5,
         offset: Any = 0,
         prefer_ivd: Any = False,
         prefer_main_category: Any = None,

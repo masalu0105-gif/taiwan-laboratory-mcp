@@ -668,6 +668,27 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 還沒有 TFDA 下載包（資料庫約 160 MB，現行下載包上限 64 MiB 壓縮）。
   - 觀察：「糖化血色素」第一筆是已註銷的「糖化血色素檢測試劑組」，因為排序先看命中程度（品名開頭相同）才看註銷欄，這是 TFDA-06 規定的順序。
 
+### 搜尋一次最多 5 筆（2026-09-15）
+
+- owner 看完上線回報後回覆「20筆好像還是有點太多，還是給5筆 有需要的話可以再進一步找」。
+- 規格解讀：
+  - 套用到所有搜尋工具：健保 `search_payment_items`（相容名稱 `search_lab_code` 固定前 5 筆），食藥署 `search_reviewed_ivd`、`search_ivd_candidates`、`list_matching_license_records`、`find_manufacturer`（相容名稱 `search_ivd` 固定前 5 筆）。上限 5、預設 5；「進一步找」用 `offset` 翻頁或換更精確的關鍵字。
+  - `find_manufacturer` 原本沒有分頁參數、固定前 20 筆；改成 5 筆後沒有分頁就看不到第 6 筆以後，所以新增 `limit`（預設 5）與 `offset`（預設 0）。
+  - 單筆查詢不算搜尋，不改：`get_license` 同一字號全部列（最多 20 列；現有資料單一字號最多 4 列）、`get_points`、`get_payment_rule`；CDC 工具仍是合成示範資料，也不改。`compare_products` 維持 1–100 並回 deprecated。
+  - 前兩節「上限 100→50」「最多 20 筆」保留作歷史；OD-07 的「一頁 20 筆暫不再減」以括號註明同日改為 5 筆。
+- 改動：`adapters/nhi.py`、`adapters/tfda.py` 的 `SEARCH_PAGE_MAX` 20→5、預設值與說明文字「1–5」；`server.py` 工具簽名、預設值與說明（告訴 host AI 用 offset 翻頁）；public contract 五個 operation 的 `limit` 預設改 5、`find_manufacturer` 新增兩個參數（143,636 bytes）；PRD §5.3、TFDA-06、OD-07 註記，SDD §10.1／§10.2，TDD，README。
+- 測試：先改 `test_nhi_search_summary.py`（`limit=5` 可用、預設 5、`limit=6` 拒絕）與 `test_tfda_official.py`（預設 5 筆與第二頁、偏好與候選分兩頁、`limit=6` 拒絕、新增 `find_manufacturer` 翻頁測試），跑出 6 failed、35 passed，改程式後全過。
+- 驗證：
+  - in-repo `pytest` 371 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 301,116 bytes，SHA-256 `2d552c7635e60179193a7de46fed8792ff68dd2af183fdedf9fb34a74fb550ff`；sdist 554,646 bytes。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：369 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
+  - 新 wheel 裝進 uv tool 環境，本機工具以 MCP stdio 查正式資料（食藥署與健保都是已上線的資料，不需要重建）：
+    - `list_matching_license_records("糖化血色素")`：共 31 筆，回 5 筆、`truncated=true`，11,128 字（粗估 3,192 tokens；原本 20 筆 34,953 字）；`offset=5` 第二頁 5 筆；`limit=6` 回 `invalid_request`「limit 為 1–5 的整數」。
+    - `search_reviewed_ivd("HbA1c")`：共 73 筆，回 5 筆，10,984 字。
+    - `find_manufacturer("Roche")`：共 1,799 筆，回 5 筆，11,074 字；`offset=5` 第二頁 5 筆。
+    - `search_payment_items("檢")`：共 1,270 筆，回 5 筆，8,790 字（粗估 2,544 tokens；原本 20 筆 26,264 字）；`offset=1265` 回最後 5 筆、`truncated=false`；`search_lab_code("檢")` 同樣 5 筆。
+  - 第一次查詢 1,407 ms（含完整性檢查），之後 110–193 ms。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

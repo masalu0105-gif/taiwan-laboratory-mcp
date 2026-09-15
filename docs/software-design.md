@@ -572,7 +572,7 @@ scope_status, scope_rule_version, scope_basis_locator
 #### 查詢邊界
 
 - `get_points(code, as_of=null)` 的precedence完全依PRD §5.3：先驗所有參數；wrong type、空字串、非strict/無效`YYYY-MM-DD`回`invalid_request`。合法non-null `as_of`在讀source availability與查code前固定回`historical_query_unsupported`、`historical_truth_supported=false`、0 items；只有null才exact lookup serving全表並回原始有效期間與`scope_status`。不得回current points、日期涵蓋布林或其他可被誤讀為as-of事實的欄位。
-- `search_payment_items(query, limit=20, offset=0)` 是中性的正式全表候選搜尋，依序排序：exact code、exact official name／approved alias、prefix、substring，再以 code／`source_row_sha256` 穩定排序。每列都帶 `scope_status`、命中欄位與 truncation；每列 record 為 `NHISearchRecord`（`record_type=nhi_fee_summary`），只含 `code_raw`、`points`、起迄日、`possible_open_end_sentinel`、中英文名稱原文、`scope_status`、`note_preview`（前60字）、`note_chars`、`note_truncated`，`limit` 為1–20（owner 2026-09-15）；exact-code的`get_points`／`get_payment_rule`仍回完整`NHIRecord`。scope registry 未核准時仍可回候選，但 `coverage_status=review_incomplete`，不得稱完整 laboratory清單。
+- `search_payment_items(query, limit=5, offset=0)` 是中性的正式全表候選搜尋，依序排序：exact code、exact official name／approved alias、prefix、substring，再以 code／`source_row_sha256` 穩定排序。每列都帶 `scope_status`、命中欄位與 truncation；每列 record 為 `NHISearchRecord`（`record_type=nhi_fee_summary`），只含 `code_raw`、`points`、起迄日、`possible_open_end_sentinel`、中英文名稱原文、`scope_status`、`note_preview`（前60字）、`note_chars`、`note_truncated`，`limit` 為1–5（owner 2026-09-15，由1–20改為1–5）；exact-code的`get_points`／`get_payment_rule`仍回完整`NHIRecord`。scope registry 未核准時仍可回候選，但 `coverage_status=review_incomplete`，不得稱完整 laboratory清單。
 - 舊`search_lab_code`是`search_payment_items`的相容wrapper，回傳相同候選與scope warning；`get_payment_rule(query)` 的 wrong type／trim 後空字串回 `invalid_request`，合法非空但沒有 exact code 回 `not_found`，不套固定碼長 regex；命中時只回原始備註／定位，不作名稱搜尋或個案申報判定。
 - 只有 `decision_status=approved` 的 alias參與production search。Alias registry每列保存 `alias_raw`、`code`、language、basis type/URL/locator、rule version/hash、reviewer/time/status；normalize collision時回所有命中候選，不做任意 winner。
 - 空結果只表示 serving snapshot 未命中，不代表「健保不給付」。
@@ -616,11 +616,11 @@ Join 只使用「醫器次類別一～三」解析出的正式 code：
 
 Query capabilities分開：
 
-- `search_reviewed_ivd(query, manufacturer=null, limit=20, offset=0)`只回逐碼`decision_status=approved`的`included`；nullable `manufacturer`只篩選製造商角色。`TFDA-R1-IVD`未完成時仍可回已核准列，但`coverage_status=review_incomplete`；沒有included而candidate tool有命中時回`candidate_matches_available`，不能用空結果暗示沒有IVD。Serving snapshot本身仍必須有`PUB-R1-OWNER`。
-- `search_ivd_candidates(query, manufacturer=null, limit=20, offset=0)` 回 `included|ambiguous|unknown`候選；nullable `manufacturer`只篩選製造商角色；必帶 `coverage_status`、reviewed code分子/分母、舊制/缺碼/未知列數、命中依據及 truncation。Keyword只能召回候選。
+- `search_reviewed_ivd(query, manufacturer=null, limit=5, offset=0)`只回逐碼`decision_status=approved`的`included`；nullable `manufacturer`只篩選製造商角色。`TFDA-R1-IVD`未完成時仍可回已核准列，但`coverage_status=review_incomplete`；沒有included而candidate tool有命中時回`candidate_matches_available`，不能用空結果暗示沒有IVD。Serving snapshot本身仍必須有`PUB-R1-OWNER`。
+- `search_ivd_candidates(query, manufacturer=null, limit=5, offset=0)` 回 `included|ambiguous|unknown`候選；nullable `manufacturer`只篩選製造商角色；必帶 `coverage_status`、reviewed code分子/分母、舊制/缺碼/未知列數、命中依據及 truncation。Keyword只能召回候選。
 - 舊 `search_ivd` 是 reviewed-only相容 alias；若沒有included命中但 candidate tool有命中，回 `result_status=candidate_matches_available`與候選tool指引，不回 `not_found`。
 - `get_license` 可回全部一般許可source rows並逐列附scope。~~`list_matching_license_records`只並列原始許可欄位與來源，不比較、排序優劣或推論等效。~~
-- `list_matching_license_records(query, limit=10, offset=0, prefer_ivd=false, prefer_main_category=null, ivd_scope=null, main_category=null)`（`D-015`／PRD TFDA-06）搜尋全部 `tfda_source_row`，不因註銷、缺碼或舊制排除。
+- `list_matching_license_records(query, limit=5, offset=0, prefer_ivd=false, prefer_main_category=null, ivd_scope=null, main_category=null)`（`D-015`／PRD TFDA-06）搜尋全部 `tfda_source_row`，不因註銷、缺碼或舊制排除。
   - 比對欄位：字號、中英文品名、申請商、製造商、效能、主／次類別原文。
   - 排序key：`(match_tier, preference_miss, cancellation_raw_nonempty, license_no, source_row_number)`。
     - `match_tier` 0＝normalized字號完全相同，1＝中文或英文品名完全相同，2＝品名prefix，3＝品名substring，4＝其他欄位substring。
@@ -632,7 +632,7 @@ Query capabilities分開：
   - SQLite `tfda_source_row` 保存34欄原文、`source_row_sha256`、`source_row_number`，另存正規化搜尋欄（NFKC、casefold、空白壓縮，再把各種引號統一、「臺」改「台」；原文不變）、ISO日期、主類別字母、分類代碼、`ivd_scope`與rule version。`tfda_classification`每個有值的主／次類別一列；`tfda_permit_group`為view。
   - 比對用SQLite `instr()`子字串，兩個字的查詢也能命中（FTS5 trigram查不到少於3字）；排序、`total_matches`與分頁都在SQLite內完成，不把十萬列讀進記憶體。
   - `search_reviewed_ivd`／`search_ivd_candidates`的`query`比對字號、品名、效能與類別原文，製造商只由`manufacturer`參數篩選。
-  - 四個搜尋operation每筆回`tfda_device_summary`摘要、`limit` 1–20；`get_license`回完整`tfda_device`。
+  - ~~四個搜尋operation每筆回`tfda_device_summary`摘要、`limit` 1–20~~ 五個搜尋operation（含`find_manufacturer(name, limit=5, offset=0)`）每筆回`tfda_device_summary`摘要、`limit` 1–5、預設5，可用`offset`翻頁（owner 2026-09-15）；`get_license`回完整`tfda_device`。
   - 附表A/B/C以外代碼、缺代碼與舊制列為`unknown`，所以正式build的`coverage_status`維持`review_incomplete`，結果附TFDA專用coverage說明。
   - 完整性檢查（descriptor、manifest、audit、資料庫與raw hash）第一次查詢時完整執行；之後在descriptor bytes與build／raw／check檔案大小、修改時間都沒變時沿用結果，stale仍每次依當下時間計算。
   - TFDA stale依官方每7日更新、兩個週期（14日）未成功檢查即`upstream_check_overdue`，沿用NHI規則，待OD-05另定。

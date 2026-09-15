@@ -90,8 +90,9 @@ def _official_summary(row: dict[str, Any], matched_by: list[str]) -> NHISearchRe
     )
 
 
-# Owner decisions 2026-09-15: bounded under host output limits, then "20 筆就很夠了".
-SEARCH_PAGE_MAX = 20
+# Owner decisions 2026-09-15: bounded under host output limits, then 20 rows, then
+# 「20筆好像還是有點太多，還是給5筆 有需要的話可以再進一步找」.
+SEARCH_PAGE_MAX = 5
 
 
 def _valid_text(value: Any) -> bool:
@@ -233,14 +234,14 @@ class NHIAdapter:
             return state
         return None
 
-    def search_payment_items(self, query: Any, limit: Any = 20, offset: Any = 0) -> ToolResult:
+    def search_payment_items(self, query: Any, limit: Any = 5, offset: Any = 0) -> ToolResult:
         request = {"query": query, "limit": limit, "offset": offset}
         if not _valid_text(query) or not _valid_page(limit, offset):
             return invalid_result(
                 operation="search_payment_items",
                 query=request,
                 data_mode=self.context.mode,
-                note="query 必須是非空字串；limit 為 1–20 的整數，offset 不得小於 0。",
+                note="query 必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0。",
             )
         state_or_unavailable = self._sample_or_unavailable(
             "search_payment_items", request, "NHI official serving snapshot 尚未建立。"
@@ -319,7 +320,7 @@ class NHIAdapter:
         )
 
     def search_lab_code(self, query: Any) -> ToolResult:
-        result = self.search_payment_items(query, 20, 0)
+        result = self.search_payment_items(query, 5, 0)
         payload = result.model_dump(mode="python")
         payload["operation"] = "search_lab_code"
         payload["query"] = {"query": query}

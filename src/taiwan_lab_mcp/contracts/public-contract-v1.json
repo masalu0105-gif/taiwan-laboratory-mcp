@@ -305,7 +305,7 @@
           "type": "integer",
           "required": false,
           "nullable": false,
-          "default": 20
+          "default": 5
         },
         {
           "name": "offset",
@@ -330,7 +330,7 @@
           },
           "limit": {
             "type": "integer",
-            "default": 20
+            "default": 5
           },
           "offset": {
             "type": "integer",
@@ -480,7 +480,7 @@
           "type": "integer",
           "required": false,
           "nullable": false,
-          "default": 20
+          "default": 5
         },
         {
           "name": "offset",
@@ -516,7 +516,7 @@
           },
           "limit": {
             "type": "integer",
-            "default": 20
+            "default": 5
           },
           "offset": {
             "type": "integer",
@@ -552,7 +552,7 @@
           "type": "integer",
           "required": false,
           "nullable": false,
-          "default": 20
+          "default": 5
         },
         {
           "name": "offset",
@@ -588,7 +588,7 @@
           },
           "limit": {
             "type": "integer",
-            "default": 20
+            "default": 5
           },
           "offset": {
             "type": "integer",
@@ -693,6 +693,20 @@
           "type": "string",
           "required": true,
           "nullable": false
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 5
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 0
         }
       ],
       "response_schema": "QueryResultV1",
@@ -707,6 +721,14 @@
         "properties": {
           "name": {
             "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "default": 5
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
           }
         },
         "type": "object",
@@ -731,7 +753,7 @@
           "type": "integer",
           "required": false,
           "nullable": false,
-          "default": 10
+          "default": 5
         },
         {
           "name": "offset",
@@ -784,7 +806,7 @@
           },
           "limit": {
             "type": "integer",
-            "default": 10
+            "default": 5
           },
           "offset": {
             "type": "integer",

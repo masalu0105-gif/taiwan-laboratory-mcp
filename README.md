@@ -78,7 +78,7 @@ macOS／Linux 可用 `python3 -m venv .venv` 建立環境，再以 `.venv/bin/py
 | TFDA | `search_reviewed_ivd`、`search_ivd_candidates`、`search_ivd`、`get_license`、`find_manufacturer`、`list_matching_license_records`、`compare_products` |
 | 保留介面 | `standards_status`、`eqa_status`；只回報尚未設定的狀態 |
 
-CDC 的採檢、容器、運送等工具目前回傳同一完整疾病紀錄，保留原骨架的工具名稱與上下文。Sample 僅涵蓋麻疹、登革熱，以及示範用實驗室、HbA1c 健保項目和 IVD 各一筆。查 HPV DNA 會得到 `not_found` 與 sample 警示。NHI official serving snapshot 目前只支援 current exact lookup、搜尋與分頁；`as_of` 歷史查詢會明確拒絕。搜尋一次最多 20 筆，每筆只回摘要（備註前 60 字），完整備註用 `get_payment_rule` 或 `get_points` 查單筆。每筆結果帶實驗室 scope 判定；資料內仍有未判定代碼時標示 `coverage_status=review_incomplete`。TFDA 搜尋同樣一次最多 20 筆、每筆只回摘要，完整欄位用 `get_license`；`list_matching_license_records` 查全部許可證（含已註銷、舊制與沒有分類代碼的），預設不偏任何類別。查詢結果不可直接當作醫療器材廣告或效能宣傳素材。
+CDC 的採檢、容器、運送等工具目前回傳同一完整疾病紀錄，保留原骨架的工具名稱與上下文。Sample 僅涵蓋麻疹、登革熱，以及示範用實驗室、HbA1c 健保項目和 IVD 各一筆。查 HPV DNA 會得到 `not_found` 與 sample 警示。NHI official serving snapshot 目前只支援 current exact lookup、搜尋與分頁；`as_of` 歷史查詢會明確拒絕。搜尋一次最多 5 筆（要看更多用 `offset` 翻頁），每筆只回摘要（備註前 60 字），完整備註用 `get_payment_rule` 或 `get_points` 查單筆。每筆結果帶實驗室 scope 判定；資料內仍有未判定代碼時標示 `coverage_status=review_incomplete`。TFDA 搜尋同樣一次最多 5 筆、每筆只回摘要，完整欄位用 `get_license`；`list_matching_license_records` 查全部許可證（含已註銷、舊制與沒有分類代碼的），預設不偏任何類別。查詢結果不可直接當作醫療器材廣告或效能宣傳素材。
 
 ## 文件與參與
 
