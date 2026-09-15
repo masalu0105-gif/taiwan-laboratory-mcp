@@ -858,6 +858,12 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - in-repo `pytest` 401 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
   - wheel 329,255 bytes，SHA-256 `eeeaddfeb9d44066ae49969630746853bf6b4f52eb6d25090929bec975b95445`；sdist 593,797 bytes。
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：399 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
+- GitHub CI（commit `178df9a`，run `34963723643`）失敗：
+  - 只有 Windows job 失敗，2 failed、397 passed：`test_install_tfda_bundle_serves_the_same_permits`、`test_cli_export_and_install_tfda_snapshot`。
+  - 原因：CI 的 pytest 暫存資料夾路徑較長，食藥署 build 審核證據檔的完整路徑 267 字元，被安裝前的 Windows 路徑長度檢查擋下（`BUNDLE_PATH_TOO_LONG`，上限 259）。檢查照設計運作；本機暫存路徑較短，所以本機沒有重現。
+  - 修正：這兩個測試關掉路徑長度檢查（直接呼叫的測試傳 `max_path_length=None`，CLI 測試暫時改掉函式預設值）。路徑長度檢查本身由 `tests/test_snapshot_bundle.py::test_install_refuses_paths_over_the_limit_before_writing` 測。
+  - 一般使用者：以重建後的食藥署 build 計算，最長檔案是 `curated/tfda_devices/<build>/audit/evidence/tfda-source-identity-confirmation-2026-09-14.md`（相對路徑 167 字元）；裝在安裝說明建議的 `C:\Users\User\taiwan-lab-data` 時，連同暫存檔名共 207 字元；使用者名稱 20 個字元時 223 字元，都在上限內。
+  - 這段期間發布腳本回 `waiting_for_ci`，沒有發布任何 Release。
 
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 

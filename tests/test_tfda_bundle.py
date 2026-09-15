@@ -193,6 +193,9 @@ def test_install_tfda_bundle_serves_the_same_permits(tmp_path, distribution):
         bundle_path=Path(exported["bundle_path"]),
         expected_sha256=exported["bundle_sha256"],
         actor="unit-test-installer",
+        # Windows CI temp folders push these paths past the MAX_PATH guard, which
+        # tests/test_snapshot_bundle.py covers on its own.
+        max_path_length=None,
     )
 
     assert (installed["result"], installed["generation"]) == ("installed", 1)
@@ -218,6 +221,7 @@ def test_install_tfda_bundle_serves_the_same_permits(tmp_path, distribution):
         source_id="tfda_devices",
         bundle_path=Path(exported["bundle_path"]),
         actor="unit-test-installer",
+        max_path_length=None,
     )
     assert again["result"] == "already_installed"
 
@@ -251,8 +255,13 @@ def test_bundle_limits_fit_the_tfda_database():
     assert MAX_BUNDLE_UNCOMPRESSED_BYTES == 512 * 1024 * 1024
 
 
-def test_cli_export_and_install_tfda_snapshot(tmp_path, distribution, capsys):
+def test_cli_export_and_install_tfda_snapshot(tmp_path, distribution, capsys, monkeypatch):
     from taiwan_lab_mcp.data_cli import main
+    from taiwan_lab_mcp.snapshot_bundle import install_snapshot_bundle
+
+    # Windows CI temp folders push these paths past the MAX_PATH guard, which
+    # tests/test_snapshot_bundle.py covers on its own.
+    monkeypatch.setitem(install_snapshot_bundle.__kwdefaults__, "max_path_length", None)
 
     source_root = tmp_path / "source"
     _serve_official(source_root)
