@@ -2,14 +2,17 @@
 
 Owner 2026-09-15 started the CDC source (「A 開始做疾管署」) and delegated its reviews to AI
 (OD-04). The official page lists shared site links next to the roster attachment, so the roster
-is picked by its label and the download must carry the same file name. This path keeps the
+is picked by its label and the download must carry the same file name. The sync keeps the
 fetched ODS as an immutable raw revision and writes a staged validation report; it never
-creates a candidate, curated build or current descriptor.
+creates a candidate, curated build or current descriptor. The daily check records its result
+on the current descriptor without switching the served roster.
 """
 
 from __future__ import annotations
 
+import json
 import re
+from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -23,6 +26,7 @@ from .importers.cdc_labs import (
     CDC_LABS_PROVIDER,
 )
 from .importers.cdc_ods import (
+    CDC_LABS_COLUMNS,
     CDC_LABS_PARSER_VERSION,
     CDC_LABS_SCHEMA_VERSION,
     CDC_LABS_SOURCE_ID,
@@ -307,3 +311,350 @@ def run_cdc_labs_upstream_sync(
     }
     _write_immutable_json(data_root / PurePosixPath(report_relative), report)
     return report
+
+
+_DIFF_LIST_LIMIT = 50
+_DIFF_CHANGE_LIMIT = 5
+# Disease code, purpose and method tell the rows of one certificate apart.
+_ROW_KEY_COLUMNS = (4, 6, 7)
+
+
+def _short(value: str, limit: int = 80) -> str:
+    text = " ".join((value or "").split())
+    if not text:
+        return "（空白）"
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def _read_cdc_labs_serving(data_root: Path) -> dict[str, Any] | None:
+    from .sync import SyncError
+
+    descriptor_path = data_root / "manifests" / "current" / f"{CDC_LABS_SOURCE_ID}.json"
+    if not descriptor_path.is_file():
+        return None
+    try:
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        serving_id = descriptor["serving_curated_build_id"]
+        if serving_id is None:
+            return None
+        manifest_path = data_root / PurePosixPath(descriptor["manifest_data_root_relative_path"])
+        manifest_bytes = manifest_path.read_bytes()
+        if sha256_bytes(manifest_bytes) != descriptor["manifest_sha256"]:
+            raise SyncError("CURRENT_POINTER_INTEGRITY", "check")
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        artifact = manifest["artifacts"][0]
+        return {
+            "descriptor": descriptor,
+            "serving_id": serving_id,
+            "artifact_sha256": artifact["sha256"],
+            "artifact_relative": artifact["data_root_relative_path"],
+            "roster_version": manifest["official_version"]["label"],
+            "transform": manifest["transform"],
+        }
+    except (KeyError, IndexError, OSError, TypeError, UnicodeDecodeError, ValueError) as exc:
+        if isinstance(exc, SyncError):
+            raise
+        raise SyncError("CURRENT_POINTER_INTEGRITY", "check") from exc
+
+
+def _read_hashed_raw(data_root: Path, relative: str, expected_sha256: str) -> bytes:
+    from .sync import SyncError
+
+    payload = (data_root / PurePosixPath(relative)).read_bytes()
+    if sha256_bytes(payload) != expected_sha256:
+        raise SyncError("RAW_ARTIFACT_READBACK_MISMATCH", "check")
+    return payload
+
+
+def _rows_by_certificate(payload: bytes) -> dict[str, list[tuple[str, ...]]]:
+    rows: dict[str, list[tuple[str, ...]]] = {}
+    for row in parse_cdc_labs_ods(payload).rows:
+        rows.setdefault(row.values[0], []).append(row.values)
+    return rows
+
+
+def _row_label(values: tuple[str, ...]) -> str:
+    return f"{values[5]}（{values[4]}）{values[6]}／{values[7]}"
+
+
+def _certificate_changes(
+    before_rows: list[tuple[str, ...]], after_rows: list[tuple[str, ...]]
+) -> list[dict[str, Any]]:
+    def grouped(rows: list[tuple[str, ...]]) -> dict[tuple[str, ...], list[tuple[str, ...]]]:
+        groups: dict[tuple[str, ...], list[tuple[str, ...]]] = {}
+        for values in rows:
+            groups.setdefault(tuple(values[i] for i in _ROW_KEY_COLUMNS), []).append(values)
+        return groups
+
+    before, after = grouped(before_rows), grouped(after_rows)
+    changes: list[dict[str, Any]] = []
+    for key in sorted(before.keys() | after.keys()):
+        old_rows, new_rows = before.get(key, []), after.get(key, [])
+        for old, new in zip(old_rows, new_rows):
+            fields = [
+                {"column": column, "before": old_value, "after": new_value}
+                for column, old_value, new_value in zip(CDC_LABS_COLUMNS, old, new)
+                if old_value != new_value
+            ]
+            if fields:
+                changes.append({"change": "changed", "row": _row_label(new), "fields": fields})
+        changes.extend(
+            {"change": "removed", "row": _row_label(old)} for old in old_rows[len(new_rows) :]
+        )
+        changes.extend(
+            {"change": "added", "row": _row_label(new)} for new in new_rows[len(old_rows) :]
+        )
+    return changes
+
+
+def _cdc_labs_upstream_diff(serving_payload: bytes, candidate_payload: bytes) -> dict[str, Any]:
+    serving = _rows_by_certificate(serving_payload)
+    candidate = _rows_by_certificate(candidate_payload)
+    serving_rows = Counter(values for rows in serving.values() for values in rows)
+    candidate_rows = Counter(values for rows in candidate.values() for values in rows)
+
+    def listed(certificates: set[str], rows: dict[str, list[tuple[str, ...]]]) -> list[dict]:
+        return [
+            {"certificate_no": item, "institution": rows[item][0][2], "rows": len(rows[item])}
+            for item in sorted(certificates)
+        ]
+
+    # Row order inside one certificate does not count as a change.
+    changed = [
+        {
+            "certificate_no": certificate,
+            "institution": candidate[certificate][0][2],
+            "changes": _certificate_changes(serving[certificate], candidate[certificate]),
+        }
+        for certificate in sorted(serving.keys() & candidate.keys())
+        if Counter(serving[certificate]) != Counter(candidate[certificate])
+    ]
+    return {
+        "row_counts": {
+            "serving": sum(serving_rows.values()),
+            "candidate": sum(candidate_rows.values()),
+        },
+        "certificate_counts": {"serving": len(serving), "candidate": len(candidate)},
+        "added_certificates": listed(candidate.keys() - serving.keys(), candidate),
+        "removed_certificates": listed(serving.keys() - candidate.keys(), serving),
+        "changed_certificates": changed,
+        "rows_only_in_candidate": sum((candidate_rows - serving_rows).values()),
+        "rows_only_in_serving": sum((serving_rows - candidate_rows).values()),
+    }
+
+
+def _cdc_labs_diff_markdown(
+    diff: dict[str, Any],
+    *,
+    checked_at: str,
+    serving_id: str,
+    serving_version: str,
+    candidate_version: str,
+) -> str:
+    rows = diff["row_counts"]
+    certificates = diff["certificate_counts"]
+    changed = diff["changed_certificates"]
+    exceeds = abs(rows["candidate"] - rows["serving"]) * 10 > rows["serving"]
+    lines = [
+        "# 疾管署傳染病認可檢驗機構名冊：上游有新版",
+        "",
+        f"- 檢查時間（UTC）：{checked_at}",
+        f"- 名冊版本：服務中 {serving_version} → 新版 {candidate_version}",
+        f"- 比對的服務中版本：`{serving_id}`",
+        f"- 資料列：服務中 {rows['serving']:,} 列 → 新版 {rows['candidate']:,} 列",
+        f"- 證號：服務中 {certificates['serving']:,} 個 → 新版 {certificates['candidate']:,} 個",
+        f"- 新增證號 {len(diff['added_certificates']):,} 個、消失證號 "
+        f"{len(diff['removed_certificates']):,} 個、內容有改的證號 {len(changed):,} 個",
+        f"- 內容不同的資料列：新版有、舊版沒有 {diff['rows_only_in_candidate']:,} 列；"
+        f"舊版有、新版沒有 {diff['rows_only_in_serving']:,} 列",
+        "- 資料列變動超過 10%：" + ("是" if exceeds else "否"),
+        "",
+        f"## 內容有改的證號（{len(changed):,} 個）",
+        "",
+    ]
+    words = {"added": "新增", "removed": "刪除"}
+    for item in changed[:_DIFF_LIST_LIMIT]:
+        parts = []
+        for change in item["changes"][:_DIFF_CHANGE_LIMIT]:
+            if change["change"] == "changed":
+                fields = "、".join(
+                    f"{field['column']} {_short(field['before'])} → {_short(field['after'])}"
+                    for field in change["fields"]
+                )
+                parts.append(f"{change['row']}：{fields}")
+            else:
+                parts.append(f"{words[change['change']]} {change['row']}")
+        extra = len(item["changes"]) - _DIFF_CHANGE_LIMIT
+        lines.append(
+            f"- {item['certificate_no']} {item['institution']}："
+            + "；".join(parts)
+            + (f"；另 {extra} 項" if extra > 0 else "")
+        )
+    if not changed:
+        lines.append("（無）")
+    elif len(changed) > _DIFF_LIST_LIMIT:
+        lines.append(f"- …另外 {len(changed) - _DIFF_LIST_LIMIT:,} 個，完整清單見 diff.json")
+    lines.append("")
+    for title, items in (
+        ("新增的證號", diff["added_certificates"]),
+        ("消失的證號", diff["removed_certificates"]),
+    ):
+        lines.extend([f"## {title}（{len(items):,} 個）", ""])
+        lines.extend(
+            f"- {item['certificate_no']} {item['institution']}（{item['rows']:,} 列）"
+            for item in items[:_DIFF_LIST_LIMIT]
+        )
+        if not items:
+            lines.append("（無）")
+        elif len(items) > _DIFF_LIST_LIMIT:
+            lines.append(f"- …另外 {len(items) - _DIFF_LIST_LIMIT:,} 個，完整清單見 diff.json")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def run_cdc_labs_upstream_check(
+    data_root: Path,
+    *,
+    actor: str,
+    landing_url: str = CDC_LABS_LANDING_URL,
+    opener=None,
+    clock=None,
+) -> dict[str, Any]:
+    """Check the official page once and record the result without switching the served roster.
+
+    The same ODS bytes as the serving build record a successful check. A different ODS keeps
+    serving the current build, marks a review-pending candidate and writes a diff report. A
+    failed fetch or validation keeps serving the current build and marks it stale.
+    """
+
+    from .publish import publish_operational_check
+    from .sync import _write_immutable_json, _write_new_file
+
+    data_root = Path(data_root)
+    serving = _read_cdc_labs_serving(data_root)
+    report = run_cdc_labs_upstream_sync(
+        data_root, landing_url=landing_url, opener=opener, clock=clock
+    )
+    discovery = report["discovery"] or {}
+    summary: dict[str, Any] = {
+        "result": None,
+        "sync_report_data_root_relative_path": report["report_data_root_relative_path"],
+        "diff_data_root_relative_path": None,
+        "diff_summary_data_root_relative_path": None,
+        "candidate_raw_revision_id": None,
+        "roster_version": discovery.get("roster_version_raw"),
+        "failed_stage": None if report["status"] == "passed" else report["stage"],
+        "error_code": report["error_code"],
+        "rows": (report["summary"] or {}).get("rows"),
+        "check_id": None,
+        "generation": None,
+        "stale": None,
+        "stale_reason_codes": None,
+    }
+    if serving is None:
+        summary["result"] = "no_serving_snapshot"
+        return summary
+
+    descriptor = serving["descriptor"]
+    saved_sha256 = report["fetch"]["sha256"] if report["raw_revision_id"] else None
+    seen_version = discovery["roster_version_raw"] if saved_sha256 else None
+    candidate_id = None
+    candidate_status = "none"
+    if report["status"] != "passed":
+        result = "failed"
+        check_result = "failed"
+        reasons = ["upstream_verification_failed"]
+        if saved_sha256 is not None and saved_sha256 != serving["artifact_sha256"]:
+            candidate_status = "rejected"
+            candidate_id = report["raw_revision_id"]
+            reasons.append("newer_candidate_rejected")
+        seen_sha256 = saved_sha256 or descriptor["latest_seen_artifact_sha256"]
+        seen_version = seen_version or descriptor["latest_seen_version"]
+    elif saved_sha256 == serving["artifact_sha256"]:
+        result = "unchanged"
+        check_result = "success"
+        reasons = []
+        seen_sha256 = saved_sha256
+    else:
+        result = "changed"
+        check_result = "success"
+        candidate_status = "review_pending"
+        candidate_id = report["raw_revision_id"]
+        reasons = ["newer_candidate_pending_review"]
+        seen_sha256 = saved_sha256
+        diff = _cdc_labs_upstream_diff(
+            _read_hashed_raw(data_root, serving["artifact_relative"], serving["artifact_sha256"]),
+            _read_hashed_raw(
+                data_root, report["raw_artifact_data_root_relative_path"], saved_sha256
+            ),
+        )
+        attempt_dir = PurePosixPath(report["report_data_root_relative_path"]).parent
+        diff_relative = str(attempt_dir / "diff.json")
+        summary_relative = str(attempt_dir / "diff-summary.md")
+        _write_immutable_json(
+            data_root / PurePosixPath(diff_relative),
+            {
+                "diff_schema_version": 1,
+                "source_id": CDC_LABS_SOURCE_ID,
+                "checked_at": report["completed_at"],
+                "serving_snapshot_id": serving["serving_id"],
+                "serving_roster_version": serving["roster_version"],
+                "serving_raw_artifact_sha256": serving["artifact_sha256"],
+                "candidate_raw_revision_id": candidate_id,
+                "candidate_roster_version": seen_version,
+                "candidate_raw_artifact_sha256": saved_sha256,
+                **diff,
+            },
+        )
+        _write_new_file(
+            data_root / PurePosixPath(summary_relative),
+            _cdc_labs_diff_markdown(
+                diff,
+                checked_at=report["completed_at"],
+                serving_id=serving["serving_id"],
+                serving_version=serving["roster_version"],
+                candidate_version=seen_version,
+            ).encode("utf-8"),
+        )
+        summary["diff_data_root_relative_path"] = diff_relative
+        summary["diff_summary_data_root_relative_path"] = summary_relative
+
+    check = {
+        "check_schema_version": 1,
+        "check_id": f"{CDC_LABS_SOURCE_ID}-check-{report['attempt_id'].lower()}",
+        "source_id": CDC_LABS_SOURCE_ID,
+        "generation": descriptor["generation"] + 1,
+        "serving_snapshot_id": serving["serving_id"],
+        "serving_curated_build_id": serving["serving_id"],
+        "checked_at": report["completed_at"],
+        "latest_seen_version": seen_version,
+        "latest_seen_artifact_sha256": seen_sha256,
+        "latest_candidate_id": candidate_id,
+        "latest_candidate_status": candidate_status,
+        "check_result": check_result,
+        "failed_stage": summary["failed_stage"],
+        "error_code": summary["error_code"],
+        "stale": bool(reasons),
+        "stale_reason_codes": reasons,
+        "freshness_policy_version": descriptor["freshness_policy_version"],
+        "content_age_status": descriptor["content_age_status"],
+        "content_age_evidence": descriptor["content_age_evidence"],
+    }
+    event = publish_operational_check(
+        data_root,
+        CDC_LABS_SOURCE_ID,
+        check,
+        expected_generation=descriptor["generation"],
+        actor=actor,
+    )
+    summary.update(
+        {
+            "result": result,
+            "candidate_raw_revision_id": candidate_id,
+            "check_id": check["check_id"],
+            "generation": event["generation"],
+            "stale": check["stale"],
+            "stale_reason_codes": reasons,
+        }
+    )
+    return summary

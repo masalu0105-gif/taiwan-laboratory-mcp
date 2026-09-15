@@ -41,8 +41,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     sync_parser.add_argument("--json", action="store_true")
     check_parser = subparsers.add_parser("check")
-    check_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
-    check_parser.add_argument("--publisher-oid", required=True)
+    check_parser.add_argument(
+        "source_id", choices=["nhi_fee", "tfda_devices", "cdc_authorized_labs"]
+    )
+    check_parser.add_argument(
+        "--publisher-oid",
+        help="Required for nhi_fee and tfda_devices; cdc_authorized_labs does not take it.",
+    )
     check_parser.add_argument("--actor", required=True)
     check_parser.add_argument("--data-dir", required=True, type=Path)
     check_parser.add_argument(
@@ -193,8 +198,23 @@ def main(argv: list[str] | None = None) -> int:
         from .publish import PublishError
         from .sync import SyncError, run_nhi_upstream_check
 
+        if args.source_id == "cdc_authorized_labs":
+            if args.publisher_oid is not None:
+                parser.error("check cdc_authorized_labs does not take --publisher-oid")
+        elif args.publisher_oid is None:
+            parser.error(f"check {args.source_id} requires --publisher-oid")
         try:
-            if args.auto_publish and args.source_id == "tfda_devices":
+            if args.source_id == "cdc_authorized_labs" and args.auto_publish:
+                from . import cdc_labs_autoupdate
+
+                summary = cdc_labs_autoupdate.run_cdc_labs_auto_update(
+                    args.data_dir, actor=args.actor
+                )
+            elif args.source_id == "cdc_authorized_labs":
+                from . import cdc_source
+
+                summary = cdc_source.run_cdc_labs_upstream_check(args.data_dir, actor=args.actor)
+            elif args.auto_publish and args.source_id == "tfda_devices":
                 from . import tfda_autoupdate
 
                 summary = tfda_autoupdate.run_tfda_auto_update(

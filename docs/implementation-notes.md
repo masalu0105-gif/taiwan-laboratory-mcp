@@ -997,6 +997,32 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 每日檢查與自動更新還沒接進排程；超過 2 天沒有成功檢查，查詢會標示可能過期。
 - 尚未做：每日自動更新、採檢手冊 PDF、疾管署資料是否放進 GitHub 下載包。
 
+### 疾管署第五步：名冊每日自動更新（2026-09-15）
+
+- 依據：owner 2026-09-15「A 開始做疾管署」（A＝跟健保、食藥署一樣自動檢查、全部通過就換上）；PRD OD-04、SDD D-011 已記。
+- 新增審核規則檔 `review_protocols/cdc-labs-r1-auto-review/1.json`：reviewer 寫成 `automated-check:cdc-labs-auto-update`，範圍只限本機 MCP，不含 GitHub 下載包。
+- `cdc_source.run_cdc_labs_upstream_check`：每天下載一次官方名冊。
+  - 和服務中名冊 bytes 相同：記一次成功檢查，不建新版。
+  - 不同：服務中名冊照舊回答，標「有新版等待審核」，寫 `diff.json` 與中文 `diff-summary.md`（依證號列出新增、消失、內容有改；同一證號內以疾病代碼＋檢驗目的＋檢驗方法對列）。
+  - 下載或驗證失敗：照舊回答，標 `upstream_verification_failed`。
+- `cdc_labs_autoupdate.run_cdc_labs_auto_update`：有新版時依序檢查，任何一項沒過就不換版：
+  - 資料列數、證號數變動各不超過 10%；除「最近一次年度能力試驗審查」（每年本來就會改）外，每欄空白比例上升不超過 2 個百分點。
+  - 讀名冊的規則（解析器、欄位、正規化版本）要和服務中版本相同；程式改了讀法就擋下（`roster_reading_rules_changed`），等重新審核。
+  - 另寫的 DOM 解析器挑 12 題驗收題（先挑 AI 審核時的涵蓋清單，再補平均分布的列），程式比對全過。
+  - 資料庫寫好、換版前，另寫的解析器逐列比對整個資料庫 0 筆不符（證據 `cdc-labs-auto-roundtrip`）。
+  - 只允許正式安裝版執行。
+- 同一個被擋下的新版，隔天回報 `already_reported=true`，排程不重複寄信。
+- CLI：`taiwan-lab-data check cdc_authorized_labs --actor … --data-dir … --auto-publish --json`；疾管署不帶 `--publisher-oid`，健保、食藥署仍必須帶。
+- 排程腳本（repo 外）`taiwan-lab-mcp-data\automation\Invoke-NhiDailyCheck.ps1` 在食藥署之後加疾管署一段：自動換版寄「已自動更新」信；擋下或換版失敗只寄一次通知；沒變動只寫進 STATUS.txt；檢查失敗寄信並把 STATUS 第一行標異常。
+- 測試：先寫 `tests/test_cdc_labs_autoupdate.py`（10 個，含參數化），跑出 `ModuleNotFoundError`；實作後全過。
+- 驗證：
+  - 全部測試 471 passed；ruff check、ruff format --check、git diff --check 通過。
+  - wheel／sdist 建到 scratchpad，安裝包內容檢查通過。第一次建出的 sdist 夾帶 `uv.lock`（本次 `uv run` 自動產生、沒有被 git 追蹤）；檔案移到 scratchpad 後重建，包內不再有。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：471 passed，import 路徑為該 venv；安裝後 contract 143,636 bytes 與 repo 相同。
+- 限制：
+  - 自動換版中途失敗留下的 build 資料夾，會讓同一新版之後重試回 `IMMUTABLE_BUILD_EXISTS`（食藥署相同）；排程只寄一次信。
+  - 真正的自動換版要等疾管署出新版才會跑到；目前是 synthetic 名冊測過。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

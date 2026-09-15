@@ -1,0 +1,67 @@
+{
+  "protocol_id": "cdc-labs-r1-auto-review",
+  "protocol_version": "1",
+  "source_id": "cdc_authorized_labs",
+  "status": "owner_delegated",
+  "approved_date": "2026-09-15",
+  "supersedes_for_roster_updates": "cdc-labs-r1-ai-review/1",
+  "delegation": {
+    "channel": "Claude Code conversation",
+    "owner_message": "A 開始做疾管署",
+    "message_timestamp": "2026-09-15T13:02:51.597Z",
+    "context": "Reply to the choice whether new CDC versions should be checked and switched automatically like NHI and TFDA (option A); the owner chose A and asked to start the CDC work. The first roster was reviewed under cdc-labs-r1-ai-review/1."
+  },
+  "identity_assurance": "local_asserted",
+  "reviewer_id": "automated-check:cdc-labs-auto-update",
+  "reviewer_role": "automated_checker_delegated_by_owner",
+  "reviewer_note": "Automated checks run by the daily schedule under the owner's delegation; no person or AI reads each new roster version.",
+  "gates": {
+    "ODS-R1-SOURCE": {
+      "purpose": "The new raw artifact is the recognized laboratory roster attached to the official CDC page.",
+      "checklist": [
+        "The landing page is https://www.cdc.gov.tw/Category/Page/02d-tR1nzB8QuflX-NmM_w on www.cdc.gov.tw over HTTPS.",
+        "Exactly one attachment link is labelled 傳染病認可檢驗機構名冊<7-digit version>.ods and points to a /File/Get/ path on www.cdc.gov.tw.",
+        "The download file name equals the attachment label and the roster sheet name carries the same version.",
+        "fetch.json is canonical and its artifact size and SHA-256 match the stored raw ODS."
+      ]
+    },
+    "ODS-R1-STRUCTURE": {
+      "purpose": "The new version keeps the reviewed structure and changed by an ordinary amount.",
+      "checklist": [
+        "The ODS passes the archive limits and the header equals the 12 researched columns in order.",
+        "Row count and distinct certificate count each changed by at most 10 percent from the serving version.",
+        "The blank rate of each column except 最近一次年度能力試驗審查 rose by at most 2 percentage points.",
+        "At least 10 golden cases chosen and parsed by an independent DOM parser pass against the new raw ODS.",
+        "Before the pointer switches, the independent parser compares every curated row with the raw ODS: sheet name, expanded row number, row hash and all 12 raw values."
+      ]
+    },
+    "ODS-R1-CONTENT": {
+      "purpose": "The served values keep the meaning reviewed under cdc-labs-r1-ai-review/1.",
+      "checklist": [
+        "The roster reading rules (parser, schema and normalization identity) equal those of the serving build; a version read by changed rules is held back.",
+        "Query results keep the attribution, the roster version, does_not_confirm_current_acceptance=true and the note 非疾管署官方服務，內容以疾管署公告為準。"
+      ]
+    },
+    "PUB-R1-OWNER": {
+      "purpose": "A version that passes every automated check may replace the served version on the local MCP runtime.",
+      "scope": "local_mcp_serving",
+      "checklist": [
+        "Only an installed distribution may publish.",
+        "A version that fails any check is not published; the served version keeps serving and is marked as having a newer candidate.",
+        "The owner is emailed after each automatic publish and after each held-back version.",
+        "Review records and golden cases name the reviewer as automated-check:cdc-labs-auto-update, never as a person or as the owner.",
+        "GitHub Release download bundles are not covered by this protocol version."
+      ]
+    }
+  },
+  "golden_cases": {
+    "minimum_distinct_official_cases": 10,
+    "selection": "Rows matching the coverage list of cdc-labs-r1-ai-review/1 first when such rows exist, then evenly spaced rows until 12 cases exist.",
+    "comparison": "Compare each expected value, sheet name, expanded row number and row hash with an independent parse of the raw ODS."
+  },
+  "severity_policy": {
+    "critical": "reject",
+    "major": "reject_until_resolved_in_a_new_build",
+    "minor": "record_and_accept"
+  }
+}
