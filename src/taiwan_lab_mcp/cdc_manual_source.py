@@ -9,6 +9,7 @@ descriptor. Reading the PDF layout is a later step (ADR 0003).
 
 from __future__ import annotations
 
+import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path, PurePosixPath
@@ -341,3 +342,288 @@ def run_cdc_manual_upstream_sync(
     }
     _write_immutable_json(data_root / PurePosixPath(report_relative), report)
     return report
+
+
+_DIFF_LIST_LIMIT = 50
+
+
+def _read_cdc_manual_serving(data_root: Path) -> dict[str, Any] | None:
+    from .sync import SyncError
+
+    descriptor_path = data_root / "manifests" / "current" / f"{CDC_MANUAL_SOURCE_ID}.json"
+    if not descriptor_path.is_file():
+        return None
+    try:
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        serving_id = descriptor["serving_curated_build_id"]
+        if serving_id is None:
+            return None
+        manifest_path = data_root / PurePosixPath(descriptor["manifest_data_root_relative_path"])
+        manifest_bytes = manifest_path.read_bytes()
+        if sha256_bytes(manifest_bytes) != descriptor["manifest_sha256"]:
+            raise SyncError("CURRENT_POINTER_INTEGRITY", "check")
+        manifest = json.loads(manifest_bytes.decode("utf-8"))
+        return {
+            "descriptor": descriptor,
+            "serving_id": serving_id,
+            "raw_revision_id": manifest["raw_revision_id"],
+            "artifact_sha256": manifest["artifacts"][0]["sha256"],
+            "manual_version": manifest["official_version"]["label"],
+            "transform": manifest["transform"],
+            "db_path": data_root
+            / PurePosixPath(manifest["publication"]["curated_build_relative_path"]),
+        }
+    except (KeyError, IndexError, OSError, TypeError, UnicodeDecodeError, ValueError) as exc:
+        if isinstance(exc, SyncError):
+            raise
+        raise SyncError("CURRENT_POINTER_INTEGRITY", "check") from exc
+
+
+def _served_rows(db_path: Path) -> list[dict[str, Any]]:
+    from .tfda_store import connect_readonly
+
+    connection = connect_readonly(db_path)
+    try:
+        return [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM cdc_specimen_requirement ORDER BY row_number"
+            )
+        ]
+    finally:
+        connection.close()
+
+
+def _parsed_rows(payload: bytes) -> list[dict[str, Any]]:
+    """Rows of a manual PDF shaped like the curated table (raw and display text, row hash)."""
+
+    from .importers import cdc_manual
+    from .importers.cdc_manual_layout import parse_cdc_specimen_layout
+
+    parsed = parse_cdc_specimen_layout(cdc_manual.extract_cdc_manual_layout(payload))
+    return [
+        cdc_manual.curated_specimen_row(row, number, parsed.summary)
+        for number, row in enumerate(parsed.rows, start=1)
+    ]
+
+
+def _row_label(row: dict[str, Any]) -> str:
+    parts = (
+        row["table_section"],
+        row["disease_display"],
+        row["specimen_display"],
+        row["collection_time_display"],
+    )
+    return "｜".join(" ".join(str(part or "").split()) for part in parts)
+
+
+def _manual_diff(serving: list[dict[str, Any]], candidate: list[dict[str, Any]]) -> dict[str, Any]:
+    def grouped(rows: list[dict[str, Any]]) -> dict[str, list[str]]:
+        groups: dict[str, list[str]] = {}
+        for row in rows:
+            groups.setdefault(_row_label(row), []).append(row["source_row_sha256"])
+        return groups
+
+    before, after = grouped(serving), grouped(candidate)
+    return {
+        "row_counts": {"serving": len(serving), "candidate": len(candidate)},
+        "disease_counts": {
+            "serving": len({row["disease_display"] for row in serving}),
+            "candidate": len({row["disease_display"] for row in candidate}),
+        },
+        "changed_rows": sorted(
+            label
+            for label in before.keys() & after.keys()
+            if sorted(before[label]) != sorted(after[label])
+        ),
+        "added_rows": sorted(after.keys() - before.keys()),
+        "removed_rows": sorted(before.keys() - after.keys()),
+    }
+
+
+def _manual_diff_markdown(
+    diff: dict[str, Any],
+    *,
+    checked_at: str,
+    serving_id: str,
+    serving_version: str,
+    candidate_version: str,
+) -> str:
+    rows, diseases = diff["row_counts"], diff["disease_counts"]
+    lines = [
+        "# 疾管署傳染病檢體採檢手冊：上游有新版",
+        "",
+        f"- 檢查時間（UTC）：{checked_at}",
+        f"- 手冊版本：服務中 {serving_version} → 新版 {candidate_version}",
+        f"- 比對的服務中版本：`{serving_id}`",
+        f"- 第 2 章資料列：服務中 {rows['serving']:,} 列 → 新版 {rows['candidate']:,} 列",
+        f"- 疾病：服務中 {diseases['serving']:,} 種 → 新版 {diseases['candidate']:,} 種",
+        f"- 內容有改的列：{len(diff['changed_rows']):,} 列；新版才有的列："
+        f"{len(diff['added_rows']):,} 列；新版沒有的列：{len(diff['removed_rows']):,} 列",
+        "",
+    ]
+    for title, items in (
+        ("內容有改的列", diff["changed_rows"]),
+        ("新版才有的列", diff["added_rows"]),
+        ("新版沒有的列", diff["removed_rows"]),
+    ):
+        lines.extend([f"## {title}（{len(items):,} 列；節｜疾病｜檢體｜採檢時間）", ""])
+        lines.extend(f"- {item}" for item in items[:_DIFF_LIST_LIMIT])
+        if not items:
+            lines.append("（無）")
+        elif len(items) > _DIFF_LIST_LIMIT:
+            lines.append(f"- …另外 {len(items) - _DIFF_LIST_LIMIT:,} 列，完整清單見 diff.json")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def run_cdc_manual_upstream_check(
+    data_root: Path,
+    *,
+    actor: str,
+    landing_url: str = CDC_MANUAL_LANDING_URL,
+    opener=None,
+    clock=None,
+) -> dict[str, Any]:
+    """Check the official manual page once and record the result without switching the manual.
+
+    The same raw revision as the serving build records a successful check. A different one keeps
+    serving the current build, marks a review-pending candidate and writes a row diff. A failed
+    fetch or validation keeps serving the current build and marks it stale.
+    """
+
+    from .importers.cdc_manual_layout import CdcManualLayoutError
+    from .publish import publish_operational_check
+    from .sync import _write_immutable_json, _write_new_file
+
+    data_root = Path(data_root)
+    serving = _read_cdc_manual_serving(data_root)
+    report = run_cdc_manual_upstream_sync(
+        data_root, landing_url=landing_url, opener=opener, clock=clock
+    )
+    discovery = report["discovery"] or {}
+    summary: dict[str, Any] = {
+        "result": None,
+        "sync_report_data_root_relative_path": report["report_data_root_relative_path"],
+        "diff_data_root_relative_path": None,
+        "diff_summary_data_root_relative_path": None,
+        "diff_error_code": None,
+        "candidate_raw_revision_id": None,
+        "manual_version": discovery.get("manual_version_raw"),
+        "failed_stage": None if report["status"] == "passed" else report["stage"],
+        "error_code": report["error_code"],
+        "check_id": None,
+        "generation": None,
+        "stale": None,
+        "stale_reason_codes": None,
+    }
+    if serving is None:
+        summary["result"] = "no_serving_snapshot"
+        return summary
+
+    descriptor = serving["descriptor"]
+    raw_revision_id = report["raw_revision_id"]
+    saved_sha256 = report["fetch"]["manual"]["sha256"] if raw_revision_id else None
+    seen_version = discovery["manual_version_raw"] if raw_revision_id else None
+    candidate_id = None
+    candidate_status = "none"
+    if report["status"] != "passed":
+        result = "failed"
+        check_result = "failed"
+        reasons = ["upstream_verification_failed"]
+        if raw_revision_id is not None and raw_revision_id != serving["raw_revision_id"]:
+            candidate_status = "rejected"
+            candidate_id = raw_revision_id
+            reasons.append("newer_candidate_rejected")
+        seen_sha256 = saved_sha256 or descriptor["latest_seen_artifact_sha256"]
+        seen_version = seen_version or descriptor["latest_seen_version"]
+    elif raw_revision_id == serving["raw_revision_id"]:
+        result = "unchanged"
+        check_result = "success"
+        reasons = []
+        seen_sha256 = saved_sha256
+    else:
+        result = "changed"
+        check_result = "success"
+        candidate_status = "review_pending"
+        candidate_id = raw_revision_id
+        reasons = ["newer_candidate_pending_review"]
+        seen_sha256 = saved_sha256
+        try:
+            candidate_payload = (
+                data_root / PurePosixPath(report["raw_artifact_data_root_relative_paths"]["manual"])
+            ).read_bytes()
+            diff = _manual_diff(_served_rows(serving["db_path"]), _parsed_rows(candidate_payload))
+        except (CdcManualLayoutError, CdcManualImportError) as exc:
+            # The auto update reads the new manual again and reports the same code.
+            summary["diff_error_code"] = exc.code
+        else:
+            attempt_dir = PurePosixPath(report["report_data_root_relative_path"]).parent
+            diff_relative = str(attempt_dir / "diff.json")
+            summary_relative = str(attempt_dir / "diff-summary.md")
+            _write_immutable_json(
+                data_root / PurePosixPath(diff_relative),
+                {
+                    "diff_schema_version": 1,
+                    "source_id": CDC_MANUAL_SOURCE_ID,
+                    "checked_at": report["completed_at"],
+                    "serving_snapshot_id": serving["serving_id"],
+                    "serving_manual_version": serving["manual_version"],
+                    "serving_raw_revision_id": serving["raw_revision_id"],
+                    "candidate_raw_revision_id": candidate_id,
+                    "candidate_manual_version": seen_version,
+                    **diff,
+                },
+            )
+            _write_new_file(
+                data_root / PurePosixPath(summary_relative),
+                _manual_diff_markdown(
+                    diff,
+                    checked_at=report["completed_at"],
+                    serving_id=serving["serving_id"],
+                    serving_version=serving["manual_version"],
+                    candidate_version=seen_version,
+                ).encode("utf-8"),
+            )
+            summary["diff_data_root_relative_path"] = diff_relative
+            summary["diff_summary_data_root_relative_path"] = summary_relative
+
+    check = {
+        "check_schema_version": 1,
+        "check_id": f"{CDC_MANUAL_SOURCE_ID}-check-{report['attempt_id'].lower()}",
+        "source_id": CDC_MANUAL_SOURCE_ID,
+        "generation": descriptor["generation"] + 1,
+        "serving_snapshot_id": serving["serving_id"],
+        "serving_curated_build_id": serving["serving_id"],
+        "checked_at": report["completed_at"],
+        "latest_seen_version": seen_version,
+        "latest_seen_artifact_sha256": seen_sha256,
+        "latest_candidate_id": candidate_id,
+        "latest_candidate_status": candidate_status,
+        "check_result": check_result,
+        "failed_stage": summary["failed_stage"],
+        "error_code": summary["error_code"],
+        "stale": bool(reasons),
+        "stale_reason_codes": reasons,
+        "freshness_policy_version": descriptor["freshness_policy_version"],
+        "content_age_status": descriptor["content_age_status"],
+        "content_age_evidence": descriptor["content_age_evidence"],
+    }
+    event = publish_operational_check(
+        data_root,
+        CDC_MANUAL_SOURCE_ID,
+        check,
+        expected_generation=descriptor["generation"],
+        actor=actor,
+    )
+    summary.update(
+        {
+            "result": result,
+            "candidate_raw_revision_id": candidate_id,
+            "check_id": check["check_id"],
+            "generation": event["generation"],
+            "stale": check["stale"],
+            "stale_reason_codes": reasons,
+        }
+    )
+    return summary

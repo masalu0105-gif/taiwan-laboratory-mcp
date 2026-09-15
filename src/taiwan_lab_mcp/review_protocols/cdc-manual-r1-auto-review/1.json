@@ -1,0 +1,65 @@
+{
+  "protocol_id": "cdc-manual-r1-auto-review",
+  "protocol_version": "1",
+  "source_id": "cdc_specimen_manual",
+  "status": "owner_delegated",
+  "approved_date": "2026-09-15",
+  "delegation": {
+    "channel": "Claude Code conversation",
+    "owner_question": "疾管署資料要不要跟健保、食藥署一樣，官方出新版時自動檢查、全部通過就換上？",
+    "owner_message": "A 開始做疾管署",
+    "message_timestamp": "2026-09-15T13:02:51.597Z",
+    "context": "Option A: new CDC versions are checked and switched automatically like NHI and TFDA. The manual itself was first reviewed under cdc-manual-r1-ai-review/1, which records the owner's delegation of every CDC review to AI (「Ai全程代審 不用特別備注未經人工審核」, 2026-09-15T10:54:18.876Z)."
+  },
+  "identity_assurance": "local_asserted",
+  "reviewer_id": "automated-check:cdc-manual-auto-update",
+  "reviewer_role": "automated_checker_delegated_by_owner",
+  "reviewer_note": "Automated checks run by the installed program on the daily schedule; no person and no AI reads the new manual. By the owner's decision, query results carry no note saying so.",
+  "supersedes_for_manual_updates": "cdc-manual-r1-ai-review/1",
+  "gates": {
+    "CDC-R1-SOURCE": {
+      "purpose": "Both raw artifacts are the specimen manual and its revision table attached to the official CDC page.",
+      "checklist": [
+        "The attachments are chosen by label on the official manual page and carry the same version.",
+        "Both files are PDFs whose sizes and SHA-256 match fetch.json.",
+        "Every chapter 2 table page header prints the attachment version as 版次."
+      ]
+    },
+    "CDC-R1-LAYOUT": {
+      "purpose": "Every chapter 2 row is rebuilt from the PDF layout with each cell in its own column.",
+      "checklist": [
+        "pypdfium2 and PDFium equal the packaged qualifier spec.",
+        "The reading rules (layout rules version, curated columns, normalization, qualifier spec) equal those of the served build.",
+        "Rows and distinct diseases change by at most 10%; the blank rate of any column except 應保存種類（應保存時間） rises by at most 2 percentage points.",
+        "Every golden case picked from the new manual passes.",
+        "Before the pointer switches, every stored cell equals the Word table tag text of the same PDF."
+      ]
+    },
+    "CDC-R1-CONTENT": {
+      "purpose": "Each served row keeps the presentation reviewed under cdc-manual-r1-ai-review/1.",
+      "checklist": [
+        "The display text rules are unchanged, so wrapped lines are joined and numbered items stay on their own lines as reviewed.",
+        "應保存種類（應保存時間） keeps its official name and results carry not_pre_submission_storage=true."
+      ]
+    },
+    "PUB-R1-OWNER": {
+      "purpose": "The build may be served by the local MCP runtime.",
+      "scope": "local_mcp_serving",
+      "checklist": [
+        "Only an installed distribution may publish.",
+        "When any check fails, the served manual keeps answering, marked as having a newer candidate, and the owner is emailed once.",
+        "GitHub Release download bundles are not covered by this protocol version."
+      ]
+    }
+  },
+  "golden_cases": {
+    "minimum_distinct_official_cases": 10,
+    "selection": "The coverage list of cdc-manual-r1-ai-review/1 where the new manual has such a row, then evenly spaced rows, twelve cases in all.",
+    "comparison": "Compare each expected raw and display value, the locator and the row hash with the rows read from the new manual PDF."
+  },
+  "severity_policy": {
+    "critical": "reject",
+    "major": "reject_until_resolved_in_a_new_build",
+    "minor": "record_and_accept"
+  }
+}

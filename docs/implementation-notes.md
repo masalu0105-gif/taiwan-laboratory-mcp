@@ -1172,6 +1172,44 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 真實手冊（1150826，scratchpad `m2` 試建，未進正式 data root）：370 列、2,960 格全部相同，沒有不符。
 - 測試：`tests/test_cdc_manual_official.py` 增為 17 個；先寫正式建置測試跑出 9 errors（還沒有正式建置函式），再補 Word 標記比對測試跑出 2 failed；實作後全過。`tests/test_package_contents.py` 必含檔加上新的審核規則檔。
 - 驗證：全部測試 551 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 含新的審核規則檔，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 551 passed，contract 與 repo 位元組相同（144,136 bytes）。
+- 提交：commit `26c48bd`，CI 通過（run 34998184007）。
+
+### 疾管署採檢手冊第五步：真實手冊 AI 代審與本機上線（2026-09-16）
+
+- 本機工具：commit `26c48bd` 的 wheel（SHA-256 `805640ee…`）連同 `cdc-manual` extra，以 `uv pip install --python <uv tool 環境>` 就地裝進 uv tool 環境（不用 `uv tool install --force`，避免刪掉正在執行的 MCP server 環境）。裝完 pypdfium2 5.13.0、安裝身分 `distribution`，安裝檔與 repo 逐檔相同。
+- 上線腳本（repo 外）`taiwan-lab-mcp-data\automation\publish_cdc_manual_official.py`，頁面圖工具 `render_cdc_manual_rows.py`：
+  - 下載：官網手冊與修訂對照表存進正式 data root，raw revision `d9d84c9d0c351915cf786c9364da3ab105c392c4cae3b74505c174429e6d6ef6`（手冊 4,046,218 bytes、修訂對照表 780,660 bytes，1150826 版，和版面試驗是同一份）。依據 OD-04（疾管署資料照健保、食藥署自動檢查、通過就換）。
+  - 讀表：55 個表格頁、370 列（8 欄 208、7 欄 162）、跨頁接格 127 處；每頁頁首版次 1150826、核准日期 115年08月26日；Word 標記逐格比對 0 不符。
+  - 驗收題 12 題：先照審核規則的涵蓋清單挑（注意事項有編號、同疾病多檢體、合併格、顯示文字有接行、跨頁接續、7 欄表格、2.7 節），再補平均分布的列；每題寫 8 欄原文與 8 欄顯示文字，程式比對全部通過。
+  - AI 看圖核對：12 題逐一對照手冊頁面圖（合併格在第一次裁切範圍外的，另外裁較高的圖；第 20 頁頂端那一題另看第 19 頁最後一列），12 題都和頁面同一列一致。發現兩處是手冊原文本身的寫法，照原文保留：第 14 頁鼠疫抗凝固全血採檢量印成「以 含 抗 凝 劑 EDTA）」（沒有其他列都有的「（肝素或」）；第 51 頁腹瀉群聚採檢時間印成「立即採檢（發病 3 日內」（沒有右括號）。
+  - 加 `--apply` 建置並發布：build `cdc_specimen_manual-build-9edea0db676f66a359af2df316b290c7bbdd4b36654b9e3ff0f7e644495c2822`，generation 1，DB SHA-256 `8dee7260…`，manifest SHA-256 `ffbd6535…`，publish event `publish-da0e2da6…`；切換前 Word 標記比對 370 列、2,960 格 0 不符（審核證據 `word-tag-check.json`）。
+- 證據（repo 外）`taiwan-lab-mcp-data\cdc-manual-review\official-1150826\`：`cdc-manual-golden-ai-approved-1150826.json`、`cdc-manual-golden-rows-1150826.json`、`cdc-manual-visual-review-1150826.json`、12 題裁切圖與加高裁切圖。
+- 以安裝版開新行程查同一個 data root：
+  - `get_data_status`：`cdc_manual` available、版次 1150826、`coverage_status=complete`、沒有過期；名冊、健保、食藥署仍 available。
+  - `search_disease`：「傷寒」18 列、「登革熱」4 列、「SARS」8 列、「M痘」2 列。
+  - `get_transport_requirement("登革熱")` 第一列（第 17 頁，印刷頁 7）：送驗方式「2-8oC↵(B 類感染性物質P650 包裝)」、保存欄「病毒株(30日)；陽性血清(30 日)」，`not_pre_submission_storage=true`，附顯名與「非疾管署官方服務」註記。
+- 本對話裡的 MCP 工具（Claude 啟動時載入的舊程式）查「登革熱」仍回 `data_unavailable`／「CDC 採檢手冊正式資料尚未完成。」；要重開 Claude Desktop 才會用新程式。
+- 限制：每日檢查還沒接上手冊，超過 2 天沒有成功檢查，手冊查詢會標可能過期（下一步處理）。
+
+### 疾管署採檢手冊第六步：每日自動更新（2026-09-16，OD-04）
+
+- 依據：owner 2026-09-15「A 開始做疾管署」（A＝跟健保、食藥署一樣自動檢查、全部通過就換上），名冊已照此做；手冊比照。
+- `cdc_manual_source.run_cdc_manual_upstream_check`：每天下載一次手冊與修訂對照表。
+  - 和服務中版本是同一個 raw revision：記一次成功檢查，不建新版。
+  - 不同：服務中手冊照舊回答，標「有新版等待審核」，寫 `diff.json` 與中文 `diff-summary.md`（第 2 章列數、疾病數，內容有改／新版才有／新版沒有的列，每列以「節｜疾病｜檢體｜採檢時間」表示）。新手冊讀不出來時只記 `diff_error_code`，自動更新會再讀一次並回報同一個錯誤。
+  - 下載或驗證失敗：照舊回答，標 `upstream_verification_failed`。
+- `cdc_manual_autoupdate.run_cdc_manual_auto_update`：有新版時依序檢查，任何一項沒過就不換版：
+  - 第 2 章列數、疾病數變動各不超過 10%；除「應保存種類（應保存時間）」（7 欄表格本來就沒有）外，每欄空白比例上升不超過 2 個百分點。
+  - 讀手冊的規則（拆表規則版本、資料表欄位、正規化、PDFium 規格）要和服務中版本相同；每份 PDF 自己的版面 hash 不算。程式改了讀法就擋下（`manual_reading_rules_changed`），等重新審核。
+  - 驗收題 12 題由新手冊挑：先照 AI 審核時的涵蓋清單（新手冊有這種列才挑），再補平均分布的列；列數太少時同一列用不同題號重複。
+  - 正式建置照舊檢查頁首版次、驗收題，並在換版前以 Word 標記逐格比對資料庫。
+  - 只允許正式安裝版執行。同一個被擋下的新版，隔天回報 `already_reported=true`。
+- 審核規則檔 `review_protocols/cdc-manual-r1-auto-review/1.json`：reviewer 寫成 `automated-check:cdc-manual-auto-update`，範圍只限本機 MCP，不含 GitHub 下載包。
+- CLI：`taiwan-lab-data check cdc_specimen_manual --actor … --data-dir … [--auto-publish] --json`；不帶 `--publisher-oid`。
+- 排程腳本（repo 外）`taiwan-lab-mcp-data\automation\Invoke-NhiDailyCheck.ps1` 在名冊之後加採檢手冊一段：自動換版寄「已自動更新」信（附差異摘要）；擋下或換版失敗只寄一次；沒變動只寫進 STATUS.txt；檢查失敗寄信並把 STATUS 第一行標異常。改完以 PowerShell parser 檢查 0 個語法錯誤，檔頭 UTF-8 BOM 保留。
+- 限制：新版能不能自動換上，靠的是 Word 標記比對這一道獨立檢查；驗收題是從新手冊本身挑的。真正的自動換版要等疾管署出新版才會跑到；目前是合成手冊測過。
+- 測試：先寫 `tests/test_cdc_manual_autoupdate.py`（8 個），跑出 8 failed；實作後全過。`tests/test_package_contents.py` 必含檔加上新的審核規則檔。
+- 驗證：全部測試 559 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 559 passed，contract 與 repo 位元組相同（144,136 bytes）。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
