@@ -1,0 +1,97 @@
+{
+  "protocol_id": "cdc-labs-r1-ai-review",
+  "protocol_version": "2",
+  "source_id": "cdc_authorized_labs",
+  "status": "owner_delegated",
+  "approved_date": "2026-09-15",
+  "delegation": {
+    "channel": "Claude Code conversation",
+    "owner_question": "疾管署採檢手冊（檢體怎麼採、怎麼送）和認可檢驗機構名單，要誰審核才上線？",
+    "owner_message": "Ai全程代審 不用特別備注未經人工審核",
+    "message_timestamp": "2026-09-15T10:54:18.876Z",
+    "context": "The owner delegated every CDC review, including the recognition program content review, to AI and asked that results carry no note saying they were not reviewed by a person."
+  },
+  "amendments": [
+    {
+      "channel": "Claude Code conversation",
+      "owner_message": "A 開始做疾管署",
+      "message_timestamp": "2026-09-15T13:02:51.597Z",
+      "changes": [
+        "The CDC source starts now; new official versions are to be checked and switched automatically like NHI and TFDA (option A)."
+      ]
+    },
+    {
+      "channel": "Claude Code conversation",
+      "owner_message": "全部照你的建議執行 疾管署的資料也放進去 手冊第七章也都必須要做。",
+      "message_timestamp": "2026-09-15T23:31:29.972Z",
+      "changes": [
+        "The reviewed build may also be redistributed as a GitHub Release download bundle (OD-19)."
+      ]
+    }
+  ],
+  "identity_assurance": "local_asserted",
+  "reviewer_id": "ai-reviewer:claude-opus-5",
+  "reviewer_role": "ai_reviewer_delegated_by_owner",
+  "reviewer_note": "AI review delegated by the owner for the data engineering gates and for the recognition program content gate; not reviewed by a person. By the owner's decision, query results carry no note saying so.",
+  "gates": {
+    "ODS-R1-SOURCE": {
+      "purpose": "The raw artifact is the recognized laboratory roster attached to the official CDC page.",
+      "checklist": [
+        "The landing page is https://www.cdc.gov.tw/Category/Page/02d-tR1nzB8QuflX-NmM_w on www.cdc.gov.tw over HTTPS.",
+        "Exactly one attachment link is labelled 傳染病認可檢驗機構名冊<7-digit version>.ods and points to a /File/Get/ path on www.cdc.gov.tw.",
+        "The download file name equals the attachment label; the ZIP carries the ODS mimetype.",
+        "fetch.json is canonical and its artifact size and SHA-256 match the stored raw ODS.",
+        "Attribution names 衛生福利部疾病管制署, the roster version and the CDC open data declaration URL; the service is described as not official and not endorsed by CDC."
+      ]
+    },
+    "ODS-R1-STRUCTURE": {
+      "purpose": "Every method row of the roster is preserved with its merged values rebuilt from declared spans only.",
+      "checklist": [
+        "Exactly one non-empty sheet named <version>名冊, matching the attachment version.",
+        "The header equals the 12 researched columns in order; no value appears beyond column 12.",
+        "Covered cells inherit only from the anchor whose number-rows-spanned covers them; a real blank cell stays blank.",
+        "Each certificate, disease, purpose and method combination stays its own row; repeated upstream rows are kept and told apart by spreadsheet row number.",
+        "The curated database holds every parsed row once with its sheet name, expanded row number and row hash.",
+        "An independent parser compares every curated row with the raw ODS before the pointer switches."
+      ]
+    },
+    "ODS-R1-CONTENT": {
+      "purpose": "The served values keep the meaning of the official roster.",
+      "checklist": [
+        "Certificate numbers and disease codes stay strings with leading zeros and letters, for example 002a and 19SC.",
+        "結束時間 is shown under its own name and never expanded into a certificate validity period.",
+        "最近一次年度能力試驗審查 keeps a date, 無需能力試驗 or a blank as the raw value.",
+        "A roster match is never described as confirming current acceptance of specimens or eligibility; results carry does_not_confirm_current_acceptance=true.",
+        "No official update frequency is claimed; results show the roster version and the last check time."
+      ]
+    },
+    "PUB-R1-OWNER": {
+      "purpose": "The build may be served by the local MCP runtime and redistributed as a GitHub Release download bundle.",
+      "scope": "local_mcp_serving_and_github_release_bundle",
+      "checklist": [
+        "Only an installed distribution may publish.",
+        "Every official result carries provenance attribution, the roster version and the note 非疾管署官方服務，內容以疾管署公告為準。",
+        "Review records and golden cases name the reviewer as ai-reviewer:claude-opus-5, never as a person or as the owner.",
+        "Download bundles contain only the raw revision and the curated build with its audit folder (docs/adr/0004-cdc-snapshot-release-bundle.md)."
+      ]
+    }
+  },
+  "golden_cases": {
+    "minimum_distinct_official_cases": 10,
+    "required_coverage": [
+      "one certificate with several method rows",
+      "a value inherited from a merged anchor",
+      "proficiency testing review with a date",
+      "proficiency testing review 無需能力試驗",
+      "proficiency testing review blank",
+      "a row repeated upstream",
+      "a disease code with a leading zero or letters"
+    ],
+    "comparison": "Compare each expected value, sheet name, expanded row number and row hash with an independent parse of the raw ODS."
+  },
+  "severity_policy": {
+    "critical": "reject",
+    "major": "reject_until_resolved_in_a_new_build",
+    "minor": "record_and_accept"
+  }
+}

@@ -1238,6 +1238,17 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 影響：加了對照表之後，讀手冊的規則版本變了。本機正在服務的手冊建置是舊規則建的，每日自動更新會先擋下並回 `manual_reading_rules_changed`；要等下載包那一步一起重建、重新發布本機建置後才會恢復。
 - 測試：先寫 2 個測試跑出 2 failed；實作後全過。`tests/test_package_contents.py` 必含檔加上對照表。
 - 驗證：全部測試 561 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 內含對照表，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 561 passed，contract 與 repo 位元組相同（144,136 bytes）。
+- 提交：commit `293122a`，CI 通過（run 35036707693）。
+
+### 疾管署資料納入 GitHub 下載包（2026-09-16，OD-19、ADR 0004）
+
+- 改動：
+  - `snapshot_bundle` 加兩個來源：`cdc_authorized_labs`（原始檔 `source.ods`）與 `cdc_specimen_manual`（原始檔 `manual.pdf`，同一個 raw revision 內的 `revision.pdf`、`fetch.json` 也一起進包）；顯名用「非疾管署官方服務」那一句，過期規則沿用各自的兩天。
+  - `taiwan-lab-data export-snapshot`／`install-snapshot` 的來源清單加上這兩個。
+  - 審核規則各出第 2 版（名冊與手冊的 AI 代審與自動更新共 4 份），`PUB-R1-OWNER` 範圍改成「本機 MCP 服務與 GitHub Release 下載包」；手冊的內容關卡另外寫明別名對照表只換查詢字、不改手冊寫法。第 1 版保留在包內，舊建置仍然驗得過。
+  - 程式的預設審核規則版本改成第 2 版；本機已上線的名冊與手冊建置要用第 2 版重新建一次才會發布下載包。
+- 測試：先寫 `tests/test_cdc_bundle.py`（3 個），跑出 3 failed；實作後全過。另外把四份第 2 版規則檔加進安裝包必含檔清單。
+- 驗證：全部測試 564 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 內含四份第 2 版規則檔，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 564 passed，contract 與 repo 位元組相同（144,136 bytes）。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 

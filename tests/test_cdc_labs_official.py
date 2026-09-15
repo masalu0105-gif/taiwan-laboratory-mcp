@@ -510,7 +510,8 @@ def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution):
     build_dir = tmp_path / "curated" / "cdc_authorized_labs" / built["snapshot_id"]
     review = json.loads((build_dir / "audit" / "reviews" / "ODS-R1-CONTENT.json").read_bytes())
     assert (review["reviewer_id"], review["reviewer_role"]) == (REVIEWER, ROLE)
-    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-labs-r1-ai-review", "1")
+    # Version 2 adds the download bundle to the reviewed scope (OD-19).
+    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-labs-r1-ai-review", "2")
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
     assert certificate["official_qualification_status"] == "approved"
     assert len(certificate["approved_distinct_case_ids"]) == 10

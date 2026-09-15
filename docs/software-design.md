@@ -895,7 +895,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-004` sample/official以process mode隔離 | Accepted | 保留示範體驗並消除混查與silent fallback |
 | `D-005` source importer分開 | Accepted | 四種格式與醫療語意不同，共用領域模型會隱藏錯誤 |
 | `D-006` CDC PDF layout engine | ~~Proposed / qualification gate~~ Accepted（2026-09-15，見`D-022`） | ~~LiteParse文字抽取已證明；以ignored official raw與pinned identity驗bbox/table lineage~~ 版面試驗證明LiteParse JSON不足以拆表，改用PDFium；CI fixture只驗synthetic contract |
-| `D-007` curated artifact是否再散布 | Accepted for NHI（owner 2026-09-14） | NHI以GitHub Release下載包散布並附原始CSV，見`docs/adr/0001-nhi-snapshot-release-bundle.md`；~~TFDA／CDC仍需另案確認第三方內容、大小與更新責任~~ TFDA同樣散布（owner 2026-09-15，`D-019`、`docs/adr/0002-tfda-bundle-and-automatic-release.md`）；CDC仍需另案 |
+| `D-007` curated artifact是否再散布 | Accepted for NHI（owner 2026-09-14） | NHI以GitHub Release下載包散布並附原始CSV，見`docs/adr/0001-nhi-snapshot-release-bundle.md`；~~TFDA／CDC仍需另案確認第三方內容、大小與更新責任~~ TFDA同樣散布（owner 2026-09-15，`D-019`、`docs/adr/0002-tfda-bundle-and-automatic-release.md`）；~~CDC仍需另案~~ 疾管署名冊與採檢手冊同樣散布（owner 2026-09-16，`D-023`、`docs/adr/0004-cdc-snapshot-release-bundle.md`） |
 | `D-008` NHI stale 7日是否hard-stop | Accepted（owner 2026-09-14）：不hard-stop | 超過兩個宣告週期未成功check時runtime加`upstream_check_overdue`，持續回舊版並揭露 |
 | `D-009` NHI lab scope owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | allowlist依據須為健保署支付標準官方文件原文與locator；review record必須標明AI reviewer；~~不確定者留`review_pending`~~ 不確定者一律`in_scope`並在basis寫明依owner決定（owner 2026-09-14「寧可錯殺一百，也不要放過一個」）。結果notes不另加AI審核備註（owner 2026-09-14） |
 | `D-010` TFDA IVD owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | 依官方分類分級附表原文逐碼判斷；揭露同D-009；~~不確定者留`ambiguous`／`unknown`~~ 附表判不出來或查無的A/B/C代碼一律`included`並寫明依owner決定（owner 2026-09-14）；缺A–P代碼或舊制編號的許可證列仍為`unknown` |
@@ -911,12 +911,13 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-020` 下載包自動發布 | Accepted（owner 2026-09-15選「自動發」） | 每日排程在健保與食藥署檢查後執行repo外`publish_data_release.py`：兩個來源都在服務且沒有stale reason才匯出；最新Release已含同名兩個下載包就不發；Release標籤指向`origin/main`，該commit的`src/taiwan_lab_mcp`檔案必須和本機安裝版逐檔相同（換行正規化後）且CI成功，否則不發並通知；發布後比對GitHub回報的附件大小與SHA-256；protocol `nhi-r1-auto-review`、`tfda-r1-auto-review` v2 |
 | `D-021` 未審核代碼預設 | Accepted（owner 2026-09-15選「先當成「算」」） | NHI只用於正式建置：沒有核准scope規則的代碼`scope_status=in_scope`、`scope_basis_locator`寫明依owner決定，NHI-R1-SCOPE capability視為approved，查詢不因此回`review_incomplete`；離線合成建置維持`review_pending`。TFDA所有建置：附表A/B/C類沒有registry決定的代碼算`included`（`derive_ivd_scope`與獨立逐列比對同規則，不再計入`unknown_code_rows`），其他類與無代碼列維持`unknown`；自動更新摘要仍列出這些代碼 |
 | `D-022` CDC手冊版面讀法 | Accepted（工程決定2026-09-15，依§10.3 extraction gate第3步） | 以1150826版實測：LiteParse把同一行相鄰兩欄併成一段、沒有表格線；PDFium（`pypdfium2`，optional extra `cdc-manual`，exact version）有逐字元框、格線與Word表格標記。欄以表頭文字對應（沒有表頭的頁面只在各欄寬度與上一頁相同時當延續頁）；列界線只算黑色且兩端貼齊格線的橫線；跨頁溢出依TR內TD順序接回上一頁同欄最後一格；TD數不符、頁中溢出、找不到可接格子、表格內有字不屬於任何格、沒有文字層都整批擋下。見`docs/adr/0003-cdc-manual-pdf-layout.md` |
+| `D-023` 疾管署下載包與別名對照表 | Accepted（owner 2026-09-16：「全部照你的建議執行 疾管署的資料也放進去」） | `export-snapshot`／`install-snapshot`與每日自動發布加入`cdc_authorized_labs`、`cdc_specimen_manual`，內容與檢查同ADR 0001、0002；手冊raw revision內兩份PDF與`fetch.json`都進包，資料庫的列只從`manual.pdf`讀；四份CDC審核規則出第2版把下載包納入`PUB-R1-OWNER`範圍，本機建置以第2版重建後才發布；手冊查詢另加版本化別名對照表`rules/cdc_disease_alias/v1.json`（95個常見名稱→手冊寫法），版本與檔案hash進build fingerprint，答案仍用手冊原文。見`docs/adr/0004-cdc-snapshot-release-bundle.md`、PRD OD-16、OD-19 |
 
 PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列出的工程decision不得冒充owner決議：
 
 | PRD owner decision | SDD decision | 現況與阻擋點 |
 | --- | --- | --- |
-| `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；~~TFDA／CDC未決~~ TFDA見`OD-10`（2026-09-15）；CDC未決 |
+| `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；~~TFDA／CDC未決~~ TFDA見`OD-10`（2026-09-15）；~~CDC未決~~ CDC見`OD-19`（2026-09-16） |
 | `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14）；~~官方文件依據研究中~~ AI審核已完成為`nhi-lab-scope-v2`（2026-09-14，見`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`），~~6,173碼中2碼仍`review_pending`~~ 依owner決定判不出來的2碼改算檢驗，已重建serving並發布`nhi-data-20260914-lab-scope`；sentinel維持原值＋可能未設定結束日推論 |
 | `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14）；附表逐碼AI判定已完成（2026-09-14，見`docs/reviews/tfda-ivd-ai-review-2026-09-14.md`），~~尚未接入MCP~~ 已做成`rules/tfda_ivd/v1.json`接入（2026-09-15） |
 | `OD-04` | `D-011` | ~~待指定CDC內容與ODS認可制度reviewer及turnaround~~ reviewer為AI全程代審、不加未經人工複核備註（2026-09-15）；~~turnaround未決~~ 新版自動檢查、通過就換（2026-09-15） |
@@ -928,6 +929,7 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 | `OD-10` | `D-019` | 下載包加入食藥署（2026-09-15） |
 | `OD-11` | `D-020` | 本機換版後自動發布GitHub Release（2026-09-15） |
 | `OD-12` | `D-021` | 未審核代碼先算「是」（2026-09-15） |
+| `OD-16`、`OD-19` | `D-023` | 手冊別名對照表、疾管署資料納入下載包（2026-09-16） |
 
 `REL-G5` pilot 已由 owner 於 2026-09-14 取消，改為公開上線並以 GitHub Issues 收集使用者回饋（PRD §8.2、§8.4）；本文件中以 pilot 為前提的 `PilotResultV1` 等設計保留為歷史，不再是發布條件。
 

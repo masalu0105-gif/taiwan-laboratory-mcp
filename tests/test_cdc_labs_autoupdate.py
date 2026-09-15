@@ -213,7 +213,7 @@ def test_checked_new_roster_is_published_automatically(tmp_path, distribution):
     review = json.loads((build_dir / "audit" / "reviews" / "ODS-R1-CONTENT.json").read_bytes())
     assert review["reviewer_id"] == "automated-check:cdc-labs-auto-update"
     assert review["reviewer_role"] == "automated_checker_delegated_by_owner"
-    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-labs-r1-auto-review", "1")
+    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-labs-r1-auto-review", "2")
     assert any(ref["artifact_id"] == "cdc-labs-auto-roundtrip" for ref in review["evidence_refs"])
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
     assert len(certificate["approved_distinct_case_ids"]) >= 10

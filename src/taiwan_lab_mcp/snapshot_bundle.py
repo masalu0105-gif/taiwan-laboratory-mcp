@@ -23,8 +23,14 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .adapters.base import NHI_NOT_OFFICIAL_NOTE, TFDA_NOT_OFFICIAL_NOTE
+from .adapters.base import CDC_NOT_OFFICIAL_NOTE, NHI_NOT_OFFICIAL_NOTE, TFDA_NOT_OFFICIAL_NOTE
 from .canonical import canonical_json_bytes, sha256_bytes
+from .cdc_labs_store import read_cdc_labs_state
+from .cdc_manual_source import CdcManualImportError
+from .cdc_manual_store import read_cdc_manual_state
+from .importers.cdc_labs import _load_official_raw_revision as _load_cdc_labs_raw_revision
+from .importers.cdc_manual import _load_official_raw_revision as _load_cdc_manual_raw_revision
+from .importers.cdc_ods import CdcOdsImportError
 from .importers.nhi import NHIImportError, _write_immutable_json
 from .importers.nhi import _load_official_raw_revision as _load_nhi_raw_revision
 from .importers.tfda import TFDAImportError
@@ -79,6 +85,22 @@ _SOURCES = {
     ),
     "tfda_devices": _Source(
         "source.zip", TFDA_NOT_OFFICIAL_NOTE, "tfda-v1", read_tfda_state, _load_tfda_raw_revision
+    ),
+    # Owner 2026-09-16 (OD-19): the bundles also carry the CDC roster and specimen manual. The
+    # manual's raw revision holds both PDFs; the manual PDF is the one the rows are read from.
+    "cdc_authorized_labs": _Source(
+        "source.ods",
+        CDC_NOT_OFFICIAL_NOTE,
+        "cdc-labs-v1",
+        read_cdc_labs_state,
+        _load_cdc_labs_raw_revision,
+    ),
+    "cdc_specimen_manual": _Source(
+        "manual.pdf",
+        CDC_NOT_OFFICIAL_NOTE,
+        "cdc-manual-v1",
+        read_cdc_manual_state,
+        _load_cdc_manual_raw_revision,
     ),
 }
 
@@ -465,7 +487,7 @@ def install_snapshot_bundle(
 
     try:
         source.load_raw_revision(data_root, raw_revision_id)
-    except (NHIImportError, TFDAImportError) as exc:
+    except (NHIImportError, TFDAImportError, CdcOdsImportError, CdcManualImportError) as exc:
         raise SnapshotBundleError("BUNDLE_CONTENT_INVALID", exc.code) from exc
 
     if current is not None and current.get("serving_snapshot_id") == build_id:

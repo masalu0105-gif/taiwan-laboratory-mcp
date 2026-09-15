@@ -49,14 +49,16 @@ CDC_LABS_TABLE = "cdc_lab_row"
 CDC_LABS_SERVING_GATES = ("ODS-R1-SOURCE", "ODS-R1-STRUCTURE", "ODS-R1-CONTENT", "PUB-R1-OWNER")
 # Owner 2026-09-15: 「Ai全程代審 不用特別備注未經人工審核」.
 CDC_LABS_REVIEW_PROTOCOL_ID = "cdc-labs-r1-ai-review"
-CDC_LABS_REVIEW_PROTOCOL_VERSION = "1"
+# Version 2 adds the GitHub Release download bundle to the reviewed scope (owner 2026-09-16, OD-19).
+CDC_LABS_REVIEW_PROTOCOL_VERSION = "2"
 # Owner 2026-09-15: 「A 開始做疾管署」 (new roster versions switch automatically).
 CDC_LABS_AUTO_REVIEW_PROTOCOL_ID = "cdc-labs-r1-auto-review"
-CDC_LABS_AUTO_REVIEW_PROTOCOL_VERSION = "1"
+CDC_LABS_AUTO_REVIEW_PROTOCOL_VERSION = "2"
 _DELEGATED_REVIEW_PROTOCOLS = frozenset(
-    {
-        (CDC_LABS_REVIEW_PROTOCOL_ID, CDC_LABS_REVIEW_PROTOCOL_VERSION),
-        (CDC_LABS_AUTO_REVIEW_PROTOCOL_ID, CDC_LABS_AUTO_REVIEW_PROTOCOL_VERSION),
+    {(CDC_LABS_REVIEW_PROTOCOL_ID, version) for version in ("1", CDC_LABS_REVIEW_PROTOCOL_VERSION)}
+    | {
+        (CDC_LABS_AUTO_REVIEW_PROTOCOL_ID, version)
+        for version in ("1", CDC_LABS_AUTO_REVIEW_PROTOCOL_VERSION)
     }
 )
 _ODS_MEDIA_TYPE = ODS_MIMETYPE.decode("ascii")

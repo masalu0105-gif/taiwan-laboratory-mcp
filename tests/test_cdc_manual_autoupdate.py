@@ -132,9 +132,10 @@ def test_changed_manual_is_published_when_every_check_passes(tmp_path, distribut
     assert result.items[0].record.volume_requirement == "5 mL"
     build_dir = tmp_path / "curated" / "cdc_specimen_manual" / summary["published_snapshot_id"]
     review = json.loads((build_dir / "audit" / "reviews" / "CDC-R1-CONTENT.json").read_bytes())
-    assert (review["reviewer_id"], review["protocol_id"]) == (
+    assert (review["reviewer_id"], review["protocol_id"], review["protocol_version"]) == (
         AUTO_REVIEWER,
         "cdc-manual-r1-auto-review",
+        "2",
     )
     assert "cdc-manual-tag-check" in {ref["artifact_id"] for ref in review["evidence_refs"]}
 

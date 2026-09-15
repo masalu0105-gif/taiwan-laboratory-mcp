@@ -53,14 +53,19 @@ from .cdc_manual_pdf import (
 
 # Owner 2026-09-15: 「Ai全程代審 不用特別備注未經人工審核」 covers the specimen manual (OD-04).
 CDC_MANUAL_REVIEW_PROTOCOL_ID = "cdc-manual-r1-ai-review"
-CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "1"
+# Version 2 adds the GitHub Release download bundle and the alias table (owner 2026-09-16).
+CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "2"
 # Owner 2026-09-15: 「A 開始做疾管署」 (new manual versions switch automatically).
 CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID = "cdc-manual-r1-auto-review"
-CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION = "1"
+CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION = "2"
 _DELEGATED_REVIEW_PROTOCOLS = frozenset(
     {
-        (CDC_MANUAL_REVIEW_PROTOCOL_ID, CDC_MANUAL_REVIEW_PROTOCOL_VERSION),
-        (CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID, CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION),
+        (CDC_MANUAL_REVIEW_PROTOCOL_ID, version)
+        for version in ("1", CDC_MANUAL_REVIEW_PROTOCOL_VERSION)
+    }
+    | {
+        (CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID, version)
+        for version in ("1", CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION)
     }
 )
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
