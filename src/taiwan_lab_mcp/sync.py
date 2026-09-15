@@ -490,7 +490,7 @@ def _diff_summary_markdown(
 ) -> str:
     gate = diff["review_gate"]
     lines = [
-        "# 健保支付標準表：上游有新版（等你審核）",
+        "# 健保支付標準表：上游有新版",
         "",
         f"- 檢查時間（UTC）：{checked_at}",
         f"- 目前 MCP 服務中的版本：`{serving_id}`",
@@ -499,8 +499,6 @@ def _diff_summary_markdown(
         "- 筆數變動超過 10%：" + ("是" if gate["row_count_change_exceeds_10_percent"] else "否"),
         "- 代碼數變動超過 10%："
         + ("是" if gate["unique_code_change_exceeds_10_percent"] else "否"),
-        "",
-        "新版審核通過並發布之前，MCP 會繼續回目前的版本，並標示「有新版等待審核」。",
         "",
     ]
 

@@ -9,7 +9,7 @@ import os
 import re
 import sqlite3
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -978,6 +978,9 @@ NHI_ATTRIBUTION = "資料提供機關：衛生福利部中央健康保險署"
 OWNER_SERVING_GATES = ("NHI-R1-SOURCE", "NHI-R1-SCHEMA", "PUB-R1-OWNER")
 OWNER_REVIEW_PROTOCOL_ID = "nhi-r1-owner-review"
 OWNER_REVIEW_PROTOCOL_VERSION = "2"
+# Owner 2026-09-15: "好，那健保新版也改成自動更新".
+AUTO_REVIEW_PROTOCOL_ID = "nhi-r1-auto-review"
+AUTO_REVIEW_PROTOCOL_VERSION = "1"
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 _EVIDENCE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
@@ -1009,6 +1012,41 @@ def _owner_review_protocol() -> tuple[str, str, str]:
     ):
         raise NHIImportError("REVIEW_PROTOCOL_INVALID")
     return OWNER_REVIEW_PROTOCOL_ID, OWNER_REVIEW_PROTOCOL_VERSION, sha256_bytes(payload)
+
+
+def _auto_review_protocol() -> tuple[str, str, str, str, str]:
+    """Return the delegated protocol identity and the reviewer id and role it names."""
+
+    try:
+        payload = (
+            files("taiwan_lab_mcp")
+            .joinpath(
+                "review_protocols", AUTO_REVIEW_PROTOCOL_ID, f"{AUTO_REVIEW_PROTOCOL_VERSION}.json"
+            )
+            .read_bytes()
+        )
+        document = json.loads(payload.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise NHIImportError("REVIEW_PROTOCOL_INVALID") from exc
+    if (
+        not isinstance(document, dict)
+        or document.get("protocol_id") != AUTO_REVIEW_PROTOCOL_ID
+        or document.get("protocol_version") != AUTO_REVIEW_PROTOCOL_VERSION
+        or document.get("status") != "owner_delegated"
+        or sorted(document.get("gates", {})) != sorted(OWNER_SERVING_GATES)
+        or not isinstance(document.get("reviewer_id"), str)
+        or not document["reviewer_id"]
+        or not isinstance(document.get("reviewer_role"), str)
+        or not document["reviewer_role"]
+    ):
+        raise NHIImportError("REVIEW_PROTOCOL_INVALID")
+    return (
+        AUTO_REVIEW_PROTOCOL_ID,
+        AUTO_REVIEW_PROTOCOL_VERSION,
+        sha256_bytes(payload),
+        document["reviewer_id"],
+        document["reviewer_role"],
+    )
 
 
 def _load_official_raw_revision(
@@ -1100,6 +1138,8 @@ def build_official_nhi_snapshot(
     owner_reviews: Sequence[Mapping[str, Any]],
     publisher_actor_id: str,
     evidence_files: Sequence[Mapping[str, Any]] = (),
+    review_protocol: tuple[str, str] = (OWNER_REVIEW_PROTOCOL_ID, OWNER_REVIEW_PROTOCOL_VERSION),
+    pre_publish_check: Callable[[Path], tuple[str, str, bytes]] | None = None,
 ) -> dict[str, Any]:
     """Build and publish an owner-reviewed NHI snapshot from a fetched raw revision.
 
@@ -1168,7 +1208,21 @@ def build_official_nhi_snapshot(
             or case["evidence_data_root_relative_path"] != artifact_relative
         ):
             raise NHIImportError("GOLDEN_CASE_NOT_APPROVED", case["case_id"])
-    protocol_id, protocol_version, protocol_sha256 = _owner_review_protocol()
+    if tuple(review_protocol) == (OWNER_REVIEW_PROTOCOL_ID, OWNER_REVIEW_PROTOCOL_VERSION):
+        protocol_id, protocol_version, protocol_sha256 = _owner_review_protocol()
+    elif tuple(review_protocol) == (AUTO_REVIEW_PROTOCOL_ID, AUTO_REVIEW_PROTOCOL_VERSION):
+        protocol_id, protocol_version, protocol_sha256, reviewer_id, reviewer_role = (
+            _auto_review_protocol()
+        )
+        # The delegated protocol names its reviewer; nobody else may sign reviews or cases.
+        for review in reviews_input:
+            if (review["reviewer_id"], review["reviewer_role"]) != (reviewer_id, reviewer_role):
+                raise NHIImportError("OWNER_REVIEW_REVIEWER_MISMATCH", review["gate_id"])
+        for result in golden_results:
+            if result["golden_case"]["reviewer_id"] != reviewer_id:
+                raise NHIImportError("GOLDEN_CASE_NOT_APPROVED", result["golden_case"]["case_id"])
+    else:
+        raise NHIImportError("REVIEW_PROTOCOL_INVALID")
 
     build_fingerprint = {
         "fingerprint_schema": "curated-build-v1",
@@ -1199,6 +1253,9 @@ def build_official_nhi_snapshot(
     db_path = build_dir / "data.sqlite3"
     _write_curated_db(db_path, parsed, scope_rules_by_code)
     db_digest = _file_sha256(db_path)
+    if pre_publish_check is not None:
+        # Runs on the finished database before any audit record or pointer refers to it.
+        evidence_inputs.append(pre_publish_check(db_path))
     audit_prefix = f"curated/nhi_fee/{build_id}/audit"
     row_counts = {
         "input_rows": len(parsed.rows),

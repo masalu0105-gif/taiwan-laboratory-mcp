@@ -237,7 +237,7 @@ def test_independent_checks_agree_with_the_curated_build(tmp_path):
     assert (report["result"], report["rows_compared"]) == ("passed", 12)
 
 
-def test_cli_auto_publish_routes_tfda_only(tmp_path, monkeypatch, capsys):
+def test_cli_auto_publish_routes_tfda(tmp_path, monkeypatch, capsys):
     import taiwan_lab_mcp.data_cli as data_cli
 
     calls = []
@@ -251,8 +251,6 @@ def test_cli_auto_publish_routes_tfda_only(tmp_path, monkeypatch, capsys):
     assert data_cli.main(["check", "tfda_devices", *arguments, "--auto-publish", "--json"]) == 0
     assert calls == [(tmp_path, {"expected_publisher_oid": OID, "actor": "unit-test"})]
     assert json.loads(capsys.readouterr().out)["result"] == "published"
-    with pytest.raises(SystemExit):
-        data_cli.main(["check", "nhi_fee", *arguments, "--auto-publish", "--json"])
 
 
 def test_renewal_with_the_same_row_count_is_published(tmp_path, distribution):

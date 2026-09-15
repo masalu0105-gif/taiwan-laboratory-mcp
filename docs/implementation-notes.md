@@ -708,7 +708,7 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 規格解讀：
   1. SDD §15 寫「NHI 或 TFDA row／distinct key count 相對 current 超過 ±10%：啟動期 block review」「TFDA 關鍵欄 null rate 增加超過 2 個百分點、未知 status／code 出現：block review」。依 owner 決定，TFDA 改成「超過才擋、沒超過自動發布」；關鍵欄清單由我訂（見上）。
   2. 「未知 code 出現」沒有列入擋下條件：附表 A/B/C 出現未審核代碼時，這些列本來就標 `unknown`，不會被說成體外診斷；改在通知信列出代碼。依 owner 2026-09-14「寧可錯殺一百」原則，之後可請 AI 補判。
-  3. 健保新版不在這次決定範圍，仍照原流程等 owner 審核。
+  3. ~~健保新版不在這次決定範圍，仍照原流程等 owner 審核。~~（同日 OD-09 改為自動更新，見下方「健保新版自動更新」）
 - 測試：先寫 `tests/test_tfda_autoupdate.py` 8 個，跑出 8 failed，實作後全過。
 - 驗證：
   - in-repo `pytest` 379 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check` 通過。
@@ -760,6 +760,45 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
     - `retention-plan` 對正式 data root 回保留 1 版、`remove_paths` 空。
     - 每日排程 `-EmailDryRun` 試跑 exit 0，STATUS「食藥署醫材許可證：沒有變動（104,619 筆）」，清理步驟有執行、沒有移動任何檔案。
 - 尚未實際發生過：真的把舊版移到回收筒（至少要第 4 版上線後才會發生），以及真實官方展延出現在通知信；兩者目前只有合成資料測試與上面的模擬。
+
+### 健保新版自動更新（2026-09-15，OD-09／D-018）
+
+- owner 在 Claude Code 對話中回覆（transcript timestamp `2026-09-15T10:22:05.922Z`，uuid `c55a6288-783b-4762-8d54-e3f12321e9f0`）：「好，那健保新版也改成自動更新」。
+- 規格同步：
+  - PRD §9 新增 OD-09，OD-08「健保新版仍需 owner 審核」加刪除線；SDD 新增 `D-018` 與 OD 對照表 `OD-09`；TDD 加 `tests/test_nhi_autoupdate.py`；README。
+  - 上方食藥署一節「健保新版不在這次決定範圍」加刪除線。
+- 程式：
+  - 審核規則檔 `src/taiwan_lab_mcp/review_protocols/nhi-r1-auto-review/1.json`：`status=owner_delegated`，記錄 owner 原話與時間；reviewer `automated-check:nhi-auto-update`、role `automated_checker_delegated_by_owner`；gate `NHI-R1-SOURCE`、`NHI-R1-SCHEMA`、`PUB-R1-OWNER`（範圍 `local_mcp_serving`）。
+  - `build_official_nhi_snapshot` 新增 `review_protocol` 與 `pre_publish_check`：
+    - 預設仍是 owner 審核規則，手動審核流程不變。
+    - 自動規則要求每份審核紀錄與驗收題的 reviewer 都是 `automated-check:nhi-auto-update`；其他規則回 `REVIEW_PROTOCOL_INVALID`。
+    - `pre_publish_check` 在資料庫建好、算完 hash 之後、切換版本之前執行，回傳的報告成為審核證據。
+  - 新模組 `src/taiwan_lab_mcp/nhi_autoupdate.py`，`run_nhi_auto_update` 流程：
+    1. 跑原本的每日檢查；沒有新版就結束。
+    2. 新版和上線版比，下列任一項成立就擋下（`blocked`），不建置：資料列數或代碼數變動超過 10%；英文名稱空白比例上升超過 2 個百分點。
+    3. 用自己的 CSV 解析（不經過 importer）挑至少 10 題驗收題，逐題寫代碼、點數、起訖日與檢驗範圍判定。
+    4. 建置；切換前以獨立解析逐列比對資料庫（列號、row hash、代碼、點數原文與數值、起訖日原文、中英文名稱、備註、檢驗範圍判定），不符就不切換（`auto_publish_failed`）。
+    5. 全部通過才發布（`published`），審核證據含 `nhi-auto-roundtrip`。
+  - 新版出現檢驗範圍清單還沒判定的代碼時照樣發布，這些代碼標「未判定」，並列在 `new_codes_without_scope`。
+  - 開發環境安裝（沒有 build identity）一律不自動發布，回 `APPLICATION_BUILD_IDENTITY_MISSING`。
+  - CLI：`taiwan-lab-data check nhi_fee --auto-publish` 開放給健保；`blocked` exit 5、`auto_publish_failed` exit 6，與食藥署相同。
+  - 差異摘要標題改成「健保支付標準表：上游有新版」，拿掉「新版審核通過並發布之前…」一句，因為自動發布成功時也用同一份摘要。
+  - 每日排程 `Invoke-NhiDailyCheck.ps1`（SHA-256 `541029c1…`）健保檢查改帶 `--auto-publish`：
+    - `published`：寄「健保支付標準已自動更新」信，列出未判定的新代碼；STATUS「OK：健保支付標準表已自動更新到新版」。
+    - `blocked`、`auto_publish_failed`：寄信（已通知過的不重寄），STATUS 第一行「異常」，exit 1。
+- 規格解讀：
+  1. SDD §15 的 ±10% 與 null rate 門檻套用到健保；關鍵欄只選英文名稱，因為中文名稱、點數、起訖日空白時官方檔會被 schema 驗證直接拒收。
+  2. 未判定的新代碼不擋發布：檢驗範圍工具本來就對未判定代碼回 `review_incomplete`，不會被說成檢驗項目；改在通知信列出。
+  3. 舊版不自動清理：每版約 8 MB。
+- 測試：先寫 `tests/test_nhi_autoupdate.py`，跑出 8 failed；實作後 9 個全過。`tests/test_tfda_autoupdate.py` 原本斷言「CLI 對 nhi_fee 帶 `--auto-publish` 會拒絕」，改名為 `test_cli_auto_publish_routes_tfda` 並拿掉這條斷言。
+- 驗證：
+  - in-repo `pytest` 393 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 319,962 bytes，SHA-256 `7b92b01cacb1775d4ce50467e0a61f771f09132f0d8def69bd9d57ce4783abc3`；sdist 582,411 bytes；wheel 58 個檔案，含 `nhi_autoupdate.py` 與新規則檔。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：391 passed、2 skipped；import 路徑來自該 venv；安裝後 contract 與 repo 位元組相同。
+  - 真實資料演練（唯讀，不換版）：對上線版 `57bdfe9ebe98…` 跑獨立逐列比對 6,173 列通過，0.09 秒；挑出 10 題驗收題，程式比對 0 不符；上線版和自己比的擋下條件為空。
+  - 新 wheel 裝進 uv tool 環境，每日排程 `-EmailDryRun` 試跑：exit 0，STATUS「OK：健保支付標準表沒有變動」＋「食藥署醫材許可證：沒有變動（104,619 筆）」；健保回 `unchanged`、`already_reported=false`、`new_codes_without_scope=[]`。
+- 尚未實際發生過：官方健保新版上線後走「發布」或「擋下」；兩條路目前只有合成資料測試。
+- 限制：GitHub Release 下載包不會跟著本機自動更新換版；其他安裝者仍拿到 owner 審核過的舊包。
 
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 

@@ -39,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument(
         "--auto-publish",
         action="store_true",
-        help="tfda_devices only: publish a changed version when every automated check passes.",
+        help="Publish a changed version when every automated check passes.",
     )
     check_parser.add_argument("--json", action="store_true")
     retention_parser = subparsers.add_parser("retention-plan")
@@ -167,13 +167,19 @@ def main(argv: list[str] | None = None) -> int:
         from .publish import PublishError
         from .sync import SyncError, run_nhi_upstream_check
 
-        if args.auto_publish and args.source_id != "tfda_devices":
-            parser.error("check --auto-publish is only available for tfda_devices")
         try:
-            if args.auto_publish:
+            if args.auto_publish and args.source_id == "tfda_devices":
                 from . import tfda_autoupdate
 
                 summary = tfda_autoupdate.run_tfda_auto_update(
+                    args.data_dir,
+                    expected_publisher_oid=args.publisher_oid,
+                    actor=args.actor,
+                )
+            elif args.auto_publish:
+                from . import nhi_autoupdate
+
+                summary = nhi_autoupdate.run_nhi_auto_update(
                     args.data_dir,
                     expected_publisher_oid=args.publisher_oid,
                     actor=args.actor,
