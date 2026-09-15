@@ -902,7 +902,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-008` NHI stale 7日是否hard-stop | Accepted（owner 2026-09-14）：不hard-stop | 超過兩個宣告週期未成功check時runtime加`upstream_check_overdue`，持續回舊版並揭露 |
 | `D-009` NHI lab scope owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | allowlist依據須為健保署支付標準官方文件原文與locator；review record必須標明AI reviewer；~~不確定者留`review_pending`~~ 不確定者一律`in_scope`並在basis寫明依owner決定（owner 2026-09-14「寧可錯殺一百，也不要放過一個」）。結果notes不另加AI審核備註（owner 2026-09-14） |
 | `D-010` TFDA IVD owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | 依官方分類分級附表原文逐碼判斷；揭露同D-009；~~不確定者留`ambiguous`／`unknown`~~ 附表判不出來或查無的A/B/C代碼一律`included`並寫明依owner決定（owner 2026-09-14）；缺A–P代碼或舊制編號的許可證列仍為`unknown` |
-| `D-011` CDC專業reviewer與turnaround | reviewer Accepted（owner 2026-09-15：「Ai全程代審 不用特別備注未經人工審核」）；turnaround仍OWNER GATE | CDC手冊內容與ODS認可制度由AI全程代審，review record標明AI、不得寫成人工；正式結果不加「未經人工複核」備註；每版發布仍需內容複核，工程測試不能取代 |
+| `D-011` CDC專業reviewer與turnaround | reviewer Accepted（owner 2026-09-15：「Ai全程代審 不用特別備注未經人工審核」）；~~turnaround仍OWNER GATE~~ turnaround Accepted（owner 2026-09-15：「A 開始做疾管署」）：官方改版後自動檢查、全部通過就換上 | CDC手冊內容與ODS認可制度由AI全程代審，review record標明AI、不得寫成人工；正式結果不加「未經人工複核」備註；每版發布仍需內容複核，工程測試不能取代 |
 | `D-012` 支援平台承諾 | Accepted（owner 2026-09-14）：Windows與macOS | macOS以CI macos-latest驗證；Linux仍在CI執行但不列為公開承諾平台 |
 | `D-013` local integrity threat model | Accepted | hash不宣稱抵抗可寫data root的惡意writer；runtime read-only principal，若需authenticity另做signed manifest ADR |
 | `D-014` NHI `29101231` sentinel對外語意 | OWNER GATE | 目前只保留raw/parsed date與`possible_open_end_sentinel=true` inference，禁止顯示「永久有效」；需由OD-02 owner核准官方語意後另建rule/build |
@@ -921,7 +921,7 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 | `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；~~TFDA／CDC未決~~ TFDA見`OD-10`（2026-09-15）；CDC未決 |
 | `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14）；~~官方文件依據研究中~~ AI審核已完成為`nhi-lab-scope-v2`（2026-09-14，見`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`），~~6,173碼中2碼仍`review_pending`~~ 依owner決定判不出來的2碼改算檢驗，已重建serving並發布`nhi-data-20260914-lab-scope`；sentinel維持原值＋可能未設定結束日推論 |
 | `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14）；附表逐碼AI判定已完成（2026-09-14，見`docs/reviews/tfda-ivd-ai-review-2026-09-14.md`），~~尚未接入MCP~~ 已做成`rules/tfda_ivd/v1.json`接入（2026-09-15） |
-| `OD-04` | `D-011` | ~~待指定CDC內容與ODS認可制度reviewer及turnaround~~ reviewer為AI全程代審、不加未經人工複核備註（2026-09-15）；turnaround未決 |
+| `OD-04` | `D-011` | ~~待指定CDC內容與ODS認可制度reviewer及turnaround~~ reviewer為AI全程代審、不加未經人工複核備註（2026-09-15）；~~turnaround未決~~ 新版自動檢查、通過就換（2026-09-15） |
 | `OD-05` | `D-008`、`D-012` | NHI不hard-stop、支援Windows與macOS（2026-09-14）；TFDA／CDC stale門檻仍依各來源另定 |
 | `OD-06` | `D-015` | TFDA全收錄＋標籤＋host AI指定偏好／篩選（2026-09-15）；~~TFDA curated build、adapter與contract參數尚未實作~~ 已實作（2026-09-15） |
 | `OD-07` | `D-016` | TFDA上線審核由AI代審、D–P代碼維持unknown、摘要不再減（2026-09-15） |

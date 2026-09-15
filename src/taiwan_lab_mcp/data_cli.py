@@ -14,7 +14,9 @@ def main(argv: list[str] | None = None) -> int:
     status_parser.add_argument("--data-dir", type=Path)
     status_parser.add_argument("--json", action="store_true")
     validate_parser = subparsers.add_parser("validate")
-    validate_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
+    validate_parser.add_argument(
+        "source_id", choices=["nhi_fee", "tfda_devices", "cdc_authorized_labs"]
+    )
     validate_parser.add_argument("--input", required=True, type=Path)
     validate_parser.add_argument("--json", action="store_true")
     sync_parser = subparsers.add_parser("sync")
@@ -216,6 +218,36 @@ def main(argv: list[str] | None = None) -> int:
             return 3
         if summary.get("failed_stage"):
             return 4
+        return 0
+    if args.command == "validate" and args.source_id == "cdc_authorized_labs":
+        from .importers import cdc_ods
+
+        try:
+            parsed = cdc_ods.parse_cdc_labs_ods(args.input.read_bytes())
+        except (OSError, cdc_ods.CdcOdsImportError) as exc:
+            print(
+                json.dumps(
+                    {
+                        "source_id": args.source_id,
+                        "validation_status": "failed",
+                        "error_code": getattr(exc, "code", "INPUT_UNAVAILABLE"),
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+            )
+            return 4
+        print(
+            json.dumps(
+                {
+                    "source_id": args.source_id,
+                    "validation_status": "passed",
+                    "summary": parsed.summary,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        )
         return 0
     if args.command == "validate" and args.source_id == "tfda_devices":
         from .importers import tfda as tfda_importer

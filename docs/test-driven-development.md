@@ -397,6 +397,7 @@ CLI 內部對兩份 PDF 執行 parse，並將 project-owned `CdcLayoutV1` 與 `q
 - 最近年度能力試驗可為日期、`無需能力試驗` 或空白；三種狀態都可 round-trip，不強迫全部轉 date。
 - ODS landing page 日期與附件版本分欄保存；固定更新頻率維持 unknown，daily polling 只能標成專案策略。
 - Resource regression 包含 declared-size 欺騙、巨大 row repeat、超長 cell、過深 XML、DOCTYPE／ENTITY、總文字超限，以及每一項「剛好等於上限」的合法 fixture；拒絕時 current bytes／generation 不變。
+- 已實作（2026-09-15，離線解析）：`tests/test_cdc_ods_importer.py` 以仿 1150914 名冊結構的 synthetic ODS 驗 LAB-01（同證號多疾病多方法各自成列、上游重複列兩列都保留並以列號區分）、LAB-02（12 欄原值、證號／代碼字串與前導零、`expanded_row_number`、row hash）、LAB-03（只照 merge span 繼承、真空白不補值、covered cell 沒有 anchor 與 span 衝突擋下）、LAB-04（能力試驗日期／`無需能力試驗`／空白三種原值與計數）；13 種格式與結構錯誤（非 ZIP、mimetype、DOCTYPE／ENTITY、壓縮檔路徑、表頭漂移、沒有或兩個名冊工作表、第 13 欄有值、結束時間格式與日期、必要欄空白、沒有資料列）；`text:s`／`text:tab`／`text:line-break`／多段落還原；最後一列空白重複 1,044,990 次不展開；8 項資源上限「剛好等於上限通過、超過一單位擋下」；預設上限等於 SDD 10.4；CLI `validate cdc_authorized_labs`。declared-size 欺騙沒有另做 fixture，由實際串流位元組計數涵蓋。
 
 ODS 第一個 official build 全部 rows review；後續全部 changed rows 必查，未變更列按疾病＋機構分層、以 subject digest 固定抽樣且至少 20 列。`ODS-R1-CONTENT` reviewer role 為熟悉認可制度的 `recognition_program_reviewer`，evidence 記 qualification basis。Merge 錯填、跨疾病／方法錯接或把名冊命中說成收件保證為 critical；source value／locator 錯誤為 major；任一 critical 或 unresolved major 都整批 rejected，修正後以新 subject digest重審。
 

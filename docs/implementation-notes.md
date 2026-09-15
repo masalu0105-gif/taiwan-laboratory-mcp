@@ -899,6 +899,36 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - README 改寫開頭說明與「查正式健保與食藥署資料」一節。
 - 尚未實際發生過：官方新版造成本機換版後的自動發布、`blocked` 或 `failed` 的通知信；目前只有這次首發與上面的試跑。
 
+### 疾管署第一步：認可檢驗機構名冊離線解析（2026-09-15，OD-04 新版處理時間）
+
+- owner 在 Claude Code 對話中回覆（transcript timestamp `2026-09-15T13:02:51.597Z`，uuid `acb6af72-904c-4026-9cfb-57ef24d7d67c`）：「A 開始做疾管署」。A 是上一則回報的選項「跟健保、食藥署一樣自動檢查、通過就換」。PRD OD-04、SDD `D-011` 與 OD 對照表同步。
+- 開發順序照 SDD Phase 3：先認可機構名冊（ODS），再採檢手冊 PDF。
+- 官方現況查證（直接抓官方頁原始 HTML，沒有用摘要工具）：
+  - 認可機構頁 https://www.cdc.gov.tw/Category/Page/02d-tR1nzB8QuflX-NmM_w ：HTTP 200、127,878 bytes。附件區只有一個名冊檔「傳染病認可檢驗機構名冊1150914.ods」，連結 `/File/Get/35jzmDYRqYO_xsXgEqAivA`（2026-09-13 研究時是 1150909）。頁面「最後更新日期 2023/9/27」與附件版本脫鉤，和研究結論相同。
+  - 同一頁還有全站共用的「傳染病檢驗機構品質保證作業要求」等 `File/Get` 連結。第一次試抓拿了頁面上第一個連結，下載到 4,206 bytes 的 HTML。之後自動下載必須依附件名稱挑檔。
+  - 名冊檔：HTTP 200、`application/octet-stream`、檔名在 Content-Disposition、沒有 Last-Modified；176,078 bytes，SHA-256 `199d8a7c2679461e81423522cc0f69945fe38b978b8f74ccd162d8e6c28327e5`；mimetype 正確；`content.xml` 4,358,776 bytes；`meta.xml` 的 `dc:date` 為 `2026-09-14T09:52:06Z`；工作表「1150914名冊」與兩個空白工作表。
+  - 採檢手冊頁：手冊與修訂對照表仍是 1150826 版；這一步沒有下載 PDF。
+  - 名冊只放在 session scratchpad，沒有放進 data root，也沒有提交。
+- 程式：`src/taiwan_lab_mcp/importers/cdc_ods.py`，CLI `taiwan-lab-data validate cdc_authorized_labs --input <ods> --json`（exit 0／4，輸出格式同食藥署）。
+  - 只用標準函式庫 `zipfile` 與 `iterparse`。上限 `OdsLimits` 13 項等於 SDD 10.4，計數用實際串流位元組、元素數、深度與文字位元組。
+  - 工作表：必須剛好一個有內容的工作表；表頭前最多 3 列、每列最多一格文字的標題列；表頭必須是 12 欄原文；第 13 欄以後有值就擋下。
+  - 合併：covered cell 只從上方 anchor 的 `number-rows-spanned` 繼承；沒有 anchor、或 span 還沒結束卻出現實際格子都擋下；資料列橫向合併擋下。
+  - 必要欄：證號、縣市別、機構名稱、疾病代碼、疾病名稱、檢驗目的、檢驗方法、結束時間；結束時間必須是有效的 `YYYY/MM/DD`。部門、住址、電話可以空白。
+  - 能力試驗欄不轉型，摘要分成日期／`無需能力試驗`／空白／其他計數。
+  - 每列：`expanded_row_number`（試算表列號，含標題與表頭列）、12 欄原值、row hash（12 欄 canonical JSON）。
+  - ODS 文字標記 `text:s`、`text:tab`、`text:line-break` 與多段落照原樣還原（官方檔目前沒有用到）；`text:s` 的空白數超過單格上限時先擋下再配置記憶體。
+- 規格解讀：
+  1. SDD 10.4「`number-rows-repeated <=10,000`」：官方名冊最後一列是空白、重複 1,044,990 次（試算表軟體填滿整張表的空列）。照字面會擋掉官方檔，所以只對有內容的重複列套上限；整列空白的重複列不展開、只計數（`skipped_blank_rows`）。有內容的重複列不能帶合併。
+  2. 同一「證號＋疾病代碼＋檢驗目的＋檢驗方法」出現兩次不擋：官方 1150914 有 12 組。兩列都保留、以列號區分，摘要列出 `duplicate_logical_keys`。
+  3. 表頭前的標題列：官方檔第 1 列是橫跨 12 欄的「傳染病檢驗機構認可項目名冊」；允許最多 3 列、每列最多一格文字。
+- 測試：先寫 `tests/test_cdc_ods_importer.py`（29 個，含參數化），跑出 29 failed；實作後全過。寫測試時我把 `text:c="2"` 的預期值寫成 3 個空白，第一次跑測試前已改正。
+- 真實名冊 1150914：3,584 列、344 張證號、29 組疾病、12 組重複鍵、合併繼承 16,055 格、能力試驗日期 3,513／無需 40／空白 31、結束時間全部是日期；0.26 秒，記憶體高峰約 29 MB。列數、證號數、疾病數與能力試驗分布都和 2026-09-13 研究的 1150909 相同。
+- 驗證：
+  - in-repo `pytest` 430 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 334,739 bytes，SHA-256 `a9b6167c31dd6ce7019bcd9c116b62e8d20b935a8158532aec2941e2b3855c06`，62 個檔案，含 `importers/cdc_ods.py`；sdist 607,539 bytes。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：428 passed、2 skipped；安裝後 contract 與 repo 位元組相同；repo 外安裝版對真實名冊執行 `validate cdc_authorized_labs` exit 0。
+- 尚未做：自動找附件與下載、保存原始檔、資料庫建置、AI 代審與上線、MCP 查詢、每日自動更新、採檢手冊 PDF。疾管署資料能不能放進 GitHub 下載包還沒問 owner（研究第 8 節列為未查證）。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。
