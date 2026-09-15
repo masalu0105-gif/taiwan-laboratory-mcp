@@ -633,6 +633,41 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 每日排程的 TFDA 檢查還只下載與驗證，沒有寫入 serving 的檢查紀錄；上線後 14 日內要補，否則會標 stale。
   - `%TEMP%\tfdarc` 試建資料約 190 MB 留在電腦上（本機擋刪除指令）。
 
+### Owner 決定與食藥署許可證本機上線（2026-09-15，OD-07／D-016）
+
+- owner 在 Claude Code 對話中回覆（transcript timestamp `2026-09-15T03:14:27.986Z`，uuid `5359b56e-ccc1-4432-aa96-24795930b109`）：「1.a 2.a 3.z你直接幫我審核」。
+  - 1.a：附表 A/B/C 以外大類（D–P）的代碼維持 `unknown`。
+  - 2.a：一頁 20 筆的摘要內容先不減。
+  - 3：上線審核不由 owner 本人看，直接由 AI 代審。「3.z」解讀為選項 3 加上「你直接幫我審核」。
+- 規格同步：PRD §9 新增 OD-07；SDD 新增 `D-016`、OD 對照表 `OD-07`，並更新 `OD-03`、`OD-06` 已過期的「尚未接入／尚未實作」（刪除線保留）；TDD 加 `tests/test_tfda_publish.py`。
+- 程式（commit `6c77671`，CI run `34925101870` 四個 job 皆 success）：
+  - 審核規則檔 `src/taiwan_lab_mcp/review_protocols/tfda-r1-ai-review/1.json`：`status=owner_delegated`，記錄 owner 原話與時間；reviewer 為 `ai-reviewer:claude-opus-5`、role `ai_reviewer_delegated_by_owner`；`PUB-R1-OWNER` 範圍只限本機 MCP 服務，不含 GitHub Release 下載包。
+  - `build_official_tfda_snapshot` 只接受規則檔指定的 reviewer id 與 role（三關審核與驗收題都檢查），不符回 `OWNER_REVIEW_REVIEWER_MISMATCH`／`GOLDEN_CASE_NOT_APPROVED`，且在寫任何 curated 檔之前拒絕。
+  - `tfda_source.run_tfda_upstream_check` 與 `taiwan-lab-data check tfda_devices`：同一份 ZIP 記成功檢查；新 ZIP 繼續服務舊版、標 `newer_candidate_pending_review`，寫 `diff.json` 與中文 `diff-summary.md`（資料列數、字號數、新增／消失字號、內容不同的列數）；下載或檢查失敗標 `upstream_verification_failed`。
+  - 測試 `tests/test_tfda_publish.py` 9 個。**這批測試與程式同時寫成，沒有先跑出失敗再修**（前一批 `test_tfda_official.py`、`test_tfda_ivd_registry.py` 有先 red）。
+- 規格解讀：
+  1. 規則檔名與 status 不沿用 `nhi-r1-owner-review`／`owner_approved`，因為這次不是 owner 本人審核；閘門名稱 `PUB-R1-OWNER` 維持不變，審核紀錄寫明是 AI 代審。
+  2. 正式結果 notes 沒有加「由 AI 審核，未經人工複核」：PRD §9 OD-02 在 2026-09-14 已由 owner 取消這段備註；AI 身分寫在審核紀錄、規則檔與驗收題。
+  3. 官方每週更新後的新版，每日檢查只標示「有新版等待審核」並寄信，不會自動換版；換版要再審一次（本次授權只涵蓋這一版）。
+- AI 審核做了什麼（repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\tfda-review\`）：
+  - 來源（`TFDA-R1-SOURCE`）：raw revision `aa385977…` 的 `fetch.json` 為 canonical，ZIP 16,265,433 bytes、SHA-256 `de880620…` 相符；metadata 發布機關代號、識別碼、授權代碼 1 與 2026-09-14 owner 確認頁一致；今天 09:30 排程重新下載的檔案 hash 相同。官方許可證查詢網站 `info.fda.gov.tw` 在這台電腦 DNS 解析失敗（`curl: (6) Could not resolve host`），沒有做網站逐筆比對，記為 minor 1。
+  - 欄位（`TFDA-R1-SCHEMA`）：`verify_curated_roundtrip.py`（SHA-256 `7c8bed5d…`）自己解壓、解析 CSV、解析分類代碼與判定標籤，與資料庫逐列比對 104,619 列：列號、row hash、34 欄原文、分類代碼、主類別字母、IVD 標籤 0 筆不符；報告 `tfda-curated-roundtrip-2026-09-15.json`（SHA-256 `e363fd57…`）。比對的資料庫 SHA-256 `6d5d204b…` 與後來正式建置的資料庫相同。
+  - 驗收題：`select_golden_cases.py`（SHA-256 `62771d09…`）以獨立解析從原始檔挑 14 題，每題寫出 34 欄原文與標籤預期值，涵蓋有效、已註銷、已廢止、註銷狀態空白但有日期、有狀態沒日期、過期未註銷、同字號兩家製造廠（2 列）、`excluded`（B.9245）、舊制、缺代碼、D–P 代碼、統編前導零與級數空白、英文品名尾端換行；程式內建比對全部通過。清單 `tfda-golden-ai-review-2026-09-15.md`（SHA-256 `97227287…`），預期值 `tfda-golden-ai-approved-2026-09-15.json`（SHA-256 `99052e91…`）。
+  - 發布（`PUB-R1-OWNER`）：顯名、授權網址、「非食藥署官方服務」說明、工具說明提示、20 筆摘要與 coverage 說明已在前一節測試與 stdio 實測確認；minor 1：D–P 大類維持 unknown（1.a）、一頁約 3.5 萬字接近 Claude Code 警告線（2.a）。
+  - 四份佐證檔在附加前搜尋 owner 本名與帳號：0 筆。
+- 上線（repo 外 `automation\publish_tfda_official.py`，SHA-256 `1fec35ca…`；先 dry run 確認條件再 `--apply`，用 uv tool 環境的正式安裝版 wheel SHA-256 `e8363ef8…`）：
+  - build `tfda_devices-build-cb94a6ca1ae38a2e68c9bd25d287192ad3b7836b3ddc5ef4c52ebbb040c11b53`，104,619 列，建置 13 秒，資料庫約 160 MB。
+  - manifest SHA-256 `43036477…`；generation 1；publish event `publish-baef6a69…`。
+  - IVD 涵蓋：399 個 A/B/C 代碼全部已審核；舊制 9,337、缺代碼 8,269、未審核代碼 69,428 列，`coverage_status=review_incomplete`。
+- 上線後驗證：
+  - 本機工具 `taiwan-lab-mcp.exe` 以 MCP stdio 讀正式 data root：22 個工具；`tfda_device` available、`review_incomplete`、不 stale；nhi_fee 仍 available、complete，09006C 200 點。
+  - 「糖化血色素」20 筆：共 31 筆，227 ms，34,953 字（粗估 9,853 tokens）；「隱形眼鏡」篩 `unknown`：3,674 筆；`get_license("衛部醫器陸輸字第000546號")` 回 2 列、兩家製造廠分開，顯名含「官方標示更新時間 2026-09-11 15:57:04」；`search_reviewed_ivd("HbA1c")` 73 筆；`find_manufacturer("Roche")` 1,799 筆。
+  - 每日排程腳本 `Invoke-NhiDailyCheck.ps1`（改為 `check tfda_devices`，SHA-256 `b08c0b7c…`）以 `-EmailDryRun` 試跑：exit 0，STATUS「OK：健保支付標準表沒有變動」＋「食藥署醫材許可證：沒有變動（104,619 筆）」；TFDA descriptor generation 2、`last_successful_check_at=2026-09-15T03:32:39Z`。
+- 風險與後續：
+  - 官方每 7 日更新；下一版出現後查詢會標「有新版等待審核」，要再審一次才換版。
+  - 還沒有 TFDA 下載包（資料庫約 160 MB，現行下載包上限 64 MiB 壓縮）。
+  - 觀察：「糖化血色素」第一筆是已註銷的「糖化血色素檢測試劑組」，因為排序先看命中程度（品名開頭相同）才看註銷欄，這是 TFDA-06 規定的順序。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。
