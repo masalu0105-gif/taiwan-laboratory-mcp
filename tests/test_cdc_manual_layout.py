@@ -280,7 +280,13 @@ def test_seven_column_table_has_no_retention_column():
     assert row.locator["table_section"] == "2.6 非法定傳染病檢體"
 
 
-def _typhoid_pages(*, next_header=EIGHT_HEADER, next_xs=EIGHT_XS, retention_top=""):
+def _typhoid_pages(
+    *,
+    next_header=EIGHT_HEADER,
+    next_xs=EIGHT_XS,
+    retention_top="",
+    transport=("2-8oC\n(B 類感染\n性物質\nP650 包", "裝)"),
+):
     first = _Page(16, 6, heading="2.2.第二類法定傳染病檢體")
     cells = [
         first.cell(col, 150, 200, text)
@@ -291,7 +297,7 @@ def _typhoid_pages(*, next_header=EIGHT_HEADER, next_xs=EIGHT_XS, retention_top=
                 "病原體檢測",
                 "未投藥前",
                 "以無菌之細菌拭子",
-                "2-8oC\n(B 類感染\n性物質\nP650 包",
+                transport[0],
                 "菌株(30日)",
                 "見 2.8.6",
             )
@@ -304,7 +310,7 @@ def _typhoid_pages(*, next_header=EIGHT_HEADER, next_xs=EIGHT_XS, retention_top=
     retention = second.cell(6, 150, 200, retention_top)
     urine = second.cell(1, 150, 200, "尿液")
     volume = second.cell(4, 150, 200, "10 mL 中段尿液")
-    overflow = second.cell(5, 150, 200, "裝)")
+    overflow = second.cell(5, 150, 200, transport[1])
     notes = second.cell(7, 150, 200, "尿液檢體")
     second.tr(None, None, None, None, [overflow], [urine], [volume], [notes])
     dengue = [
@@ -345,6 +351,54 @@ def test_page_without_a_header_continues_when_every_column_width_matches():
 
     assert [row.fields()["specimen"] for row in rows] == ["肛門拭子", "尿液", "血清"]
     assert rows[1].fields()["disease"] == "傷寒"
+
+
+def _display_page():
+    # Builder characters advance 6 pt; a full line leaves less room than the next word needs.
+    page = _Page(14, 4, heading="2.2.第二類法定傳染病檢體")
+    texts = (
+        "傷寒\n副傷寒",
+        "肛門拭子",
+        "病原體檢測；血清\n型別鑑定",
+        "發病後(30\n日)內",
+        "以無菌試管收集以無菌試管收集 3\nmL 血清",
+        "送驗前請參考說明第\n3.4節。",
+        "菌株(30日)",
+        "尿液檢體(參考第3.4節)採自\n下列患者：\n1.確定合併感染埃及血吸蟲患者\n。\n2.無症狀帶菌者",
+    )
+    page.tr(*[[page.cell(col, 150, 250, text)] for col, text in enumerate(texts)])
+    return page
+
+
+def test_display_text_joins_lines_that_ran_out_of_room_and_keeps_author_line_breaks():
+    # Owner 2026-09-15 chose B: cell text reads as one line except before 「1.」「2.」 items.
+    (row,) = _parse(_layout(_display_page())).rows
+
+    assert row.fields()["purpose"] == "病原體檢測；血清\n型別鑑定"
+    assert row.display_fields() == {
+        # 「傷寒」 stops with room to spare, so the author broke the line: both names stay apart.
+        "disease": "傷寒\n副傷寒",
+        "specimen": "肛門拭子",
+        "purpose": "病原體檢測；血清型別鑑定",
+        # 「日」 alone would fit, but 「)」 cannot start a line, so 「日)」 moved down together.
+        "collection_time": "發病後(30日)內",
+        "volume_requirement": "以無菌試管收集以無菌試管收集 3 mL 血清",
+        # 「3.4節」 is a section number, not a list item.
+        "transport_method": "送驗前請參考說明第3.4節。",
+        "retention_raw": "菌株(30日)",
+        # 「。」 cannot start a line either: its line is joined whatever room was left.
+        "notes": "尿液檢體(參考第3.4節)採自下列患者：\n1.確定合併感染埃及血吸蟲患者。\n2.無症狀帶菌者",
+    }
+
+
+def test_display_text_joins_a_full_line_with_its_overflow_on_the_next_page():
+    # Nine builder characters fill the transport column; the rest continues on the next page.
+    rows = _parse(_layout(*_typhoid_pages(transport=("2-8oC(B類感", "染性物質)")))).rows
+
+    assert rows[0].fields()["transport_method"] == "2-8oC(B類感\n染性物質)"
+    assert rows[0].display_fields()["transport_method"] == "2-8oC(B類感染性物質)"
+    assert rows[1].display_fields()["transport_method"] == "2-8oC(B類感染性物質)"
+    assert rows[1].display_fields()["retention_raw"] == "菌株(30日)"
 
 
 def _shifted(xs, amount):

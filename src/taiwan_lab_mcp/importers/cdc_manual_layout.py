@@ -48,6 +48,16 @@ _COLUMN_RULE_MIN_HEIGHT = 25.0
 _CLUSTER_GAP = 2.0
 _SECTION_RE = re.compile(r"^2\.([1-9][0-9]*)\.?(\D.*)$")
 _PRINTED_PAGE_RE = re.compile(r"頁碼:第([0-9]+)頁")
+# 「1.」「2、」 start a list item; 「3.4」 and 「2.8.6」 are section numbers.
+_LIST_ITEM_RE = re.compile(r"^[0-9]+[\.、](?![0-9])")
+# A line wrapped when the room left before the column rule was less than the next line's first
+# piece needs plus this much. Word keeps a cell margin of about 5.4 pt and glyph boxes stop at the
+# ink. Measured on 1150826: wrapped lines left up to 7.0 pt more (「0 mL 靜脈血，」), lines the
+# author ended left 8.0 pt or more (「急性期」); a few 「2-8oC」 lines in between read either way.
+_WRAP_ROOM = 7.5
+# Word keeps an opening bracket with what follows it and never starts a line with a closing mark.
+_OPENING = frozenset("（(「『【〔《〈“‘[")
+_CLOSING = frozenset("）)」』】〕》〉”’]，,。.、；;：:！!？?%")
 
 
 class CdcManualLayoutError(ValueError):
@@ -62,9 +72,15 @@ class CdcSpecimenRow:
     values: tuple[str | None, ...]
     locator: dict[str, Any]
     source_row_sha256: str
+    display_values: tuple[str | None, ...] = ()
 
     def fields(self) -> dict[str, str | None]:
         return dict(zip(CDC_SPECIMEN_FIELDS, self.values))
+
+    def display_fields(self) -> dict[str, str | None]:
+        """Cell text for reading: wrapped lines joined, author line breaks and list items kept."""
+
+        return dict(zip(CDC_SPECIMEN_FIELDS, self.display_values))
 
 
 @dataclass(frozen=True)
@@ -96,6 +112,45 @@ def _is_black(color: Any) -> bool:
     )
 
 
+@dataclass(eq=False)
+class _Line:
+    items: list[tuple[str, tuple[float, float, float, float] | None]] = field(default_factory=list)
+    right: float | None = None
+
+    def add(self, text: str, box: tuple[float, float, float, float] | None) -> None:
+        self.items.append((text, box))
+        if box is not None:
+            self.right = box[2] if self.right is None else max(self.right, box[2])
+
+    def text(self) -> str:
+        return "".join(text for text, _ in self.items).strip()
+
+    def first_piece_width(self) -> float:
+        """Width of the start of the line that Word would move to the next line as one piece."""
+
+        items = self.items
+        start = next((index for index, (_, box) in enumerate(items) if box is not None), None)
+        if start is None:
+            return 0.0
+
+        def boxed(index: int) -> bool:
+            # Spaces carry no box; one ends the piece.
+            return index < len(items) and items[index][1] is not None
+
+        end = start
+        while items[end][0] in _OPENING and boxed(end + 1):
+            end += 1
+        if items[end][0].isascii() and items[end][0].isalnum():
+            # A run of ASCII characters wraps as one word; any other character wraps alone.
+            while boxed(end + 1) and items[end + 1][0].isascii():
+                end += 1
+        while boxed(end + 1) and items[end + 1][0] in _CLOSING:
+            end += 1
+        first, last = items[start][1], items[end][1]
+        assert first is not None and last is not None
+        return last[2] - first[0]
+
+
 class _Group:
     def __init__(self, cell: _Cell) -> None:
         self.cells = [cell]
@@ -103,23 +158,65 @@ class _Group:
     def text(self) -> str:
         return "\n".join(text for text in (cell.own_text() for cell in self.cells) if text)
 
+    def display_text(self) -> str:
+        """Owner 2026-09-15 chose B: join lines that ran out of room; keep other line breaks."""
+
+        joined = ""
+        previous: tuple[_Line, float] | None = None
+        for cell in self.cells:
+            for line in cell.lines():
+                text = line.text()
+                if previous is None:
+                    joined = text
+                elif _LIST_ITEM_RE.match(text):
+                    joined += "\n" + text
+                elif text[0] in _CLOSING or (
+                    previous[0].right is not None
+                    and previous[1] - previous[0].right < line.first_piece_width() + _WRAP_ROOM
+                ):
+                    # The next piece did not fit on the previous line, so the line wrapped.
+                    ascii_edge = (
+                        joined[-1:].isascii()
+                        and joined[-1:].isalnum()
+                        and text[:1].isascii()
+                        and text[:1].isalnum()
+                    )
+                    joined += (" " if ascii_edge else "") + text
+                else:
+                    joined += "\n" + text
+                previous = (line, cell.right)
+        return joined
+
 
 @dataclass(eq=False)
 class _Cell:
+    right: float = 0.0
     chars: list[tuple[str, tuple[float, float, float, float] | None]] = field(default_factory=list)
     group: _Group | None = None
 
-    def own_text(self) -> str:
-        parts: list[str] = []
+    def lines(self) -> list[_Line]:
+        lines: list[_Line] = []
+        current: _Line | None = None
         previous = None
         for text, box in self.chars:
+            # A line starts where the text moves down and back left, or wholly below the previous
+            # character (a one-character line such as 「。」 has nothing to its left).
+            starts_new_line = (
+                box is not None
+                and previous is not None
+                and box[1] > previous[1] + 3
+                and (box[0] < previous[0] - 1 or box[1] >= previous[3] - 1)
+            )
+            if current is None or starts_new_line:
+                current = _Line()
+                lines.append(current)
+            current.add(text, box)
             if box is not None:
-                if previous is not None and box[0] < previous[0] - 1 and box[1] > previous[1] + 3:
-                    parts.append("\n")
                 previous = box
-            parts.append(text)
-        lines = (line.strip() for line in "".join(parts).split("\n"))
-        return "\n".join(line for line in lines if line)
+        return [line for line in lines if line.text()]
+
+    def own_text(self) -> str:
+        return "\n".join(line.text() for line in self.lines())
 
     def has_text(self) -> bool:
         return any(text.strip() for text, _ in self.chars)
@@ -210,7 +307,9 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
             )
         )
     cells = {
-        (col, k): _Cell() for col, ys in enumerate(columns) for k in range(max(len(ys) - 1, 0))
+        (col, k): _Cell(right=xs[col + 1])
+        for col, ys in enumerate(columns)
+        for k in range(max(len(ys) - 1, 0))
     }
     for cell in cells.values():
         cell.group = _Group(cell)
@@ -496,6 +595,11 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
             for name, cell in zip(table.names or (), covering)
         }
         values = tuple(by_name.get(name) for name in CDC_SPECIMEN_FIELDS)
+        display = {
+            name: cell.group.display_text()  # type: ignore[union-attr]
+            for name, cell in zip(table.names or (), covering)
+        }
+        display_values = tuple(display.get(name) for name in CDC_SPECIMEN_FIELDS)
         if not any(values):
             raise CdcManualLayoutError("LAYOUT_EMPTY_ROW", f"page {table.number}")
         result_rows.append(
@@ -514,6 +618,7 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
                     ],
                 },
                 source_row_sha256=sha256_bytes(canonical_json_bytes(list(values))),
+                display_values=display_values,
             )
         )
     return CdcSpecimenLayoutResult(
