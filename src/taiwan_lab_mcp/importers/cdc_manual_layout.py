@@ -150,6 +150,7 @@ class _PageTable:
     names: tuple[str, ...] | None
     table_rows: list[list[Any]]
     mcid_columns: dict[int, set[int]]
+    mcid_box_columns: dict[int, set[int]]
     mcid_text: dict[int, str]
 
     @property
@@ -180,15 +181,18 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
     segments = page["segments"]
     chars = page["chars"]
     verticals = [
-        (s["x0"] + s["x1"]) / 2
+        s
         for s in segments
         if _is_black(s.get("color"))
         and s["x1"] - s["x0"] < 3
         and s["y1"] - s["y0"] > _COLUMN_RULE_MIN_HEIGHT
     ]
-    xs = _cluster(verticals)
+    xs = _cluster([(s["x0"] + s["x1"]) / 2 for s in verticals])
     if len(xs) < 2:
         return None
+    # The table spans its column rules; the page header box above has lines too (1150826 manual).
+    table_top = min(s["y0"] for s in verticals)
+    table_bottom = max(s["y1"] for s in verticals)
     columns = []
     for left, right in zip(xs, xs[1:]):
         columns.append(
@@ -201,6 +205,7 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
                     and s["x1"] - s["x0"] > 3
                     and s["x0"] <= left + _RULE_END_TOLERANCE
                     and s["x1"] >= right - _RULE_END_TOLERANCE
+                    and table_top - 1 <= (s["y0"] + s["y1"]) / 2 <= table_bottom + 1
                 ]
             )
         )
@@ -219,8 +224,9 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
         mcid = char.get("mcid")
         if mcid is not None:
             mcid_text.setdefault(mcid, []).append(text)
-        if box[2] - box[0] < 0.5:
-            # A generated space has no real box; it belongs to the previous character's cell.
+        if box[2] - box[0] < 0.5 or not text.strip():
+            # Spaces carry no position of their own: a generated space has no box and a real one
+            # can end past a column rule (manual page 21). They stay with the previous character.
             if last_cell is not None:
                 last_cell.chars.append((text, None))
             continue
@@ -240,32 +246,33 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
         )
         if col is None or index is None:
             last_cell = None
-            outside.append((text, box[0], box[1]))
+            outside.append((text, box[0], cy))
             continue
         last_cell = cells[(col, index)]
         last_cell.chars.append((text, box))
         if mcid is not None:
             mcid_columns.setdefault(mcid, set()).add(col)
+    mcid_box_columns: dict[int, set[int]] = {}
     for item in page.get("marked_content", ()):
         # Marked content without visible characters (an empty own cell) still has a position.
-        if item["mcid"] not in mcid_columns:
-            cx = (item["x0"] + item["x1"]) / 2
-            col = next((i for i in range(len(xs) - 1) if xs[i] <= cx < xs[i + 1]), None)
-            if col is not None:
-                mcid_columns[item["mcid"]] = {col}
+        cx = (item["x0"] + item["x1"]) / 2
+        col = next((i for i in range(len(xs) - 1) if xs[i] <= cx < xs[i + 1]), None)
+        if col is not None:
+            mcid_box_columns.setdefault(item["mcid"], set()).add(col)
 
-    table_top = min((ys[0] for ys in columns if ys), default=0.0)
+    # Lines above the table are grouped by height; within a line the PDF stream order is kept,
+    # because a period's box can start right of the next character (1150826 「2.2.」).
+    above = [(index, item) for index, item in enumerate(outside) if item[2] < table_top]
     lines: list[list[Any]] = []
-    for text, x0, y0 in outside:
-        if y0 >= table_top:
-            continue
-        if lines and abs(y0 - lines[-1][0]) <= 3:
-            lines[-1][1].append(text)
+    for index, (text, _, cy) in sorted(above, key=lambda pair: pair[1][2]):
+        if lines and cy - lines[-1][0] <= 5:
+            lines[-1][1].append((index, text))
         else:
-            lines.append([y0, [text]])
+            lines.append([cy, [(index, text)]])
     section = None
     for _, parts in lines:
-        match = _SECTION_RE.fullmatch("".join("".join(parts).split()))
+        joined = "".join(text for _, text in sorted(parts))
+        match = _SECTION_RE.fullmatch("".join(joined.split()))
         if match:
             section = f"2.{match.group(1)} {match.group(2)}"
     printed = _PRINTED_PAGE_RE.search(_squeeze("".join(char["text"] for char in chars)))
@@ -305,12 +312,16 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
         names=names,
         table_rows=page.get("table_rows") or [],
         mcid_columns=mcid_columns,
+        mcid_box_columns=mcid_box_columns,
         mcid_text={key: "".join(value) for key, value in mcid_text.items()},
     )
 
 
 def _child_column(table: _PageTable, child: list[int]) -> int | None:
     columns = set().union(*(table.mcid_columns.get(mcid, set()) for mcid in child))
+    if not columns:
+        # Only a cell without visible characters falls back to its marked-content boxes.
+        columns = set().union(*(table.mcid_box_columns.get(mcid, set()) for mcid in child))
     if len(columns) > 1:
         raise CdcManualLayoutError("LAYOUT_TAG_COLUMN_AMBIGUOUS", f"page {table.number}")
     return next(iter(columns), None)

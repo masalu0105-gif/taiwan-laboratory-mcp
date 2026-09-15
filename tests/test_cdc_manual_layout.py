@@ -43,12 +43,13 @@ class _Page:
         self.segments = []
         self.chars = []
         self.table_rows = []
+        self.marked_content = []
         self.mcid = 0
         self.top = 120.0
         self.bottom = 120.0
         self._text(f"頁碼：第{printed}頁/共 119 頁", 380.0, 60.0, None)
         if heading:
-            self._text(heading, 60.0, 100.0, None)
+            self._text(heading, 60.0, 105.0, None)
         if header:
             self.tr(*[[self.cell(col, 120, 150, name)] for col, name in enumerate(header)])
 
@@ -91,6 +92,7 @@ class _Page:
             "height": 842.04,
             "segments": segments,
             "chars": list(self.chars),
+            "marked_content": list(self.marked_content),
             "table_rows": [list(row) for row in self.table_rows],
         }
 
@@ -193,12 +195,72 @@ def test_characters_in_pdf_stream_order_across_columns_stay_in_their_own_cells()
     assert rows[0].fields()["transport_method"] == "2-8oC\n(B 類感染\n性物質\nP650 包裝)"
 
 
+def test_space_that_crosses_a_column_rule_stays_with_the_previous_character():
+    # Manual page 21: the space after 「3」 in 「3 mL 血清」 ends past the column rule.
+    layout = _layout(_plague_page())
+    chars = layout["pages"][0]["chars"]
+    three = next(index for index, char in enumerate(chars) if char["text"] == "3")
+    space = chars[three + 1]
+    assert space["text"] == " "
+    space.update(x0=EIGHT_XS[5] - 1.5, x1=EIGHT_XS[5] + 2.0)
+
+    rows = _parse(layout).rows
+
+    assert rows[1].fields()["volume_requirement"] == "3 mL 血清"
+    assert rows[1].fields()["transport_method"] == "2-8oC\n(B 類感染\n性物質\nP650 包裝)"
+
+
+def test_marked_content_without_characters_does_not_move_a_cell_with_text():
+    # Manual page 55: a cell's tag also lists invisible marked content whose box sits in the
+    # next column; the visible characters decide the column.
+    page = _plague_page()
+    page.marked_content.append(
+        {"mcid": 999, "x0": EIGHT_XS[5] + 1, "y0": 160.0, "x1": EIGHT_XS[5] + 4, "y1": 170.0}
+    )
+    page.table_rows[1][4] = [*page.table_rows[1][4], 999]
+
+    rows = _parse(_layout(page)).rows
+
+    assert rows[0].fields()["volume_requirement"] == "以無菌針筒\n吸取 1-2 mL"
+
+
 def test_red_underlines_and_lines_that_do_not_reach_the_column_rules_are_not_row_boundaries():
     page = _plague_page()
     page.rule(4, 175, color=RED, gap=1.4)
     page.rule(1, 175, gap=1.4)
 
     assert len(_parse(_layout(page)).rows) == 2
+
+
+def test_page_header_box_lines_above_the_table_are_not_table_rules():
+    page = _plague_page()
+    # The 1150826 page header box (編號／版次／頁碼) has lines that end on table column rules.
+    for y in (67.7, 84.5, 101.2):
+        for col in (1, 2, 4, 6):
+            page.rule(col, y)
+    for x in (40.4, 198.2, 375.3, 539.3):
+        page.segments.append(
+            {"x0": x - 0.25, "y0": 67.7, "x1": x + 0.25, "y1": 84.5, "color": BLACK}
+        )
+
+    result = _parse(_layout(page))
+
+    assert result.rows[0].locator["table_section"] == "2.1 第一類法定傳染病檢體"
+    assert [row.fields()["specimen"] for row in result.rows] == ["淋巴液", "血清"]
+
+
+def test_section_heading_reads_in_stream_order_even_when_a_period_box_sits_further_right():
+    # Manual 1150826: the box of the period in 「2.2.」 starts right of 「第」, so sorting by x read
+    # 「2.2 第.二類…」.
+    layout = _layout(_plague_page())
+    chars = layout["pages"][0]["chars"]
+    heading = [char for char in chars if 100 < char["y0"] < 118]
+    assert "".join(char["text"] for char in heading) == "2.1.第一類法定傳染病檢體"
+    heading[3].update(x0=heading[4]["x0"] + 2, x1=heading[4]["x0"] + 4)
+
+    rows = _parse(layout).rows
+
+    assert rows[0].locator["table_section"] == "2.1 第一類法定傳染病檢體"
 
 
 def test_seven_column_table_has_no_retention_column():

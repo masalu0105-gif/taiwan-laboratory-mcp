@@ -1080,6 +1080,20 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 驗證：全部測試 513 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 513 passed，import 路徑為該 venv，安裝後 contract 與 repo 位元組相同。
 - 開發環境另裝了 `pypdfium2==5.13.0`（專案 `.venv`，供下半使用），`pyproject.toml` 還沒改。
 
+### 疾管署採檢手冊第三步（上半補充）：真實手冊試跑後的四個修正（2026-09-15）
+
+- 做法：scratchpad 的 PDFium 試用版（`extract_proto.py`，`pypdfium2` 5.13.0，`FPDFText_GetTextObject` 可用）把 1150826 手冊 130 頁讀成 `CdcLayoutV1`（2.7 秒、86,516 個字元），交給已 commit 的拆表程式。沒有進正式 data root。
+- 依序卡住的地方，各先補會失敗的測試再修：
+  1. 第 13 頁 `LAYOUT_SECTION_MISSING`：頁首「編號／版次／頁碼」格的三條橫線（y 67.7、84.5、101.2）端點剛好貼齊第 1、2、4、6 欄格線，被當成列線，表格上緣變成 67.7，「2.1.第一類法定傳染病檢體」被算進格子。改為只取表格欄線直線上下範圍內的橫線，範圍外的字才拿去找節名。
+  2. 第 21 頁 `LAYOUT_TAG_COLUMN_AMBIGUOUS`：「以無菌試管收集 3 mL 血清」的空白字元結尾超過欄線（358.6），被算到送驗方式欄。改為空白一律跟著前一個字。
+  3. 第 55 頁 `LAYOUT_TAG_COLUMN_AMBIGUOUS`：「以無菌檢體小瓶收集 0.3 mL 水疱液；…」這格的標記另列一段沒有字的 marked content，位置框在隔壁欄。改為有可見字時只用字判斷欄位，沒有字才看位置框。
+  4. 節名讀成「2.2 第.二類法定傳染病檢體」：「2.2.」句點的字元框起點在「第」右邊，照 x 排序就排錯。改為同一行內照 PDF 內順序。
+- 修正後整章結果：第 13–67 頁 55 個表格頁（第 52–54 頁為延續頁），370 列（8 欄 208、7 欄 162），跨頁接格 127 處；各節 2.1 14、2.2 67、2.3 47、2.4 62、2.5 18、2.6 26、2.7 136 列；沒有採檢項目空白的列。370 列與只看 Word TR 標記數出的 370 列相同。
+- 抽查對照頁面圖：第 16–17 頁傷寒兩列送驗方式都是完整「2-8oC (B 類感染性物質 P650 包裝)」，第 17 頁尿液沿用上一頁合併格的疾病、目的、時間、保存欄；第 53 頁狂犬病毒檢驗的送驗方式與注意事項接上溢出文字；第 55 頁水疱液採檢量全文正確。第 21 頁那格原文是「以無菌試管收集 3」換行「mL 血清」，沒有句點（先前我說有句點是記錯）。
+- 格內換行目前原樣保留（例如「病原體檢\n測」），顯示與搜尋怎麼處理留到建資料庫那一步。
+- 測試：`tests/test_cdc_manual_layout.py` 增為 18 個。驗證：全部測試 517 passed；ruff、git diff --check 通過；wheel／sdist 建到 scratchpad；repo 外 venv 以 `--import-mode=importlib` 跑 517 passed，contract 與 repo 位元組相同。
+- 證據（repo 外）：`taiwan-lab-mcp-data\cdc-manual-review\layout-spike-1150826\extract_proto.py`、`rows-proto.jsonl`（370 列，SHA-256 `c4409b81…`）、`p21.png`、`p52.png`、`p55.png`。
+
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
 - owner 原話：「如果像那種 PDF，我覺得是不是可以用一些開源專案，例如說 MarkItDown，或者是有其他的工具？例如說，可以先把 PDF 變成 Markdown 之後，AI 再去讀 Markdown，應該就能完整判讀出原本的語意了吧？」（transcript timestamp `2026-09-15T14:43:28.643Z`）
