@@ -442,8 +442,9 @@ TFDA_DATASET_NAME = "醫療器材許可證資料集"
 TFDA_ATTRIBUTION = "資料提供機關：衛生福利部食品藥物管理署"
 TFDA_NORMALIZATION_VERSION = "tfda-text-v1"
 TFDA_SERVING_GATES = ("TFDA-R1-SOURCE", "TFDA-R1-SCHEMA", "PUB-R1-OWNER")
-TFDA_OWNER_REVIEW_PROTOCOL_ID = "tfda-r1-owner-review"
-TFDA_OWNER_REVIEW_PROTOCOL_VERSION = "1"
+# Owner 2026-09-15 delegated the TFDA launch review to AI ("你直接幫我審核").
+TFDA_REVIEW_PROTOCOL_ID = "tfda-r1-ai-review"
+TFDA_REVIEW_PROTOCOL_VERSION = "1"
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 _EVIDENCE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
@@ -1337,14 +1338,16 @@ def build_tfda_snapshot(
     )
 
 
-def _owner_review_protocol() -> tuple[str, str, str]:
+def _review_protocol() -> tuple[str, str, str, str, str]:
+    """Return protocol id, version, SHA-256 and the reviewer id and role it names."""
+
     try:
         payload = (
             files("taiwan_lab_mcp")
             .joinpath(
                 "review_protocols",
-                TFDA_OWNER_REVIEW_PROTOCOL_ID,
-                f"{TFDA_OWNER_REVIEW_PROTOCOL_VERSION}.json",
+                TFDA_REVIEW_PROTOCOL_ID,
+                f"{TFDA_REVIEW_PROTOCOL_VERSION}.json",
             )
             .read_bytes()
         )
@@ -1353,13 +1356,23 @@ def _owner_review_protocol() -> tuple[str, str, str]:
         raise TFDAImportError("REVIEW_PROTOCOL_INVALID") from exc
     if (
         not isinstance(document, dict)
-        or document.get("protocol_id") != TFDA_OWNER_REVIEW_PROTOCOL_ID
-        or document.get("protocol_version") != TFDA_OWNER_REVIEW_PROTOCOL_VERSION
-        or document.get("status") != "owner_approved"
+        or document.get("protocol_id") != TFDA_REVIEW_PROTOCOL_ID
+        or document.get("protocol_version") != TFDA_REVIEW_PROTOCOL_VERSION
+        or document.get("status") != "owner_delegated"
         or sorted(document.get("gates", {})) != sorted(TFDA_SERVING_GATES)
+        or not isinstance(document.get("reviewer_id"), str)
+        or not document["reviewer_id"]
+        or not isinstance(document.get("reviewer_role"), str)
+        or not document["reviewer_role"]
     ):
         raise TFDAImportError("REVIEW_PROTOCOL_INVALID")
-    return TFDA_OWNER_REVIEW_PROTOCOL_ID, TFDA_OWNER_REVIEW_PROTOCOL_VERSION, sha256_bytes(payload)
+    return (
+        TFDA_REVIEW_PROTOCOL_ID,
+        TFDA_REVIEW_PROTOCOL_VERSION,
+        sha256_bytes(payload),
+        document["reviewer_id"],
+        document["reviewer_role"],
+    )
 
 
 def _load_official_raw_revision(
@@ -1488,7 +1501,11 @@ def build_official_tfda_snapshot(
             raise TFDAImportError("EVIDENCE_FILE_INVALID", artifact_id) from exc
     if len({name for _, name, _ in evidence_inputs}) != len(evidence_inputs):
         raise TFDAImportError("EVIDENCE_FILE_INVALID", "duplicate evidence file name")
-    protocol = _owner_review_protocol()
+    protocol_id, protocol_version, protocol_sha256, reviewer_id, reviewer_role = _review_protocol()
+    # The review is delegated to the reviewer the protocol names; nobody else may sign it.
+    for review in review_inputs:
+        if (review["reviewer_id"], review["reviewer_role"]) != (reviewer_id, reviewer_role):
+            raise TFDAImportError("OWNER_REVIEW_REVIEWER_MISMATCH", review["gate_id"])
 
     entry = extract_tfda_csv(payload)
     summary = summarize_tfda_csv(entry)
@@ -1513,6 +1530,7 @@ def build_official_tfda_snapshot(
             case["review_status"] != "approved"
             or case["official_source"] is not True
             or case["evidence_data_root_relative_path"] != artifact_relative
+            or case["reviewer_id"] != reviewer_id
         ):
             raise TFDAImportError("GOLDEN_CASE_NOT_APPROVED", case["case_id"])
     return _publish_tfda_build(
@@ -1530,7 +1548,7 @@ def build_official_tfda_snapshot(
         decisions=decisions,
         golden_results=golden_results,
         review_inputs=review_inputs,
-        protocol=protocol,
+        protocol=(protocol_id, protocol_version, protocol_sha256),
         publisher_actor_id=publisher_actor_id,
         evidence_inputs=evidence_inputs,
         official=True,

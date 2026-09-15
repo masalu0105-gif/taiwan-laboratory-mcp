@@ -369,6 +369,7 @@ Pilot result schema 只保存 participant pseudonymous ID、角色類型、scena
 | OD-04 | 尚未決定 | — |
 | OD-05 | NHI 超過兩個宣告週期沒有成功檢查時標 `upstream_check_overdue`，不 hard-stop，持續回答並揭露；P1.1 支援 Windows 與 macOS | macOS 以 CI macos-latest 驗證；實機安裝流程尚未驗證前不得宣稱實機已驗證 |
 | OD-06 | TFDA 許可證資料 104,619 筆（含已註銷、缺分類代碼、舊制分類）全部收錄、全部查得到，服務 IVD 以外產業的使用者（例如競品研究）。每筆掛官方欄位與審核結果的標籤；預設依命中程度排序、不偏任何類別；使用者的語意由 host AI 判斷，再指定偏好（只調順序）或篩選（使用者明確要求時）。缺分類代碼的 17,606 列維持 `ivd_scope=unknown`（owner 2026-09-15：「A 這樣才有做 data 清理的意義在啊」；2026-09-14「舊制那些維持現狀」） | TFDA-06；`list_matching_license_records` 新增分頁、偏好與篩選參數；可並排原始欄位供使用者自行比較，系統不判優劣、等效或可替代，`compare_products` 維持 deprecated；TFDA 下載包大小上限另行調整 |
+| OD-07 | TFDA 上線審核（`TFDA-R1-SOURCE`、`TFDA-R1-SCHEMA`、`PUB-R1-OWNER` 與正式驗收題）由 AI 代審；附表 A/B/C 以外大類的代碼維持 `ivd_scope=unknown`；搜尋一頁 20 筆的摘要內容暫不再減（owner 2026-09-15：「1.a 2.a 3.z你直接幫我審核」） | review protocol `tfda-r1-ai-review` 第 1 版（`status=owner_delegated`）；審核紀錄與驗收題的 reviewer 寫 `ai-reviewer:claude-opus-5`、role `ai_reviewer_delegated_by_owner`，不得寫成人工或「專案負責人」；範圍只限本機 MCP 服務，不含 GitHub Release 下載包；每日排程改跑 `check tfda_devices`，官方新版仍需再審才發布 |
 | REL-G5 | 取消 5–10 人 pilot，改為公開上線並由使用者回報收集回饋 | 見第 8.2 節修訂列與第 8.4 節註記 |
 
 ## 10. 風險、假設與緩解

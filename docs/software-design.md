@@ -907,6 +907,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-013` local integrity threat model | Accepted | hash不宣稱抵抗可寫data root的惡意writer；runtime read-only principal，若需authenticity另做signed manifest ADR |
 | `D-014` NHI `29101231` sentinel對外語意 | OWNER GATE | 目前只保留raw/parsed date與`possible_open_end_sentinel=true` inference，禁止顯示「永久有效」；需由OD-02 owner核准官方語意後另建rule/build |
 | `D-015` TFDA全收錄、標籤與查詢排序 | Accepted（owner 2026-09-15） | 全部104,619列可查；標籤只取官方欄位與approved registry；預設依命中程度排序、不偏類別；語意由host AI判斷後以`prefer_*`（只調順序）或篩選參數表達，不在server端猜意圖或加隱藏權重；缺分類代碼列維持`unknown`；不輸出分數、等效或採購排序 |
+| `D-016` TFDA上線審核與每日檢查 | Accepted（owner 2026-09-15：「1.a 2.a 3.z你直接幫我審核」） | 三關與正式驗收題由AI代審，protocol `tfda-r1-ai-review` v1；正式build只接受protocol指定的reviewer id與role；範圍只限本機MCP服務；附表A/B/C以外代碼維持`unknown`；每日`check tfda_devices`同檔記成功檢查、新檔標`newer_candidate_pending_review`並寫差異摘要、失敗標`upstream_verification_failed`；新版仍需再審才發布 |
 
 PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列出的工程decision不得冒充owner決議：
 
@@ -914,10 +915,11 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 | --- | --- | --- |
 | `OD-01` | `D-007` | NHI已決定以GitHub Release散布（2026-09-14）；TFDA／CDC未決 |
 | `OD-02` | `D-009`、`D-014` | scope reviewer決定為AI（2026-09-14）；~~官方文件依據研究中~~ AI審核已完成為`nhi-lab-scope-v2`（2026-09-14，見`docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md`），~~6,173碼中2碼仍`review_pending`~~ 依owner決定判不出來的2碼改算檢驗，已重建serving並發布`nhi-data-20260914-lab-scope`；sentinel維持原值＋可能未設定結束日推論 |
-| `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14）；附表逐碼AI判定已完成（2026-09-14，見`docs/reviews/tfda-ivd-ai-review-2026-09-14.md`），尚未接入MCP |
+| `OD-03` | `D-010` | IVD registry reviewer決定為AI（2026-09-14）；附表逐碼AI判定已完成（2026-09-14，見`docs/reviews/tfda-ivd-ai-review-2026-09-14.md`），~~尚未接入MCP~~ 已做成`rules/tfda_ivd/v1.json`接入（2026-09-15） |
 | `OD-04` | `D-011` | 待指定CDC內容與ODS認可制度reviewer及turnaround |
 | `OD-05` | `D-008`、`D-012` | NHI不hard-stop、支援Windows與macOS（2026-09-14）；TFDA／CDC stale門檻仍依各來源另定 |
-| `OD-06` | `D-015` | TFDA全收錄＋標籤＋host AI指定偏好／篩選（2026-09-15）；TFDA curated build、adapter與contract參數尚未實作 |
+| `OD-06` | `D-015` | TFDA全收錄＋標籤＋host AI指定偏好／篩選（2026-09-15）；~~TFDA curated build、adapter與contract參數尚未實作~~ 已實作（2026-09-15） |
+| `OD-07` | `D-016` | TFDA上線審核由AI代審、D–P代碼維持unknown、摘要不再減（2026-09-15） |
 
 `REL-G5` pilot 已由 owner 於 2026-09-14 取消，改為公開上線並以 GitHub Issues 收集使用者回饋（PRD §8.2、§8.4）；本文件中以 pilot 為前提的 `PilotResultV1` 等設計保留為歷史，不再是發布條件。
 

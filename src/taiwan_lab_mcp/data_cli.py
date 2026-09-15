@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     sync_parser.add_argument("--json", action="store_true")
     check_parser = subparsers.add_parser("check")
-    check_parser.add_argument("source_id", choices=["nhi_fee"])
+    check_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
     check_parser.add_argument("--publisher-oid", required=True)
     check_parser.add_argument("--actor", required=True)
     check_parser.add_argument("--data-dir", required=True, type=Path)
@@ -158,11 +158,20 @@ def main(argv: list[str] | None = None) -> int:
         from .sync import SyncError, run_nhi_upstream_check
 
         try:
-            summary = run_nhi_upstream_check(
-                args.data_dir,
-                expected_publisher_oid=args.publisher_oid,
-                actor=args.actor,
-            )
+            if args.source_id == "tfda_devices":
+                from . import tfda_source
+
+                summary = tfda_source.run_tfda_upstream_check(
+                    args.data_dir,
+                    expected_publisher_oid=args.publisher_oid,
+                    actor=args.actor,
+                )
+            else:
+                summary = run_nhi_upstream_check(
+                    args.data_dir,
+                    expected_publisher_oid=args.publisher_oid,
+                    actor=args.actor,
+                )
         except (PublishError, SyncError) as exc:
             print(
                 json.dumps(

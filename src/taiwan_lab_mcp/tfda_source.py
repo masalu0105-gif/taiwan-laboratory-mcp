@@ -9,11 +9,12 @@ candidate, curated build or current descriptor.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
 
-from .canonical import sha256_bytes, sha256_json
+from .canonical import canonical_json_bytes, sha256_bytes, sha256_json
 from .fetch import FetchedArtifact, FetchError, fetch_https_bytes
 from .importers.tfda import (
     MAX_ZIP_BYTES,
@@ -21,9 +22,11 @@ from .importers.tfda import (
     TFDA_SCHEMA_VERSION,
     TFDA_SOURCE_ID,
     TFDAImportError,
+    _iter_tfda_records,
     extract_tfda_csv,
     summarize_tfda_csv,
 )
+from .util import search_normalize
 
 TFDA_DATASET_ID = "9576"
 TFDA_SOURCE_IDENTIFIER = "A21020000I-000053"
@@ -280,3 +283,251 @@ def run_tfda_upstream_sync(
     }
     _write_immutable_json(data_root / PurePosixPath(report_relative), report)
     return report
+
+
+_DIFF_LIST_LIMIT = 50
+
+
+def _read_tfda_serving(data_root: Path) -> dict[str, Any] | None:
+    from .sync import SyncError
+
+    descriptor_path = data_root / "manifests" / "current" / f"{TFDA_SOURCE_ID}.json"
+    if not descriptor_path.is_file():
+        return None
+    try:
+        descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+        serving_id = descriptor["serving_curated_build_id"]
+        if serving_id is None:
+            return None
+        manifest_path = data_root / PurePosixPath(descriptor["manifest_data_root_relative_path"])
+        manifest_bytes = manifest_path.read_bytes()
+        if sha256_bytes(manifest_bytes) != descriptor["manifest_sha256"]:
+            raise SyncError("CURRENT_POINTER_INTEGRITY", "check")
+        artifact = json.loads(manifest_bytes.decode("utf-8"))["artifacts"][0]
+        return {
+            "descriptor": descriptor,
+            "serving_id": serving_id,
+            "artifact_sha256": artifact["sha256"],
+            "artifact_relative": artifact["data_root_relative_path"],
+        }
+    except (KeyError, IndexError, OSError, TypeError, UnicodeDecodeError, ValueError) as exc:
+        if isinstance(exc, SyncError):
+            raise
+        raise SyncError("CURRENT_POINTER_INTEGRITY", "check") from exc
+
+
+def _read_hashed_raw(data_root: Path, relative: str, expected_sha256: str) -> bytes:
+    from .sync import SyncError
+
+    payload = (data_root / PurePosixPath(relative)).read_bytes()
+    if sha256_bytes(payload) != expected_sha256:
+        raise SyncError("RAW_ARTIFACT_READBACK_MISMATCH", "check")
+    return payload
+
+
+def _permit_rows(payload: bytes) -> tuple[Counter[str], set[str]]:
+    """Rows per normalized permit number and every source row hash of one raw ZIP."""
+
+    permits: Counter[str] = Counter()
+    hashes: set[str] = set()
+    for _, values in _iter_tfda_records(extract_tfda_csv(payload).payload):
+        permits[search_normalize(values[0])] += 1
+        hashes.add(sha256_bytes(canonical_json_bytes(list(values))))
+    return permits, hashes
+
+
+def _exceeds_ten_percent(before: int, after: int) -> bool:
+    return abs(after - before) * 10 > before
+
+
+def _tfda_upstream_diff(serving_payload: bytes, candidate_payload: bytes) -> dict[str, Any]:
+    # Parse one file at a time; each official file is about 70 MB of CSV text.
+    serving_permits, serving_hashes = _permit_rows(serving_payload)
+    candidate_permits, candidate_hashes = _permit_rows(candidate_payload)
+    serving_rows = sum(serving_permits.values())
+    candidate_rows = sum(candidate_permits.values())
+    return {
+        "row_counts": {"serving": serving_rows, "candidate": candidate_rows},
+        "permit_counts": {"serving": len(serving_permits), "candidate": len(candidate_permits)},
+        "added_permits": sorted(candidate_permits.keys() - serving_permits.keys()),
+        "removed_permits": sorted(serving_permits.keys() - candidate_permits.keys()),
+        "rows_only_in_candidate": len(candidate_hashes - serving_hashes),
+        "rows_only_in_serving": len(serving_hashes - candidate_hashes),
+        "review_gate": {
+            "row_count_change_exceeds_10_percent": _exceeds_ten_percent(
+                serving_rows, candidate_rows
+            ),
+            "permit_count_change_exceeds_10_percent": _exceeds_ten_percent(
+                len(serving_permits), len(candidate_permits)
+            ),
+        },
+    }
+
+
+def _tfda_diff_markdown(diff: dict[str, Any], *, checked_at: str, serving_id: str) -> str:
+    gate = diff["review_gate"]
+    lines = [
+        "# 食藥署醫療器材許可證資料：上游有新版（等待審核）",
+        "",
+        f"- 檢查時間（UTC）：{checked_at}",
+        f"- 目前 MCP 服務中的版本：`{serving_id}`",
+        f"- 資料列：服務中 {diff['row_counts']['serving']:,} 列 → 新版 {diff['row_counts']['candidate']:,} 列",
+        f"- 許可證字號：服務中 {diff['permit_counts']['serving']:,} 個 → 新版 {diff['permit_counts']['candidate']:,} 個",
+        f"- 新增字號 {len(diff['added_permits']):,} 個、消失字號 {len(diff['removed_permits']):,} 個",
+        f"- 內容不同的資料列：新版有、舊版沒有 {diff['rows_only_in_candidate']:,} 列；"
+        f"舊版有、新版沒有 {diff['rows_only_in_serving']:,} 列",
+        "- 資料列變動超過 10%：" + ("是" if gate["row_count_change_exceeds_10_percent"] else "否"),
+        "",
+        "新版審核並發布之前，MCP 會繼續回目前的版本，並標示「有新版等待審核」。",
+        "",
+    ]
+    for title, permits in (
+        ("新增的許可證字號", diff["added_permits"]),
+        ("消失的許可證字號", diff["removed_permits"]),
+    ):
+        lines.extend([f"## {title}（{len(permits):,} 個）", ""])
+        lines.extend(f"- {permit}" for permit in permits[:_DIFF_LIST_LIMIT])
+        if not permits:
+            lines.append("（無）")
+        elif len(permits) > _DIFF_LIST_LIMIT:
+            lines.append(f"- …另外 {len(permits) - _DIFF_LIST_LIMIT:,} 個，完整清單見 diff.json")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def run_tfda_upstream_check(
+    data_root: Path,
+    *,
+    expected_publisher_oid: str,
+    actor: str,
+    opener=None,
+    clock=None,
+) -> dict[str, Any]:
+    """Check upstream once and record the result without switching the serving snapshot.
+
+    Same ZIP bytes as the serving build record a successful check. A different ZIP keeps
+    serving the approved build, marks a review-pending candidate and writes a diff report.
+    A failed fetch or validation keeps serving the approved build and marks it stale.
+    """
+
+    from .publish import publish_operational_check
+    from .sync import _write_immutable_json, _write_new_file
+
+    data_root = Path(data_root)
+    serving = _read_tfda_serving(data_root)
+    report = run_tfda_upstream_sync(
+        data_root, expected_publisher_oid=expected_publisher_oid, opener=opener, clock=clock
+    )
+    summary: dict[str, Any] = {
+        "result": None,
+        "sync_report_data_root_relative_path": report["report_data_root_relative_path"],
+        "diff_data_root_relative_path": None,
+        "diff_summary_data_root_relative_path": None,
+        "candidate_raw_revision_id": None,
+        "failed_stage": None if report["status"] == "passed" else report["stage"],
+        "error_code": report["error_code"],
+        "rows": (report["summary"] or {}).get("rows"),
+        "check_id": None,
+        "generation": None,
+        "stale": None,
+        "stale_reason_codes": None,
+    }
+    if serving is None:
+        summary["result"] = "no_serving_snapshot"
+        return summary
+
+    descriptor = serving["descriptor"]
+    saved_sha256 = report["fetch"]["sha256"] if report["raw_revision_id"] else None
+    candidate_id = None
+    candidate_status = "none"
+    if report["status"] != "passed":
+        result = "failed"
+        check_result = "failed"
+        reasons = ["upstream_verification_failed"]
+        if saved_sha256 is not None and saved_sha256 != serving["artifact_sha256"]:
+            candidate_status = "rejected"
+            candidate_id = report["raw_revision_id"]
+            reasons.append("newer_candidate_rejected")
+        seen_sha256 = saved_sha256 or descriptor["latest_seen_artifact_sha256"]
+    elif saved_sha256 == serving["artifact_sha256"]:
+        result = "unchanged"
+        check_result = "success"
+        reasons = []
+        seen_sha256 = saved_sha256
+    else:
+        result = "changed"
+        check_result = "success"
+        candidate_status = "review_pending"
+        candidate_id = report["raw_revision_id"]
+        reasons = ["newer_candidate_pending_review"]
+        seen_sha256 = saved_sha256
+        diff = _tfda_upstream_diff(
+            _read_hashed_raw(data_root, serving["artifact_relative"], serving["artifact_sha256"]),
+            _read_hashed_raw(
+                data_root, report["raw_artifact_data_root_relative_path"], saved_sha256
+            ),
+        )
+        attempt_dir = PurePosixPath(report["report_data_root_relative_path"]).parent
+        diff_relative = str(attempt_dir / "diff.json")
+        summary_relative = str(attempt_dir / "diff-summary.md")
+        _write_immutable_json(
+            data_root / PurePosixPath(diff_relative),
+            {
+                "diff_schema_version": 1,
+                "source_id": TFDA_SOURCE_ID,
+                "checked_at": report["completed_at"],
+                "serving_snapshot_id": serving["serving_id"],
+                "serving_raw_artifact_sha256": serving["artifact_sha256"],
+                "candidate_raw_revision_id": candidate_id,
+                "candidate_raw_artifact_sha256": saved_sha256,
+                **diff,
+            },
+        )
+        _write_new_file(
+            data_root / PurePosixPath(summary_relative),
+            _tfda_diff_markdown(
+                diff, checked_at=report["completed_at"], serving_id=serving["serving_id"]
+            ).encode("utf-8"),
+        )
+        summary["diff_data_root_relative_path"] = diff_relative
+        summary["diff_summary_data_root_relative_path"] = summary_relative
+
+    check = {
+        "check_schema_version": 1,
+        "check_id": f"{TFDA_SOURCE_ID}-check-{report['attempt_id'].lower()}",
+        "source_id": TFDA_SOURCE_ID,
+        "generation": descriptor["generation"] + 1,
+        "serving_snapshot_id": serving["serving_id"],
+        "serving_curated_build_id": serving["serving_id"],
+        "checked_at": report["completed_at"],
+        "latest_seen_version": None,
+        "latest_seen_artifact_sha256": seen_sha256,
+        "latest_candidate_id": candidate_id,
+        "latest_candidate_status": candidate_status,
+        "check_result": check_result,
+        "failed_stage": summary["failed_stage"],
+        "error_code": summary["error_code"],
+        "stale": bool(reasons),
+        "stale_reason_codes": reasons,
+        "freshness_policy_version": descriptor["freshness_policy_version"],
+        "content_age_status": descriptor["content_age_status"],
+        "content_age_evidence": descriptor["content_age_evidence"],
+    }
+    event = publish_operational_check(
+        data_root,
+        TFDA_SOURCE_ID,
+        check,
+        expected_generation=descriptor["generation"],
+        actor=actor,
+    )
+    summary.update(
+        {
+            "result": result,
+            "candidate_raw_revision_id": candidate_id,
+            "check_id": check["check_id"],
+            "generation": event["generation"],
+            "stale": check["stale"],
+            "stale_reason_codes": reasons,
+        }
+    )
+    return summary
