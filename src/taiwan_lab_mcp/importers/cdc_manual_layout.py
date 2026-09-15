@@ -48,6 +48,9 @@ _COLUMN_RULE_MIN_HEIGHT = 25.0
 _CLUSTER_GAP = 2.0
 _SECTION_RE = re.compile(r"^2\.([1-9][0-9]*)\.?(\D.*)$")
 _PRINTED_PAGE_RE = re.compile(r"頁碼:第([0-9]+)頁")
+# Page header 「版次：1150826 核准日期：115年08月26日」.
+_VERSION_RE = re.compile(r"版次:([0-9]{7})")
+_APPROVED_DATE_RE = re.compile(r"核准日期:([0-9]+年[0-9]+月[0-9]+日)")
 # 「1.」「2、」 start a list item; 「3.4」 and 「2.8.6」 are section numbers.
 _LIST_ITEM_RE = re.compile(r"^[0-9]+[\.、](?![0-9])")
 # A line wrapped when the room left before the column rule was less than the next line's first
@@ -238,6 +241,8 @@ def _link(earlier: _Cell, later: _Cell) -> None:
 class _PageTable:
     number: int
     printed_page: int | None
+    version: str | None
+    approved_date_raw: str | None
     section: str | None
     xs: list[float]
     columns: list[list[float]]
@@ -374,7 +379,10 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
         match = _SECTION_RE.fullmatch("".join(joined.split()))
         if match:
             section = f"2.{match.group(1)} {match.group(2)}"
-    printed = _PRINTED_PAGE_RE.search(_squeeze("".join(char["text"] for char in chars)))
+    page_text = _squeeze("".join(char["text"] for char in chars))
+    printed = _PRINTED_PAGE_RE.search(page_text)
+    version = _VERSION_RE.search(page_text)
+    approved = _APPROVED_DATE_RE.search(page_text)
 
     header_bottom = None
     names = None
@@ -402,6 +410,8 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
     return _PageTable(
         number=int(page["page_number"]),
         printed_page=int(printed.group(1)) if printed else None,
+        version=version.group(1) if version else None,
+        approved_date_raw=approved.group(1) if approved else None,
         section=section,
         xs=xs,
         columns=columns,
@@ -534,6 +544,13 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
         if section is None:
             raise CdcManualLayoutError("LAYOUT_SECTION_MISSING", f"page {table.number}")
         table.section = section
+        if table.version is None or table.approved_date_raw is None:
+            raise CdcManualLayoutError("LAYOUT_VERSION_MISSING", f"page {table.number}")
+        if (table.version, table.approved_date_raw) != (
+            tables[0].version,
+            tables[0].approved_date_raw,
+        ):
+            raise CdcManualLayoutError("LAYOUT_VERSION_CONFLICT", f"page {table.number}")
         width = len(table.columns)
         rows = [row for row in table.table_rows if any(child is not None for child in row)]
         header_rows = [
@@ -625,6 +642,8 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
         rows=result_rows,
         summary={
             "rules_version": CDC_MANUAL_LAYOUT_RULES_VERSION,
+            "manual_version": tables[0].version,
+            "approved_date_raw": tables[0].approved_date_raw,
             "table_pages": [table.number for table in tables],
             "continuation_pages": continuation_pages,
             "page_joins": joins,

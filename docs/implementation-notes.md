@@ -1128,6 +1128,15 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 驗證：全部測試 531 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 531 passed，import 路徑來自該 venv，安裝後 contract 與 repo 位元組相同（144,136 bytes）。
 - 證據（repo 外）：`taiwan-lab-mcp-data\cdc-manual-review\layout-spike-1150826\rows-display.jsonl`（370 列，528,657 bytes，SHA-256 `ae4fbba3…`）、`display-breaks-1150826.txt`（4,143 bytes，SHA-256 `f52946d4…`）。
 - 待 owner 確認（留到最後總結）：作者自己換的行要不要保留，還是照 B 原文除了編號前全部接起來。
+- 提交：commit `e49b1e9`，CI 通過（run 34994361710）。
+
+### 疾管署採檢手冊：讀頁首版次與核准日期（2026-09-16）
+
+- 依據：SDD §10.3 每列要保存 `manual_version`、`approved_date_raw`，版本資訊互相矛盾時整批擋下；TDD §9.1 版本衝突要 block。
+- 改動：`parse_cdc_specimen_layout` 從每個表格頁頁首讀「版次：1150826 核准日期：115年08月26日」，放進 summary 的 `manual_version`、`approved_date_raw`（日期保留民國原文）。缺一項回 `LAYOUT_VERSION_MISSING`；和第一個表格頁不同回 `LAYOUT_VERSION_CONFLICT`。建資料庫時再和下載時的附件版本（`fetch.json`）比對。
+- 真實手冊（1150826，scratchpad）：55 個表格頁都讀到 `1150826`、`115年08月26日`；370 列的原文、顯示文字與定位和 `rows-display.jsonl` 完全相同。
+- 測試：先寫測試跑出 4 failed，實作後 `tests/test_cdc_manual_layout.py` 23 passed。
+- 驗證：全部測試 534 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 534 passed，安裝後 contract 與 repo 位元組相同（144,136 bytes）。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
