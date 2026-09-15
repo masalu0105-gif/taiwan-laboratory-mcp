@@ -1019,6 +1019,9 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 全部測試 471 passed；ruff check、ruff format --check、git diff --check 通過。
   - wheel／sdist 建到 scratchpad，安裝包內容檢查通過。第一次建出的 sdist 夾帶 `uv.lock`（本次 `uv run` 自動產生、沒有被 git 追蹤）；檔案移到 scratchpad 後重建，包內不再有。
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：471 passed，import 路徑為該 venv；安裝後 contract 143,636 bytes 與 repo 相同。
+- 接進排程：commit `7db0854` 的 wheel（SHA-256 `75460f99…`）裝進 uv tool 環境後，以 `-EmailDryRun` 跑一次 `Invoke-NhiDailyCheck.ps1`（2026-09-15 22:03，exit 0）：
+  - STATUS 第一行「OK：健保支付標準表沒有變動」；食藥署沒有變動（104,619 筆）；疾管署名冊沒有變動（1150914）；下載包已是最新（data-20260915）。
+  - 疾管署檢查 `result=unchanged`、3,584 列、generation 1→2、`stale=false`。
 - 限制：
   - 自動換版中途失敗留下的 build 資料夾，會讓同一新版之後重試回 `IMMUTABLE_BUILD_EXISTS`（食藥署相同）；排程只寄一次信。
   - 真正的自動換版要等疾管署出新版才會跑到；目前是 synthetic 名冊測過。
