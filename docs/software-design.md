@@ -59,7 +59,7 @@
 | `SDD-OBS-01` | `tests/test_models.py::test_sdd_obs_01_status_and_logs_exclude_query_content` | structured status/log capture；`REL-G1`、`REL-G5` |
 | `SDD-AUDIT-01` | `tests/test_snapshot_publish.py::test_sdd_audit_01_subject_digest_binds_all_evidence` | tamper-each-input matrix＋review/certificate hashes；`REL-G1` |
 | `SDD-API-01` | `tests/test_mcp_stdio.py::test_sdd_api_01_public_contract_resource_matches_discovery` | installed `public-contract-v1.json`與22-tool discovery equality；`REL-G1` |
-| `SDD-QUAL-01` | `tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution` | out-of-tree wheel、missing/mismatch/success preflight；`CDC-R1-LAYOUT` |
+| `SDD-QUAL-01` | ~~`tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution`~~ `tests/test_cdc_pdf_importer.py::test_sdd_qual_01_pdfium_identity_and_resource_resolution`（ADR 0003；acceptance contract 與第一個實作切片一起改名） | out-of-tree wheel、missing/mismatch/success preflight；`CDC-R1-LAYOUT` |
 
 ## 3. 現況與限制
 
@@ -182,7 +182,7 @@ src/taiwan_lab_mcp/schemas/
 src/taiwan_lab_mcp/review_protocols/
   <protocol-id>/<protocol-version>.json
 src/taiwan_lab_mcp/qualifier_specs/
-  liteparse-2.0.0.json
+  pdfium-layout-v1.json
 src/taiwan_lab_mcp/contracts/
   public-contract-v1.json
 ```
@@ -650,29 +650,26 @@ Query capabilities分開：
 
 #### PDF extraction gate
 
-目前研究證明 LiteParse `--no-ocr` 可取得文字並供 screenshot 抽查，但尚未證明其 JSON 契約可穩定提供本 parser 所需的 bounding boxes、table lines與跨頁lineage。因此第一個CDC implementation slice MUST先用忽略於Git的`data/raw`現行130/29頁official artifacts做可重跑qualification，不得稱它們為checked-in fixture：
+~~目前研究證明 LiteParse `--no-ocr` 可取得文字並供 screenshot 抽查，但尚未證明其 JSON 契約可穩定提供本 parser 所需的 bounding boxes、table lines與跨頁lineage。~~ 2026-09-15 版面試驗已完成（`docs/adr/0003-cdc-manual-pdf-layout.md`、`D-022`）：LiteParse JSON 會把同一行相鄰兩欄的字併成一段，而且沒有表格線，不足以拆表；改用 PDFium（`pypdfium2`）讀字元框、黑色格線與 Word 表格標記。官方 artifacts 仍只放在不進 Git 的 data root，不得稱為 checked-in fixture：
 
-1. 確認 LiteParse JSON 是否含足夠座標與頁資訊，並記錄 LiteParse 版本及命令。
+1. ~~確認 LiteParse JSON 是否含足夠座標與頁資訊，並記錄 LiteParse 版本及命令。~~ 已確認不足（ADR 0003 §背景）。
 2. 用同疾病多檢體、跨頁續列與三欄修訂表重建 golden cases。
-3. 若不足，再選最小必要 PDF layout dependency並新增 ADR；不得悄悄退化為純文字切割或預設 OCR。
+3. ~~若不足，再選最小必要 PDF layout dependency並新增 ADR；~~ 已選 PDFium 並新增 ADR 0003；不得悄悄退化為純文字切割或預設 OCR。
 
 可重跑入口固定為：
 
 ```powershell
 taiwan-lab-data qualify cdc_specimen_manual `
   --raw-revision-id <id> `
-  --extractor liteparse `
-  --extractor-version 2.0.0 `
-  --no-ocr `
   --data-dir <path> `
   --json
 ```
 
-Qualifier spec 的唯一位置是 Python package resource `importlib.resources.files("taiwan_lab_mcp").joinpath("qualifier_specs", "liteparse-2.0.0.json")`；repo-relative path與`qualifiers/`別名禁止fallback。該spec以`extra=forbid` schema固定npm package `@llamaindex/liteparse`、exact version `2.0.0`、npm dist integrity、需核對的package-relative bundle files及各SHA-256、executable basename與approved argv。
+Qualifier spec 的唯一位置是 Python package resource `importlib.resources.files("taiwan_lab_mcp").joinpath("qualifier_specs", "pdfium-layout-v1.json")`；repo-relative path與`qualifiers/`別名禁止fallback。該spec以`extra=forbid` schema固定 `pypdfium2` exact version、PDFium build、讀表規則版本與容差（ADR 0003 §決定 3）。~~npm package `@llamaindex/liteparse`、exact version `2.0.0`、npm dist integrity、bundle files SHA-256、executable basename與approved argv~~（2026-09-15 由 ADR 0003 取代）。
 
-LiteParse不是Python runtime dependency，而是只有 `qualify cdc_specimen_manual` 需要的optional Node prerequisite。Preflight先以`shutil.which("lit.cmd")`（Windows）或`shutil.which("lit")`（其他平台）解析唯一executable，再以`shutil.which("npm.cmd")`／`shutil.which("npm")`執行`npm root -g`與`npm prefix -g`定位global package root/bin；不得搜尋repo、PATH外猜測安裝或自動下載。Package固定解析為`<npm-root>/@llamaindex/liteparse/package.json`，executable必須位於global prefix bin且對應package.json的`bin.lit` target；版本同時以package.json及`lit(.cmd) --version`核對。Integrity固定從`<npm-root>/.package-lock.json`的`packages["node_modules/@llamaindex/liteparse"].integrity`讀取並與spec比對，再逐一hash spec列出的bundle bytes；lock entry或任何identity證據缺失回`QUALIFIER_DEPENDENCY_MISSING`，值不一致回`QUALIFIER_IDENTITY_MISMATCH`，皆exit 4且不建立reviewable build。這些錯誤只阻止CDC新candidate qualification；已核准CDC snapshot與NHI、TFDA、ODS runtime仍可各自服務。
+`pypdfium2` 放在 optional extra `cdc-manual`，只有 `qualify cdc_specimen_manual` 與手冊自動更新需要，MCP 查詢不需要。Preflight 以 `importlib.metadata.version("pypdfium2")` 與 `pypdfium2.version.PDFIUM_INFO` 核對 spec；缺少回`QUALIFIER_DEPENDENCY_MISSING`，不符回`QUALIFIER_IDENTITY_MISMATCH`，皆exit 4且不建立reviewable build；已核准CDC snapshot與NHI、TFDA、ODS runtime仍可各自服務。以下 LiteParse preflight 原文已由 ADR 0003 取代，保留作歷史：~~LiteParse不是Python runtime dependency，而是只有 `qualify cdc_specimen_manual` 需要的optional Node prerequisite。Preflight先以`shutil.which("lit.cmd")`（Windows）或`shutil.which("lit")`（其他平台）解析唯一executable，再以`shutil.which("npm.cmd")`／`shutil.which("npm")`執行`npm root -g`與`npm prefix -g`定位global package root/bin；不得搜尋repo、PATH外猜測安裝或自動下載。Package固定解析為`<npm-root>/@llamaindex/liteparse/package.json`，executable必須位於global prefix bin且對應package.json的`bin.lit` target；版本同時以package.json及`lit(.cmd) --version`核對。Integrity固定從`<npm-root>/.package-lock.json`的`packages["node_modules/@llamaindex/liteparse"].integrity`讀取並與spec比對，再逐一hash spec列出的bundle bytes；lock entry或任何identity證據缺失回`QUALIFIER_DEPENDENCY_MISSING`，值不一致回`QUALIFIER_IDENTITY_MISMATCH`，皆exit 4且不建立reviewable build。這些錯誤只阻止CDC新candidate qualification；已核准CDC snapshot與NHI、TFDA、ODS runtime仍可各自服務。~~
 
-Preflight通過後，CLI 對手冊與修訂表各執行 `lit(.cmd) parse <input> --format json --no-ocr -o <attempt-output>`，保存完整argv（不含本機絕對root）、tool/package/spec identity、raw output SHA-256與stderr hash。兩份raw extractor output必須正規化為project-owned `CdcLayoutV1`：document artifact/hash、extractor identity/options、page dimensions、physical page number、text-layer flag與逐block `bbox/text/order`；缺bbox/page或無法建立header lineage就qualification failed。Normalized layout JSON的canonical bytes、schema與hash納入curated build fingerprint。
+Preflight通過後，CLI 以 PDFium 讀手冊與修訂表，正規化為project-owned `CdcLayoutV1`：document artifact/hash、extractor identity（`pypdfium2` 版本與 PDFium build）、page dimensions、physical page number、text-layer flag、黑色格線、逐字元 `bbox/text/order` 與 Word 表格標記的 TR／TD 順序；表格重建規則與擋下條件見 ADR 0003 §決定 3，缺字元框、格線、表頭或跨頁接續不成立就qualification failed。~~CLI 對手冊與修訂表各執行 `lit(.cmd) parse <input> --format json --no-ocr -o <attempt-output>`，保存完整argv、tool/package/spec identity、raw output SHA-256與stderr hash；逐block `bbox/text/order`。~~Normalized layout JSON的canonical bytes、schema與hash納入curated build fingerprint。
 
 Qualification先輸出`staged/<source>/<attempt>/qualification-candidate.json`，保存`automated_status=passed|failed`、`synthetic_ci_status=not_run|passed|failed`及逐案結果。Command在extract/schema/golden candidate成功產生時exit 0；extract/schema失敗exit 4。Source reviews核准後，publisher依第7.4節產生immutable`audit/golden-qualification.json`certificate；缺active subject的approved certificate則exit 5。CI只使用最小synthetic`CdcLayoutV1`fixture且最多令synthetic status passed，不能宣稱qualified official PDF。
 
@@ -837,8 +834,8 @@ Operational status永遠不授權publish；current availability descriptor、其
 | `src/taiwan_lab_mcp/importers/tfda.py` | ZIP verify、34 欄 CSV、classifications與IVD join |
 | `src/taiwan_lab_mcp/importers/cdc_pdf.py` | artifact pairing、layout JSON ingestion、section entities與review diff |
 | `src/taiwan_lab_mcp/importers/cdc_ods.py` | ODS ZIP/XML、merge span與12欄 schema |
-| `src/taiwan_lab_mcp/qualifiers/cdc.py` | pinned LiteParse qualification、`CdcLayoutV1`與official report |
-| `src/taiwan_lab_mcp/qualifier_specs/liteparse-2.0.0.json` | npm package/version/integrity、bundle hash與approved arguments |
+| `src/taiwan_lab_mcp/qualifiers/cdc.py` | pinned PDFium layout qualification（ADR 0003）、`CdcLayoutV1`與official report |
+| `src/taiwan_lab_mcp/qualifier_specs/pdfium-layout-v1.json` | `pypdfium2` exact version、PDFium build、讀表規則版本與容差 |
 | `src/taiwan_lab_mcp/contracts/public-contract-v1.json` | PRD §5.3、§6.3.1、§7 operation/status/truth/safety machine-readable真源 |
 | `src/taiwan_lab_mcp/adapters/*.py` | 從注入 store 查詢；保留 source-specific notes/guards |
 | `src/taiwan_lab_mcp/server.py` | 建立單一 DataContext、status與ToolResult contract |
@@ -897,7 +894,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-003` current用per-source lock/CAS atomic availability descriptor | Accepted | serving pointer與operational狀態同檔單次replace；generation/parent阻止並行晚到舊候選倒退；rollback/recovery另有稽核命令 |
 | `D-004` sample/official以process mode隔離 | Accepted | 保留示範體驗並消除混查與silent fallback |
 | `D-005` source importer分開 | Accepted | 四種格式與醫療語意不同，共用領域模型會隱藏錯誤 |
-| `D-006` CDC PDF layout engine | Proposed / qualification gate | LiteParse文字抽取已證明；以ignored official raw與pinned identity驗bbox/table lineage，CI fixture只驗synthetic contract |
+| `D-006` CDC PDF layout engine | ~~Proposed / qualification gate~~ Accepted（2026-09-15，見`D-022`） | ~~LiteParse文字抽取已證明；以ignored official raw與pinned identity驗bbox/table lineage~~ 版面試驗證明LiteParse JSON不足以拆表，改用PDFium；CI fixture只驗synthetic contract |
 | `D-007` curated artifact是否再散布 | Accepted for NHI（owner 2026-09-14） | NHI以GitHub Release下載包散布並附原始CSV，見`docs/adr/0001-nhi-snapshot-release-bundle.md`；~~TFDA／CDC仍需另案確認第三方內容、大小與更新責任~~ TFDA同樣散布（owner 2026-09-15，`D-019`、`docs/adr/0002-tfda-bundle-and-automatic-release.md`）；CDC仍需另案 |
 | `D-008` NHI stale 7日是否hard-stop | Accepted（owner 2026-09-14）：不hard-stop | 超過兩個宣告週期未成功check時runtime加`upstream_check_overdue`，持續回舊版並揭露 |
 | `D-009` NHI lab scope owner/reviewer | Accepted（owner 2026-09-14）：AI reviewer | allowlist依據須為健保署支付標準官方文件原文與locator；review record必須標明AI reviewer；~~不確定者留`review_pending`~~ 不確定者一律`in_scope`並在basis寫明依owner決定（owner 2026-09-14「寧可錯殺一百，也不要放過一個」）。結果notes不另加AI審核備註（owner 2026-09-14） |
@@ -913,6 +910,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-019` TFDA下載包 | Accepted（owner 2026-09-15選「健保＋食藥署」） | `export-snapshot`／`install-snapshot`支援`tfda_devices`，內容與檢查同ADR 0001（原始ZIP＋curated build＋audit），見`docs/adr/0002-tfda-bundle-and-automatic-release.md`；上限改為壓縮後128 MiB、解壓後512 MiB；匯出與安裝逐檔串流讀寫，不把整包放進記憶體；安裝時check record沿用發布者最後成功檢查時間，TFDA超過兩個宣告週期（14天）標`upstream_check_overdue`；review protocol `tfda-r1-ai-review` v2 |
 | `D-020` 下載包自動發布 | Accepted（owner 2026-09-15選「自動發」） | 每日排程在健保與食藥署檢查後執行repo外`publish_data_release.py`：兩個來源都在服務且沒有stale reason才匯出；最新Release已含同名兩個下載包就不發；Release標籤指向`origin/main`，該commit的`src/taiwan_lab_mcp`檔案必須和本機安裝版逐檔相同（換行正規化後）且CI成功，否則不發並通知；發布後比對GitHub回報的附件大小與SHA-256；protocol `nhi-r1-auto-review`、`tfda-r1-auto-review` v2 |
 | `D-021` 未審核代碼預設 | Accepted（owner 2026-09-15選「先當成「算」」） | NHI只用於正式建置：沒有核准scope規則的代碼`scope_status=in_scope`、`scope_basis_locator`寫明依owner決定，NHI-R1-SCOPE capability視為approved，查詢不因此回`review_incomplete`；離線合成建置維持`review_pending`。TFDA所有建置：附表A/B/C類沒有registry決定的代碼算`included`（`derive_ivd_scope`與獨立逐列比對同規則，不再計入`unknown_code_rows`），其他類與無代碼列維持`unknown`；自動更新摘要仍列出這些代碼 |
+| `D-022` CDC手冊版面讀法 | Accepted（工程決定2026-09-15，依§10.3 extraction gate第3步） | 以1150826版實測：LiteParse把同一行相鄰兩欄併成一段、沒有表格線；PDFium（`pypdfium2`，optional extra `cdc-manual`，exact version）有逐字元框、格線與Word表格標記。欄以表頭文字對應；列界線只算黑色且兩端貼齊格線的橫線；跨頁溢出依TR內TD順序接回上一頁同欄最後一格；TD數不符、頁中溢出、找不到可接格子、表格內有字不屬於任何格、沒有文字層都整批擋下。見`docs/adr/0003-cdc-manual-pdf-layout.md` |
 
 PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列出的工程decision不得冒充owner決議：
 

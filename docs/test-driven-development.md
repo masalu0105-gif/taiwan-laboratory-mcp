@@ -106,7 +106,7 @@ Official suite 最多證明「適合本機離線公開資料查詢」，不構�
 | `SDD-OBS-01` | `tests/test_models.py::test_sdd_obs_01_status_and_logs_exclude_query_content` | redacted sync／status report hash；`REL-G1`／`REL-G5` |
 | `SDD-AUDIT-01` | `tests/test_snapshot_publish.py::test_sdd_audit_01_subject_digest_binds_all_evidence` | immutable audit paths／hash readback；source gates |
 | `SDD-API-01` | `tests/test_mcp_stdio.py::test_sdd_api_01_public_contract_resource_matches_discovery` | `public-contract-v1.json` hash／list_tools transcript；`REL-G1` |
-| `SDD-QUAL-01` | `tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution` ＋第 9.2 節 CLI | out-of-tree wheel／missing／mismatch／success preflight；`CDC-R1-LAYOUT` |
+| `SDD-QUAL-01` | ~~`tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution`~~ `tests/test_cdc_pdf_importer.py::test_sdd_qual_01_pdfium_identity_and_resource_resolution`（ADR 0003）＋第 9.2 節 CLI | out-of-tree wheel／missing／mismatch／success preflight；`CDC-R1-LAYOUT` |
 
 Acceptance reporter 必須對 14 個 SDD ID 輸出 `reports/acceptance/<release-id>/<SDD-ID>.json`，內含 collected node count、exit code、evidence path／hash 與 gate disposition。Node 不存在、0 collected、skip、xfail、**PLANNED** 或只有文件審查，一律不得記為 passed。
 
@@ -361,6 +361,7 @@ PDF extraction 與資料語意解析分層測試。CI 的 parser unit test 使�
 - 同疾病的不同 specimen、purpose、collection timing、volume／container、transport、retention、notes 各自維持同一列關係；組合測試證明不會做 Cartesian product。
 - 對外固定使用官方欄名「應保存種類（應保存時間）」並回 `not_pre_submission_storage=true`；不得出現泛稱 storage／保存條件。運送溫度與時間只留在「送驗方式」／注意事項原文，感染性物質分類與 P620／P650 文字保持同一條件。
 - 第 2 章採檢規定與第 7 章送驗地點／檢驗方法分成不同 entity；第 7.7、7.9 的不同表格另走各自 schema，不在 extraction 階段直接 join。
+- 版面讀法依 ADR 0003：欄位只照表頭文字對應，第 2.6 節 7 欄表格沒有「應保存種類（應保存時間）」時該欄回 `null`；紅字修訂底線（紅色、端點沒有貼齊格線）不能當列界線；同一行相鄰兩欄的字要依字元位置分回各欄；頁首溢出文字依 TR 內 TD 順序接回上一頁同一格，TD 數不符、頁中溢出或找不到可接格子時整批擋下。
 - provenance 同時保存 PDF 實體頁與印刷頁；末頁 `pdf_page=130`、`printed_page=120` 及文件顯示共 119 頁的矛盾，仍能被定位且不能只留單一頁碼。
 - 新版只可在 row diff、變更列全檢、未變更列抽樣與醫檢 reviewer gate 完成後 approved；`review_pending` 不可切 current。
 
@@ -374,16 +375,13 @@ $rawRevision = '<raw-revision-id>'
 $dataDir = (Resolve-Path -LiteralPath 'data').Path
 taiwan-lab-data qualify cdc_specimen_manual `
   --raw-revision-id $rawRevision `
-  --extractor liteparse `
-  --extractor-version 2.0.0 `
-  --no-ocr `
   --data-dir $dataDir `
   --json
 ```
 
-Qualification 固定要求 LiteParse `2.0.0`，且只從 `importlib.resources.files("taiwan_lab_mcp").joinpath("qualifier_specs", "liteparse-2.0.0.json")` 讀取 spec，不得 repo-relative fallback。`tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution` 在 repo 外 wheel 環境驗證該 exact package/path，並核對 npm package name／version／dist integrity、spec-listed bundle hashes 與 approved arguments。Windows 只用 `shutil.which("lit.cmd")`，其他平台用 `shutil.which("lit")`，再由 npm global root 回查 package metadata；`@llamaindex/liteparse@2.0.0` 是只影響 CDC 新 candidate qualification 的 optional Node prerequisite，不是 Python runtime 依賴。缺失或不符 exit `4`，不建立 reviewable build，但不得中斷已核准 CDC serving snapshot 或其他三個資料集。
+Qualification 固定要求 qualifier spec 指定的 `pypdfium2` exact version 與 PDFium build（ADR 0003），且只從 `importlib.resources.files("taiwan_lab_mcp").joinpath("qualifier_specs", "pdfium-layout-v1.json")` 讀取 spec，不得 repo-relative fallback。`tests/test_cdc_pdf_importer.py::test_sdd_qual_01_pdfium_identity_and_resource_resolution` 在 repo 外 wheel 環境驗證該 exact package/path，並核對 `importlib.metadata.version("pypdfium2")` 與 `pypdfium2.version.PDFIUM_INFO`。`pypdfium2` 放在 optional extra `cdc-manual`，只影響 CDC 手冊新 candidate；缺失或不符 exit `4`，不建立 reviewable build，但不得中斷已核准 CDC serving snapshot 或其他三個資料集。~~LiteParse `2.0.0`、npm dist integrity、`lit.cmd` preflight~~（2026-09-15 由 ADR 0003 取代：本機實際為 2.0.3、沒有 `.package-lock.json`，而且 JSON 會把相鄰兩欄併成一段、沒有表格線）。
 
-CLI 內部對兩份 PDF 執行 parse，並將 project-owned `CdcLayoutV1` 與 `qualification-candidate.json` 寫入 staged attempt。Candidate 保存 LiteParse identity、完整 argv（不含本機 absolute root）、兩份 PDF、raw output 與 normalized layout hashes、schema version、頁數、文字層 coverage、row／table counts、quarantine、golden 結果與 exit status。Extract、schema 及 golden candidate 成功才 exit `0`，extractor identity／extract／schema 失敗 exit `4`，不建立 reviewable build。Exit `0` 只代表 pre-review candidate 可供審查，不代表 official qualification approved。Source reviews 通過後，publisher 建立 immutable `audit/golden-qualification.json`；active subject 缺 approved certificate 時 publish exit `5`。
+CLI 內部對兩份 PDF 執行 parse，並將 project-owned `CdcLayoutV1` 與 `qualification-candidate.json` 寫入 staged attempt。Candidate 保存 PDFium extractor identity、讀表規則版本、兩份 PDF 與 normalized layout hashes、schema version、頁數、文字層 coverage、row／table counts、quarantine、golden 結果與 exit status。Extract、schema 及 golden candidate 成功才 exit `0`，extractor identity／extract／schema 失敗 exit `4`，不建立 reviewable build。Exit `0` 只代表 pre-review candidate 可供審查，不代表 official qualification approved。Source reviews 通過後，publisher 建立 immutable `audit/golden-qualification.json`；active subject 缺 approved certificate 時 publish exit `5`。
 
 `CDC-R1-SOURCE` 綁兩份 PDF，`CDC-R1-LAYOUT` 綁 layout outputs，`CDC-R1-CONTENT` 綁疾病－檢體－目的－採檢時間－送驗方式－應保存種類關係。第一個 official build 沒有可信前版，全部 rows 都 review；後續全部 changed／unlisted-change rows 必查，未變更列按 entity＋疾病章節分層，以 `SHA-256(subject_digest + source_row_sha256)` 排序，每層至少 1 列，抽 `min(全部未變更列, max(30, ceil(未變更列數*5%)))`，seed 與 drawn row hashes 寫入 review evidence。Critical／major／minor 分級中，任一 critical 或未處置 major 都整批 rejected；修正 parser、rule 或人工裁決後 subject digest 改變，受影響 gates 必須重新 review。
 
@@ -496,7 +494,7 @@ uv run pytest -q tests\test_mcp_stdio.py
 
 MCP transport release check 必須另外從 repo 外的暫存 cwd、對安裝後 wheel 執行；延續 `TAIWAN_LAB_TEST_PYTHON` 指向該隔離環境的 Python。official stdio fixture 路徑使用測試專用環境變數，不能讀開發者電腦上的真實 `current`。
 
-正式 contract／schema／rule／review protocol／qualifier resources 固定放在 `src/taiwan_lab_mcp/contracts/**`、`src/taiwan_lab_mcp/schemas/**`、`src/taiwan_lab_mcp/rules/**`、`src/taiwan_lab_mcp/review_protocols/**` 與 `src/taiwan_lab_mcp/qualifier_specs/**`，以 `importlib.resources` 載入。Out-of-tree wheel test 必須在沒有 repository cwd 的暫存目錄執行 data CLI、解析一份 NHI synthetic fixture，並讀到 `contracts/public-contract-v1.json`、hash-bound schema／rule 與 exact `qualifier_specs/liteparse-2.0.0.json`；找不到 package resource 即失敗，不可 fallback 到 repo-relative 路徑。另有 CDC qualifier preflight case 驗證 LiteParse 缺失時只讓新 qualification exit `4`，舊 CDC serving 與其他來源仍可查詢。
+正式 contract／schema／rule／review protocol／qualifier resources 固定放在 `src/taiwan_lab_mcp/contracts/**`、`src/taiwan_lab_mcp/schemas/**`、`src/taiwan_lab_mcp/rules/**`、`src/taiwan_lab_mcp/review_protocols/**` 與 `src/taiwan_lab_mcp/qualifier_specs/**`，以 `importlib.resources` 載入。Out-of-tree wheel test 必須在沒有 repository cwd 的暫存目錄執行 data CLI、解析一份 NHI synthetic fixture，並讀到 `contracts/public-contract-v1.json`、hash-bound schema／rule 與 exact `qualifier_specs/pdfium-layout-v1.json`；找不到 package resource 即失敗，不可 fallback 到 repo-relative 路徑。另有 CDC qualifier preflight case 驗證 `pypdfium2` 缺失時只讓新 qualification exit `4`，舊 CDC serving 與其他來源仍可查詢。
 
 `tests/test_package_contents.py` 的 build 後 canonical audit command 為：
 
@@ -505,7 +503,7 @@ $env:TAIWAN_LAB_ARTIFACT_DIR = (Resolve-Path -LiteralPath 'dist').Path
 .\.venv\Scripts\python.exe -m pytest -q tests\test_package_contents.py
 ```
 
-此測試逐一 enumerate wheel 與 sdist 並保存 inventory hash。Denylist 至少含 `data/raw`、`data/staged`、`data/quarantine`、runtime current、audit/review reports、`.env`、key／secret／token 類檔名、cache、absolute local paths；allowlist 明列 Python code、synthetic sample、approved public contract／schemas／rules／review protocols／qualifier specs 與必要文件。`public-contract-v1.json`、rule bundle 或 `qualifier_specs/liteparse-2.0.0.json` 被漏包，或 denylisted artifact 被包入，都讓 `REL-G1` 失敗。
+此測試逐一 enumerate wheel 與 sdist 並保存 inventory hash。Denylist 至少含 `data/raw`、`data/staged`、`data/quarantine`、runtime current、audit/review reports、`.env`、key／secret／token 類檔名、cache、absolute local paths；allowlist 明列 Python code、synthetic sample、approved public contract／schemas／rules／review protocols／qualifier specs 與必要文件。`public-contract-v1.json`、rule bundle 或 `qualifier_specs/pdfium-layout-v1.json` 被漏包，或 denylisted artifact 被包入，都讓 `REL-G1` 失敗。
 
 Live source probe 不屬於一般 `pytest -q`。若日後加入 `live` marker，必須預設 skip、明確 opt-in、只下載到暫存區並輸出 manifest／report；不能在 live test 自動發布 production current。
 
@@ -584,7 +582,7 @@ Pilot evidence 固定放 `reports/pilot/<protocol-version>/<run-id>/summary.json
 ### 第二輪：TFDA＋CDC／ODS＋跨來源 hardening
 
 1. 先寫 TFDA ZIP security／34 欄 contract，再寫 row identity、query-time temporal evaluation、法人角色、reviewed/candidate tool matrix與 deprecated compare 行為；完成 adapter 與 golden cases。
-2. 先用最小 synthetic layout／ODS fixture 寫 CDC table lineage、官方「應保存種類」語意、跨頁、雙頁碼、merge span與 XML budgets，再執行 pinned LiteParse official qualification。
+2. 先用最小 synthetic layout／ODS fixture 寫 CDC table lineage、官方「應保存種類」語意、跨頁、雙頁碼、merge span與 XML budgets，再執行 pinned PDFium official qualification（ADR 0003）。
 3. 加入 immutable review gates、latest candidate 與 serving approved 分離、全來源 public status mapping、tool descriptions／misuse boundaries 與 MCP official stdio cases。
 4. 執行 schema mutation、ZIP/XML resource limits、fixed-seed、所有 publish failure stage、concurrency/crash recovery及 package archive regression。
 5. 第二輪 release candidate 只有在對應 source gates 與 `PUB-R1-OWNER` 完成時，才可把來源標記 publishable；單一來源未通過不阻止其他已通過來源服務，但狀態必須逐來源揭露。

@@ -1,0 +1,51 @@
+# ADR 0003：疾管署採檢手冊改用 PDFium 讀版面
+
+- 狀態：Accepted（工程決定，2026-09-15）。依 SDD §10.3 extraction gate 第 3 步：LiteParse 不足時「選最小必要 PDF layout dependency 並新增 ADR」。
+- 範圍：`cdc_specimen_manual` 第 2 章「傳染病檢體採檢及運送規定總覽表」（第一個實作切片）。第 7 章與修訂對照表沿用同一讀法，另外驗證。
+- 關聯：SDD §10.3、`D-006`、`D-022`；TDD §9.1–9.2；owner 2026-09-15「好 接下來做疾管署採檢手冊」；`docs/implementation-notes.md`「疾管署採檢手冊第一步：版面試驗」。
+
+## 背景
+
+SDD 要求第一個 CDC 手冊切片先驗 LiteParse JSON 能不能把表格拆回原本的格子。2026-09-15 用官網現行 1150826 版實測：手冊 4,046,218 bytes（SHA-256 `988654c0e561630a…`），修訂對照表 780,660 bytes（`6732685204fcfd89…`），和 2026-09-13 研究時是同一份。
+
+### LiteParse
+
+- 本機 `@llamaindex/liteparse` 的 package.json 是 2.0.3，`lit --version` 卻印 2.0.0（版本字串寫死在 CLI 裡）。npm global root 沒有 `.package-lock.json`，SDD 指定的 integrity 來源不存在。照原規格，preflight 本來就過不了。
+- `lit parse --format json --no-ocr` 讀 130 頁花 1.8 秒，每頁有 `textItems`（x、y、width、height、fontName、fontSize）。
+- 拆表不夠用：
+  - 同一行、相鄰兩欄的字會併成同一個 item。例如第 14 頁「以無菌容器收集排 (B 類感染」橫跨「採檢量及規定」與「送驗方式」兩欄；「咽喉擦拭液 2.8.3 及 2.8.4 備」橫跨保存欄與注意事項。
+  - 沒有表格線，分不出一列在哪裡結束。
+
+### PDFium（`pypdfium2` 5.13.0，PDFium 153.0.7999.0）
+
+- 每個字元有自己的框，上面兩段併在一起的字都能拆回各自欄位。
+- 表格格線是 path 物件。第 14 頁有 59 條橫線、73 條直線。第 13–50 頁是 8 欄；第 51–67 頁（2.6 非法定傳染病）是 7 欄，沒有「應保存種類（應保存時間）」。
+- 紅字修訂的底線也是 path：紅色填色，端點距格線 1.4 pt。真正的格線是黑色，端點距格線 0.2 pt。
+- 文件由 Microsoft Word LTSC 產生，帶 Tagged PDF 表格標記（Table／TR／TD）：
+  - 一列裡，從上一列延伸下來的合併格排在前面，本列自己的格依欄位順序排在後面。
+  - 跨頁時，合併格溢出到下一頁的文字（例如第 17 頁頂端的「裝)」）會排在本列自己的格前面。
+  - 第 2 章 349 列逐列檢查：溢出只出現在頁首列，共 16 處；頁中 0 列違反順序；TD 數與欄數全部相符。
+
+## 決定
+
+1. 疾管署採檢手冊的版面改用 PDFium（Python 套件 `pypdfium2`）讀。LiteParse 不再是 CDC qualification 的前置條件。
+2. `pypdfium2` 固定 exact version，放在 optional extra `cdc-manual`，MCP 查詢不需要它。沒有安裝或版本不符時，只有手冊建置失敗（`QUALIFIER_DEPENDENCY_MISSING`／`QUALIFIER_IDENTITY_MISMATCH`，exit 4）；已服務的手冊與其他資料不受影響。
+3. 讀表規則（規則版本寫進 transform identity）：
+   - 欄：用表頭文字對應欄位（8 欄或 7 欄）。表頭文字對不上就整批擋下。
+   - 列界線：只算黑色、兩端貼齊該欄左右格線（容差 0.5 pt）的橫線。
+   - 格內文字：字元中心點落在哪一格就屬於哪一格，照 PDF 內的字元順序排列；字元往左回到行首時才換行。
+   - 一筆紀錄的切法：看「傳染病名稱、採檢項目、採檢目的、採檢時間、採檢量及規定」這幾欄裡最細的格子。其他欄若是合併格，就把同一段原文重複帶進每一筆。
+   - 跨頁：頁首列裡依標記順序判定為溢出的文字，接到上一頁同一欄最後一格後面；共用那一格的每一筆都拿到完整原文。
+   - 以下任一情況整批擋下，不猜欄位：TD 數和欄數不同；頁中出現溢出；找不到上一頁可以接的格子；表格範圍內有字不屬於任何格；頁面沒有文字層。
+4. 讀出來的中間結果仍正規化成專案自己的 `CdcLayoutV1`（每頁尺寸、格線、字元框與順序、TR／TD 順序），hash 納入 curated build fingerprint；`pypdfium2` 版本與 PDFium build 寫進 extractor identity。
+5. `CDC-R1-LAYOUT` 仍逐列核對：用 Word 標記裡每個 TD 的文字，和按座標拆出的格子原文交叉比對。
+
+## 取捨
+
+- PDFium 是 7 MB 的原生程式庫（BSD-3-Clause／Apache-2.0），只裝在建置資料的環境。
+- 讀法依賴 Word 標記的排列規律。新版手冊若不是 Word 產生，或規律不成立，就整批擋下並通知，不會發出拆錯的資料。
+
+## 不做
+
+- 不用 OCR。
+- 這一步不處理第 7 章與修訂對照表。

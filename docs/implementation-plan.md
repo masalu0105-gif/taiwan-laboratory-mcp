@@ -99,7 +99,7 @@ MCP runtime：唯讀查詢最後一次通過驗證的 snapshot
 | `data/quarantine/<source>/<snapshot-id>/` | 異常列與錯誤原因 | 不進 Git；不得被 runtime 載入 |
 | `data/manifests/` | 版本、雜湊、列數、授權、驗證結果 | 可進 Git，但不得含秘密或個資 |
 
-先以 Python standard library 處理 HTTP、CSV、ZIP、JSON、日期與 SHA-256。CDC PDF qualification 依 SDD 指定的 LiteParse 工具契約執行。P1.1 official publish 禁止使用 OCR-derived rows；文字層不足時只能產生 staged candidate，未來若要發布 OCR 結果，必須先修訂 PRD／TDD 並重新審查。
+先以 Python standard library 處理 HTTP、CSV、ZIP、JSON、日期與 SHA-256。CDC PDF qualification 依 SDD §10.3 與 ADR 0003 以 PDFium（`pypdfium2`）讀版面。P1.1 official publish 禁止使用 OCR-derived rows；文字層不足時只能產生 staged candidate，未來若要發布 OCR 結果，必須先修訂 PRD／TDD 並重新審查。
 
 ## 5. 共用 provenance 契約
 
