@@ -832,6 +832,33 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：394 passed、2 skipped；import 路徑來自該 venv；安裝後 contract 與 repo 位元組相同。
 - 這一段尚未做：食藥署下載包的匯出與安裝、本機食藥署以第 2 版規則重建、自動發布腳本與新的 GitHub Release、疾管署資料本身。
 
+### 食藥署下載包：匯出與安裝（2026-09-15，OD-10／D-019）
+
+- 程式：
+  - `snapshot_bundle.py` 改成健保、食藥署共用：`export_snapshot_bundle(data_root, source_id, output_dir=…)`、`install_snapshot_bundle(data_root, source_id=…, bundle_path=…, actor=…)`。健保原本的 `export_nhi_snapshot_bundle`、`install_nhi_snapshot_bundle` 保留，改呼叫共用版。
+  - 兩個來源的差異集中在一張表：原始檔名（`source.csv`／`source.zip`）、非官方聲明、freshness 規則版本（`nhi-v1`／`tfda-v1`）、讀取服務狀態與驗原始檔的函式。
+  - 讀寫改成每次 1 MiB 串流：
+    - 匯出：先逐檔算大小與 SHA-256，再邊讀邊寫進暫存 ZIP，寫完才換成正式檔名。
+    - 安裝：先逐項解壓、只驗大小與 SHA-256、不寫檔；全部通過、衝突與路徑長度也檢查過，才逐項解壓寫入。
+  - 上限：壓縮後 64 MiB → 128 MiB，解壓後 256 MiB → 512 MiB。
+  - 安裝指令的來源和下載包不同，回 `BUNDLE_SOURCE_MISMATCH`（exit 4），不寫任何檔案。
+  - CLI `export-snapshot`、`install-snapshot` 開放 `tfda_devices`。
+  - `docs/install.md` 改寫：兩組下載檔、兩個安裝指令、食藥署 14 天標過期、官方有新版後自動發布、錯誤碼表加 `BUNDLE_SOURCE_MISMATCH`，已知限制與顯名加入食藥署。
+- 測試：
+  - 先寫 `tests/test_tfda_bundle.py` 5 個，跑出 5 failed（找不到新函式）；實作後全過。
+  - 其中一題原本讀 `result.stale`，查詢結果沒有這個欄位（在 `provenance` 底下），改成 `result.provenance.stale`；這是測試寫錯。
+  - 健保 `tests/test_snapshot_bundle.py` 16 個沒有改，全過，代表串流改寫沒有改變健保下載包的行為。
+- 真實資料試跑（本機食藥署服務版，build 結尾 `bbb040c11b53`；輸出在 session scratchpad，沒有公開）：
+  - 匯出兩次：都是 64,830,989 bytes、SHA-256 `a6d2e5c4cb800608d0b656a67990f6c379fce40b6b9611125bceeee72a056b0f`，14 個檔案，5.0 秒；行程記憶體高峰（working set）約 41 MB。
+  - 裝進 `%TEMP%\tlb-tfda`：`installed`、generation 1、寫入 14 個檔案，3.3 秒，記憶體高峰約 49 MB。
+  - 裝好後 `read_tfda_state` 為 available、沒有過期；涵蓋統計與本機服務版相同：已審代碼 399／399、舊制 9,337 列、缺代碼 8,269 列、只有其他類別 69,428 列。
+  - 這次試跑的服務版是用第 1 版審核規則建置，只用來驗程式；公開前會先以第 2 版規則重建。
+  - 試裝資料夾約 185 MB 留在 `%TEMP%\tlb-tfda`，沒有刪（本機擋刪除指令）。
+- 驗證：
+  - in-repo `pytest` 401 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 329,255 bytes，SHA-256 `eeeaddfeb9d44066ae49969630746853bf6b4f52eb6d25090929bec975b95445`；sdist 593,797 bytes。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：399 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

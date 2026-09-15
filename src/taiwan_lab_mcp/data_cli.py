@@ -74,12 +74,12 @@ def main(argv: list[str] | None = None) -> int:
     publish_parser.add_argument("--data-dir", required=True, type=Path)
     publish_parser.add_argument("--json", action="store_true")
     export_parser = subparsers.add_parser("export-snapshot")
-    export_parser.add_argument("source_id", choices=["nhi_fee"])
+    export_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
     export_parser.add_argument("--data-dir", required=True, type=Path)
     export_parser.add_argument("--output-dir", required=True, type=Path)
     export_parser.add_argument("--json", action="store_true")
     install_parser = subparsers.add_parser("install-snapshot")
-    install_parser.add_argument("source_id", choices=["nhi_fee"])
+    install_parser.add_argument("source_id", choices=["nhi_fee", "tfda_devices"])
     install_parser.add_argument("--bundle", required=True, type=Path)
     install_parser.add_argument("--sha256")
     install_parser.add_argument("--actor", required=True)
@@ -374,16 +374,19 @@ def main(argv: list[str] | None = None) -> int:
         from .publish import PublishError
         from .snapshot_bundle import (
             SnapshotBundleError,
-            export_nhi_snapshot_bundle,
-            install_nhi_snapshot_bundle,
+            export_snapshot_bundle,
+            install_snapshot_bundle,
         )
 
         try:
             if args.command == "export-snapshot":
-                summary = export_nhi_snapshot_bundle(args.data_dir, output_dir=args.output_dir)
+                summary = export_snapshot_bundle(
+                    args.data_dir, args.source_id, output_dir=args.output_dir
+                )
             else:
-                summary = install_nhi_snapshot_bundle(
+                summary = install_snapshot_bundle(
                     args.data_dir,
+                    source_id=args.source_id,
                     bundle_path=args.bundle,
                     expected_sha256=args.sha256,
                     actor=args.actor,
