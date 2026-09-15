@@ -1065,6 +1065,21 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：491 passed，import 路徑為該 venv；安裝後 contract 143,636 bytes 與 repo 相同。
   - 對真實官網跑一次（寫到 scratchpad，未進正式 data root）：passed；1150826 版；手冊 4,046,218 bytes `988654c0…`、修訂表 780,660 bytes `67326852…`，和版面試驗是同一份；raw revision `d9d84c9d0c351915…`。
 
+### 疾管署採檢手冊第三步（上半）：第 2 章拆表規則（2026-09-15）
+
+- 依據：owner 2026-09-15「A 加翻頁，手冊繼續做第三步」；ADR 0003。
+- `importers/cdc_manual_layout.py` 的 `parse_cdc_specimen_layout(layout)`：輸入是正規化後的 `CdcLayoutV1`（每頁格線與顏色、依 PDF 內順序排列的字元框、選用的 marked content 位置框、Word TR／TD 標記），輸出第 2 章每一筆採檢規定（8 個欄位、`cdc_pdf_row` 定位、row hash）。
+  - 從第一個表頭對得上的頁面開始，到第一個沒有表格的頁面為止。
+  - 欄位照表頭文字；沒有表頭的頁面只在欄寬和上一頁相同時沿用。
+  - 列界線只算黑色、兩端貼齊該欄格線（0.5 pt）的橫線；一筆紀錄依疾病、採檢項目、目的、時間、採檢量這幾欄最細的格子切。
+  - 合併格的原文帶進它蓋到的每一筆；下一頁頂端的溢出文字接回上一頁同一欄最後一格，兩頁的列共用完整原文。
+  - 判斷跨頁：頁首列的 TR 裡排在前面的格是延續格；有字的算溢出，沒字的由「頂端空白格」補足欄位，數量對不起來就擋下。沒有字的本列格子若有 marked content 位置框就用來定欄位。
+  - 節名取表格上方「2.N.…」那行，之後的頁沿用；印刷頁取頁首「頁碼：第 N 頁」。
+- 這一步不需要 PDFium；PDF 讀出 `CdcLayoutV1` 與真實手冊比對是下半。
+- 測試：先寫 `tests/test_cdc_manual_layout.py`（14 個，含參數化），跑出 14 failed；實作後全過。為了確認測試真的有抓規則，故意改壞規則各跑一次：放寬端點容差 1 failed、跨頁不接格 2 failed、表頭不檢查 12 failed。
+- 驗證：全部測試 513 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 513 passed，import 路徑為該 venv，安裝後 contract 與 repo 位元組相同。
+- 開發環境另裝了 `pypdfium2==5.13.0`（專案 `.venv`，供下半使用），`pyproject.toml` 還沒改。
+
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
 - owner 原話：「如果像那種 PDF，我覺得是不是可以用一些開源專案，例如說 MarkItDown，或者是有其他的工具？例如說，可以先把 PDF 變成 Markdown 之後，AI 再去讀 Markdown，應該就能完整判讀出原本的語意了吧？」（transcript timestamp `2026-09-15T14:43:28.643Z`）
