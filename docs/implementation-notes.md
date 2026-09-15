@@ -979,6 +979,24 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：459 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
 - 尚未做：真實名冊 AI 代審與本機上線（repo 外 `taiwan-lab-mcp-data\automation\publish_cdc_labs_official.py` 已寫好、還沒執行）、每日自動更新、採檢手冊 PDF。
 
+### 疾管署第四步：真實名冊 AI 代審與本機上線（2026-09-15）
+
+- 上線腳本（repo 外）`taiwan-lab-mcp-data\automation\publish_cdc_labs_official.py`，用 uv tool 環境的正式安裝版（commit `d8389cf` 的 wheel，SHA-256 `e95ef427…`）執行：
+  - 先跑 `run_cdc_labs_upstream_sync`，把官網名冊存進正式 data root：raw revision `7e8f133cfda02d86b3fe1fb18a220eca0ebe79c7c308dcf9d24a844d5ecb9e64`，附件「傳染病認可檢驗機構名冊1150914.ods」。
+  - 另寫一個 DOM 解析器（整份 XML 讀進來、從 anchor 往下算合併範圍，不經過正式解析器），和正式解析器逐列比對 3,584 列（列號、12 欄值、row hash）：0 不符。
+  - 驗收題 12 題：先依審核規則的涵蓋清單挑（同證號多方法、合併格繼承、能力試驗日期／無需能力試驗／空白、上游重複列、代碼有前導零或英文），再補平均分布的列；每題寫 12 欄預期值，程式比對全部通過。證據檔：`taiwan-lab-mcp-data\cdc-review\cdc-labs-golden-ai-approved-1150914.json`、`cdc-labs-golden-coverage-1150914.json`。
+  - AI 內容抽查：第 4 列（證號到檢驗目的由第 3 列合併格繼承，方法為「血清型別鑑定(B2)」）與第 3516 列（能力試驗欄在原始 XML 就是空白）都和原始 XML 一致；機構名稱括號內的代碼、`002a`、`052VC` 等代碼保持原字串。
+  - 試跑通過後加 `--apply`：切換前以獨立解析逐列比對資料庫 3,584 列 0 不符（審核證據 `cdc-labs-roundtrip`），共 2 秒。
+- 結果：build `cdc_authorized_labs-build-23dbcaa480db7135244e32e756bf94628e7ec701207bee5354057876e66fdf06`，generation 1，DB SHA-256 `4ff9b2692b8f7d58cbc3d21b6f9d1c336fae06a48750dd107a1f8bc4a8c16775`，manifest SHA-256 `a6ceced1…`，publish event `publish-87ab8bbe…`；四關 finding 都是 0。
+- 以本機工具查詢（同一個 data root）：
+  - `cdc_recognized_labs`：available、`coverage_status=complete`、沒有過期、`freshness_policy_version=cdc-labs-v1`。
+  - 「傷寒」：ok，共 364 筆（含「副傷寒」），回 20 筆，`truncated=true`；「梅毒」加縣市「台南市」：共 47 筆；定位為 `1150914名冊` 的列號。
+  - notes 與出處說明如上一節設計；健保、食藥署仍為 available。
+- 限制：
+  - `find_authorized_lab` 沒有翻頁參數，「傷寒」364 筆只看得到前 20 筆，要加縣市縮小範圍。要不要加翻頁需 owner 決定（public contract 會變）。
+  - 每日檢查與自動更新還沒接進排程；超過 2 天沒有成功檢查，查詢會標示可能過期。
+- 尚未做：每日自動更新、採檢手冊 PDF、疾管署資料是否放進 GitHub 下載包。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。
