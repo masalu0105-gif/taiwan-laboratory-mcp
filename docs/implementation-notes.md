@@ -865,6 +865,40 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 一般使用者：以重建後的食藥署 build 計算，最長檔案是 `curated/tfda_devices/<build>/audit/evidence/tfda-source-identity-confirmation-2026-09-14.md`（相對路徑 167 字元）；裝在安裝說明建議的 `C:\Users\User\taiwan-lab-data` 時，連同暫存檔名共 207 字元；使用者名稱 20 個字元時 223 字元，都在上限內。
   - 這段期間發布腳本回 `waiting_for_ci`，沒有發布任何 Release。
 
+### 食藥署以第 2 版重建、第一個自動發布的下載包（2026-09-15，OD-10／OD-11）
+
+- 重建（repo 外 `taiwan-lab-mcp-data\automation\rebuild_tfda_release_scope.py`，SHA-256 `226e39f9…`）：
+  - 先把 commit `178df9a` 的 wheel（SHA-256 `eeeaddfe…`）以 `uv pip install --reinstall-package` 裝進 uv tool 環境。
+  - 模擬執行：`distribution` identity、審核規範 `tfda-r1-ai-review` 第 2 版、14 題驗收題 0 題失敗、服務中 build 用同一個 raw revision `aa385977…`、沒有等待中的新版。
+  - 正式執行 15 秒：新 build `tfda_devices-build-452aecdb7e99afb78b436085e61c7fc3e077b3f9e983293e016315b288620f5f`，generation 6，publish event `publish-fac84c5a…`。
+  - 切換前獨立逐列比對 104,619 列 0 不符，報告存成審核證據 `tfda-release-scope-roundtrip`；IVD 標籤 included 17,081、excluded 495、unknown 87,043。
+  - 資料庫 SHA-256 `6d5d204b…` 與第 1 版 build 完全相同；舊 build `cb94a6ca…` 保留，保留清單兩版都留、沒有要清的檔案。
+  - 審核證據多一份說明 `tfda-review\tfda-release-scope-rebuild-2026-09-15.md`；三關 finding 為 SOURCE 輕微 1（官方查詢網站 DNS 失敗，與第 1 版相同）、SCHEMA 0、PUB 輕微 1（附表以外大類維持 unknown）。
+  - 以本機工具查詢：available、沒有過期、搜尋「糖化血色素」回 5 筆（共 30 筆），審核紀錄為 `ai-reviewer:claude-opus-5`、第 2 版。
+- 自動發布腳本（repo 外 `taiwan-lab-mcp-data\automation\publish_data_release.py`，SHA-256 `27968807…`），依 ADR 0002 §2：
+  - 兩個來源都在服務、沒有 stale reason 才繼續，否則 `skipped_not_fresh`。
+  - GitHub 最新 Release 已含同名的兩個 ZIP 就回 `already_released`。
+  - `git fetch` 後取 `origin/main`，`src/taiwan_lab_mcp` 每個檔案（`git show`，換行正規化）要和 uv tool 環境安裝的檔案逐一相同；不同回 `blocked`（exit 5）。
+  - 該 commit 的 CI：跑完且成功才發；還在跑回 `waiting_for_ci`；失敗或沒有回 `blocked`。
+  - 標籤 `data-YYYYMMDD`（台北日期，已存在就加 `-2`…）；兩個 ZIP 匯出到 `taiwan-lab-mcp-data\release\<標籤>\`，說明文字由 manifest、審核紀錄與資料庫統計產生。
+  - `gh release create --target <commit>` 後以 `gh release view` 比對 4 個附件的大小與 `sha256:` digest，並以 `git ls-remote` 確認標籤指向目標 commit；不符回 `failed`（exit 6）。
+  - `blocked`／`failed` 的原因存在 `release\release-problem.json`，同一個原因第二次起 `already_reported=true`。
+- 第一次執行：
+  - commit `178df9a` 的 CI 失敗時模擬執行回 `waiting_for_ci`（當時 CI 還在跑），程式逐檔比對相同。
+  - commit `2656506` 的 CI run `34964174246` 成功後正式執行 23 秒，回 `released`：
+    - Release https://github.com/masalu0105-gif/taiwan-laboratory-mcp/releases/tag/data-20260915 ，標題「健保＋食藥署資料 2026-09-15」，非 draft、非 prerelease，Latest；舊 Release 兩版保留。
+    - `nhi_fee-snapshot-4ecd71e74f3b.zip` 1,718,254 bytes，SHA-256 `6f1e1a9286ffd4793d24423103f8cb5d7f40a4e7295c65c54366f7ff460bb2c1`（健保 build 與 `nhi-data-20260914-lab-scope` 相同；ZIP 位元組不同是因為清單裡的「最後成功檢查時間」更新了）。
+    - `tfda_devices-snapshot-452aecdb7e99.zip` 64,832,909 bytes，SHA-256 `7c8bd5ef16b7991e0b2274888f81687f8b56ec310b99ec914a8430ee679c38a7`。
+    - 說明文字存在 `taiwan-lab-mcp-data\release\data-20260915\release-notes-data-20260915.md`。
+  - 驗證：`gh release download` 到 session scratchpad，兩個 `.sha256` 以 `sha256sum -c` 都 OK；`git ls-remote` 標籤指向 `2656506`；兩包裝進全新資料夾 `%TEMP%\tlrel-0915`（健保寫入 13 檔、食藥署 15 檔），查 `09006C` 200 點、`in_scope`、`coverage_status=complete`，食藥署搜尋 30 筆，兩者都沒有過期。試裝資料夾沒有刪（本機擋刪除指令）。
+- 每日排程 `Invoke-NhiDailyCheck.ps1`（SHA-256 `489e69ba…`）在食藥署清舊版之後、健保結果判斷之前執行發布腳本：
+  - `released`、`already_released`、`waiting_for_ci`、`skipped_not_fresh` 只寫 STATUS 一行，不寄信。
+  - 其他結果把 STATUS 第一行改為「異常：GitHub 下載包沒有發布」並寄信；`already_reported=true` 不重寄。
+  - 第一次試跑（`-EmailDryRun`）發現我寫入腳本時把工具路徑的 `\t` 轉成 tab，`uv<tab>ools<tab>aiwan…` 找不到 Python，STATUS 變成異常（信是試跑，沒有寄出）。修正路徑並加上「找不到工具就標異常」的檢查；PowerShell 語法檢查 0 錯誤。
+  - 修正後試跑：exit 0，STATUS「OK：健保支付標準表沒有變動」「食藥署醫材許可證：沒有變動（104,619 筆）」「下載包：已是最新（data-20260915）」。
+- README 改寫開頭說明與「查正式健保與食藥署資料」一節。
+- 尚未實際發生過：官方新版造成本機換版後的自動發布、`blocked` 或 `failed` 的通知信；目前只有這次首發與上面的試跑。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

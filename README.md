@@ -6,7 +6,7 @@
 
 免費、開源，由 masalu.lab 發起。希望醫檢師第一次使用就能解決一個查資料的麻煩，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
 
-> **目前基準版本：0.1.1。** Package 提供 22 個工具與四組合成示範資料。健保支付標準已有專案負責人審核過的正式資料，可從 Releases 下載安裝（見[安裝說明](docs/install.md)）；檢驗範圍清單（scope）已由 AI 審核（[審核紀錄](docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md)），帶判定的新下載包待發布。食藥署醫療器材許可證的查詢程式已完成（10 萬多筆全收錄、每筆標出是否屬體外診斷等標籤），2026-09-15 由 AI 代審後在專案負責人的電腦上線，官方每週新版由每日排程自動檢查、通過就自動換上（健保新版也一樣自動更新，但 GitHub 下載包不會跟著換）；食藥署還沒有下載包，所以其他安裝者目前查不到食藥署正式資料。CDC 正式資料尚未完成。程式不會自動下載或發布正式資料。不可用於實際採檢、申報或採購。
+> **目前基準版本：0.1.1。** Package 提供 22 個工具與四組合成示範資料。健保支付標準（專案負責人審核；檢驗範圍由 AI 審核，[審核紀錄](docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md)）與食藥署醫療器材許可證（10 萬多筆全收錄、每筆標出是否屬體外診斷等標籤，由 AI 代審，[審核紀錄](docs/reviews/tfda-ivd-ai-review-2026-09-14.md)）都有正式資料，可從 Releases 下載安裝（見[安裝說明](docs/install.md)）。官方有新版時，專案負責人電腦上的每日排程會自動檢查，全部通過才換版，並自動發布新的下載包。CDC 正式資料尚未完成。安裝後的程式不會自動下載新版資料。不可用於實際採檢、申報或採購。
 
 ## 三個先做好的問題
 
@@ -22,9 +22,9 @@
 
 CDC 結果須保留條件與例外；NHI 支付點數不能直接當成新臺幣金額；TFDA 許可證比對不能推論產品可互換。查不到資料時，說明搜尋範圍及資料狀態。實際作業仍需核對官方原文與適用的機構流程。
 
-## 查正式健保資料（Windows／macOS）
+## 查正式健保與食藥署資料（Windows／macOS）
 
-照 **[安裝說明](docs/install.md)** 做：安裝工具、從 [Releases](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/releases) 下載已審核的健保資料、用 `taiwan-lab-data install-snapshot` 裝進電腦，再接到 Claude 桌面版或 Claude Code。目前下載包只有健保支付標準；CDC 與 TFDA 仍會回 `data_unavailable`。
+照 **[安裝說明](docs/install.md)** 做：安裝工具、從 [Releases](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/releases) 下載健保與食藥署資料、用 `taiwan-lab-data install-snapshot` 裝進電腦，再接到 Claude 桌面版或 Claude Code。CDC 仍會回 `data_unavailable`。
 
 ## 五分鐘看示範資料（Windows PowerShell）
 
