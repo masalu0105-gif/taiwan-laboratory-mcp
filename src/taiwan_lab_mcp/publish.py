@@ -26,11 +26,14 @@ _RAW_ARTIFACT_NAMES = {
     "nhi_fee": "source.csv",
     "tfda_devices": "source.zip",
     "cdc_authorized_labs": "source.ods",
+    # The revision table PDF stays in the same raw revision; the served rows come from the manual.
+    "cdc_specimen_manual": "manual.pdf",
 }
 _CURATED_TABLES = {
     "nhi_fee": "nhi_fee",
     "tfda_devices": "tfda_source_row",
     "cdc_authorized_labs": "cdc_lab_row",
+    "cdc_specimen_manual": "cdc_specimen_requirement",
 }
 
 

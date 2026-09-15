@@ -594,6 +594,11 @@ def read_source_status(
 
         state = read_cdc_labs_state(data_root, clock=lambda: now)
         descriptor_path = Path(data_root) / "manifests" / "current" / "cdc_authorized_labs.json"
+    elif source_id == "cdc_manual":
+        from .cdc_manual_store import read_cdc_manual_state
+
+        state = read_cdc_manual_state(data_root, clock=lambda: now)
+        descriptor_path = Path(data_root) / "manifests" / "current" / "cdc_specimen_manual.json"
     else:
         state = _unavailable("no_serving_snapshot")
         descriptor_path = Path(data_root) / "manifests" / "current" / f"{source_id}.json"

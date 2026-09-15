@@ -4,6 +4,7 @@ from contextlib import closing
 from typing import Any
 
 from ..config import DataContext
+from ..importers.cdc_manual_layout import CDC_SPECIMEN_FIELDS
 from ..importers.cdc_ods import CDC_LABS_FIELD_NAMES
 from ..models import CDCLabRecord, CDCSpecimenRecord, ToolResult
 from ..sources import CDC_LABS, CDC_SPECIMEN
@@ -50,6 +51,12 @@ def _lab_record(row: dict[str, Any]) -> CDCLabRecord:
     )
 
 
+def _official_specimen_record(row: dict[str, Any]) -> CDCSpecimenRecord:
+    # Owner 2026-09-15 chose B (OD-15): answers read the display text; the database keeps the raw
+    # cell text and the row hash for source checks.
+    return CDCSpecimenRecord(**{name: row[f"{name}_display"] for name in CDC_SPECIMEN_FIELDS})
+
+
 def _official_lab_record(row: dict[str, Any]) -> CDCLabRecord:
     # Raw roster values unchanged, including a blank proficiency testing review.
     return CDCLabRecord(**{name: row[name] for name in CDC_LABS_FIELD_NAMES})
@@ -78,14 +85,31 @@ class CDCAdapter:
             self.specimens = []
             self.labs = []
 
-    def _unavailable(self, operation: str, query: dict[str, Any]) -> ToolResult | None:
-        if self.context.mode == "official_snapshot":
+    def _official_specimens(self, query: str, request: dict[str, Any]) -> ToolResult:
+        from ..cdc_manual_store import read_cdc_manual_state, search_specimen_rows
+        from ..tfda_store import connect_readonly
+
+        assert self.context.data_root is not None
+        state = read_cdc_manual_state(self.context.data_root, clock=self.context.clock)
+        if state.availability != "available" or state.db_path is None or state.provenance is None:
             return unavailable_result(
-                operation=operation,
-                query=query,
-                note="CDC 採檢手冊正式資料尚未完成。",
+                operation="search_disease",
+                query=request,
+                reason=state.reason or "no_serving_snapshot",
+                note="疾管署採檢手冊正式資料尚未建立，或沒有通過完整性檢查。",
+                source_status=state.status,
             )
-        return None
+        with closing(connect_readonly(state.db_path)) as connection:
+            rows = search_specimen_rows(connection, query=query)
+        return result_from_rows(
+            operation="search_disease",
+            query=request,
+            rows=rows,
+            provenance=state.provenance,
+            record_factory=_official_specimen_record,
+            source_id="cdc_manual",
+            source_status=state.status,
+        )
 
     def search_disease(self, query: Any) -> ToolResult:
         request = {"query": query}
@@ -96,9 +120,8 @@ class CDCAdapter:
                 data_mode=self.context.mode,
                 note="query 必須是非空字串。",
             )
-        unavailable = self._unavailable("search_disease", request)
-        if unavailable is not None:
-            return unavailable
+        if self.context.mode == "official_snapshot":
+            return self._official_specimens(query, request)
         nq = norm(query)
         rows = [
             row

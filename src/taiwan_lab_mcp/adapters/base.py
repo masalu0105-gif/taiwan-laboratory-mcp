@@ -101,6 +101,15 @@ def _row_locator(source_id: str, row: dict[str, Any], index: int) -> Any:
         return OdsLocator(
             sheet_name=row["sheet_name"], expanded_row_number=int(row["expanded_row_number"])
         )
+    if source_id == "cdc_manual" and "pdf_page" in row:
+        from ..models import CdcLocator
+
+        return CdcLocator(
+            pdf_page=int(row["pdf_page"]),
+            printed_page=row["printed_page"],
+            table_section=row["table_section"],
+            row_bbox=json.loads(row["row_bbox"]),
+        )
     return _default_locator(source_id, int(row.get("source_row_number", index + 1)))
 
 
@@ -164,6 +173,8 @@ def result_from_rows(
         notes.append(TFDA_NOT_OFFICIAL_NOTE)
     if provenance.source_id == "cdc_recognized_labs" and provenance.snapshot_id is not None:
         notes.extend([CDC_NOT_OFFICIAL_NOTE, CDC_LABS_ACCEPTANCE_NOTE])
+    if provenance.source_id == "cdc_manual" and provenance.snapshot_id is not None:
+        notes.append(CDC_NOT_OFFICIAL_NOTE)
     if provenance.stale:
         warnings.extend(provenance.stale_reason_codes)
         notes.append("serving snapshot 已標記 stale；使用者應重新核對目前官方來源。")

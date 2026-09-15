@@ -1137,6 +1137,25 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 真實手冊（1150826，scratchpad）：55 個表格頁都讀到 `1150826`、`115年08月26日`；370 列的原文、顯示文字與定位和 `rows-display.jsonl` 完全相同。
 - 測試：先寫測試跑出 4 failed，實作後 `tests/test_cdc_manual_layout.py` 23 passed。
 - 驗證：全部測試 534 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 534 passed，安裝後 contract 與 repo 位元組相同（144,136 bytes）。
+- 提交：commit `53e2848`，CI 通過（run 34994985509）。
+
+### 疾管署採檢手冊第四步（上半）：建資料庫，6 個手冊查詢工具接正式資料（2026-09-16）
+
+- 改動：
+  - `importers/cdc_manual.py`：第 2 章每一列存進 SQLite 表 `cdc_specimen_requirement`，欄位有列號（頁面順序）、row hash（8 欄原文算出）、PDF 頁、印刷頁、節名、row_bbox、版次、核准日期、8 欄原文、8 欄顯示文字、疾病搜尋欄。7 欄表格沒有保存欄，那兩欄存 NULL。
+  - 建置指紋綁讀表規則版本、PDFium 規格（pypdfium2 5.13.0）與版面 hash。版面 hash 先把座標換成千分之一 pt 的整數再算：專案的 canonical JSON 不收小數，抽取時本來就只取到小數第 3 位，所以不會少資訊。這是第三步留下「座標怎麼存」的決定。
+  - manifest 的原始檔只列手冊 PDF。修訂對照表 PDF 留在同一個 raw revision，審核紀錄的證據清單列出它的路徑與 hash。發布程式目前每個來源只收一個主要原始檔，這樣不用改發布程式。
+  - `cdc_manual_store.py`：讀 current 指標，驗 manifest、審核紀錄、資料庫 hash 與列數。查詢比對疾病名稱（顯示文字去掉空白、換行、括號後比對）：完全相同 → 開頭相同 → 包含，同一層照頁面順序。過期規則和名冊相同：兩天沒檢查就標過期。
+  - `search_disease`、`get_specimen_requirement` 與 4 個別名在 official 模式改查這個資料庫：回答用顯示文字（OD-15），證據的 row hash 與定位指向原文那一列，加註「非疾管署官方服務，內容以疾管署公告為準。」。沒有正式資料時回 `data_unavailable`，不退回 sample。`get_data_status` 也會回報手冊。
+  - 登記：`models.SourceId` 加 `cdc_specimen_manual`；`audit` 的審核關卡加 `CDC-R1-SOURCE`、`CDC-R1-LAYOUT`、`CDC-R1-CONTENT`、`PUB-R1-OWNER`；`publish` 加原始檔名 `manual.pdf` 與資料表名。
+- 這一步只有測試用的合成建置（`build_cdc_manual_snapshot`，審核者標 `offline-test-builder`）。正式建置（讀下載的 PDF、AI 代審、驗收題）是下一步。
+- 用真實手冊試建（1150826；版面來自真的 PDF，寫進資料庫的 PDF bytes 是合成的；只寫到 scratchpad `m1`，未進正式 data root）：370 列。
+  - 查「傷寒」18 列（傷寒、傷寒↵副傷寒、流行性斑疹傷寒、恙蟲病/地方性斑疹傷寒、非傷寒沙門氏菌…）、「SARS」8 列、「登革熱」4 列、「麻疹」13 列（含德國麻疹、先天性德國麻疹症候群）、「新型A型流感」4 列（手冊印「新型 A型流感」）、「M痘」2 列。
+  - 查不到：「嚴重特殊傳染性肺炎」「猴痘」「HIV」。第 2 章沒有這些寫法（例如手冊印「M 痘」）；目前只比對手冊印的疾病名稱，沒有別名表。
+  - 例子：登革熱第一列（第 17 頁）採檢量「以無菌試管收集↵3 mL 血清。」、送驗方式「2-8oC↵(B 類感染性物質P650 包裝)」。
+- 發現：第一次試建用了較長的 scratchpad 資料夾名稱，資料庫完整路徑超過 Windows 260 字元，SQLite 回 `unable to open database file`；改短資料夾名後成功。名冊的建置資料夾名稱一樣長（都是來源名＋`-build-`＋64 字元），正式 data root 若放在很深的資料夾也會遇到。
+- 測試：先寫 `tests/test_cdc_manual_official.py`（7 個），跑出 6 failed（沒有正式資料的那一個原本就成立）；實作後全過。
+- 驗證：全部測試 541 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 含兩個新模組，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 541 passed，安裝版的改動模組與 repo 相同，contract 與 repo 位元組相同（144,136 bytes，公開契約不用改）。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 

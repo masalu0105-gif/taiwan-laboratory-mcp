@@ -355,6 +355,7 @@ SourceId = Literal[
     "cdc_manual",
     "cdc_recognized_labs",
     "cdc_authorized_labs",
+    "cdc_specimen_manual",
     "nhi_fee",
     "tfda_device",
     "tfda_devices",

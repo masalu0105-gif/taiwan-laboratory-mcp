@@ -31,6 +31,9 @@ _SERVING_GATES = {
     "cdc_authorized_labs": frozenset(
         {"ODS-R1-SOURCE", "ODS-R1-STRUCTURE", "ODS-R1-CONTENT", "PUB-R1-OWNER"}
     ),
+    "cdc_specimen_manual": frozenset(
+        {"CDC-R1-SOURCE", "CDC-R1-LAYOUT", "CDC-R1-CONTENT", "PUB-R1-OWNER"}
+    ),
 }
 
 
