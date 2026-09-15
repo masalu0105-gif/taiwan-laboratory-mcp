@@ -290,14 +290,17 @@ def test_find_authorized_lab_matching_order_and_city_filter(tmp_path, query, cit
 
 
 def test_find_authorized_lab_pages_through_every_match(tmp_path):
-    # Owner 2026-09-15: 「A 加翻頁」; one page holds five rows like the NHI and TFDA searches.
+    # Owner 2026-09-15: 「A 加翻頁」, then 「一次 20 筆」 because one hospital fills several rows.
     _offline(tmp_path)
     adapter = _adapter(tmp_path)
 
-    first = adapter.find_authorized_lab("C型肝炎", "新北市")
+    default = adapter.find_authorized_lab("C型肝炎", "新北市")
+    assert (default.total_matches, default.returned_count, default.limit) == (8, 8, 20)
+    assert default.truncated is False
+    assert default.query == {"query": "C型肝炎", "city": "新北市", "limit": 20, "offset": 0}
+    first = adapter.find_authorized_lab("C型肝炎", "新北市", 5, 0)
     assert (first.total_matches, first.returned_count, first.limit, first.offset) == (8, 5, 5, 0)
     assert first.truncated is True
-    assert first.query == {"query": "C型肝炎", "city": "新北市", "limit": 5, "offset": 0}
     last = adapter.find_authorized_lab("C型肝炎", "新北市", 5, 5)
     assert (last.returned_count, last.offset, last.truncated) == (3, 5, False)
     assert _certificates(first) + _certificates(last) == [
@@ -308,17 +311,41 @@ def test_find_authorized_lab_pages_through_every_match(tmp_path):
 
     alias = adapter.get_lab_scope("C型肝炎")
     assert (alias.operation, alias.query) == ("get_lab_scope", {"query": "C型肝炎"})
-    assert (alias.total_matches, alias.returned_count, alias.truncated) == (8, 5, True)
+    assert (alias.total_matches, alias.returned_count, alias.truncated) == (8, 8, False)
+    assert adapter.find_authorized_lab("C型肝炎", "新北市", 20, 0).returned_count == 8
 
 
 @pytest.mark.parametrize(
-    ("limit", "offset"), [(0, 0), (6, 0), ("5", 0), (True, 0), (5, -1), (5, "1"), (5, None)]
+    ("limit", "offset"), [(0, 0), (21, 0), ("5", 0), (True, 0), (5, -1), (5, "1"), (5, None)]
 )
 def test_find_authorized_lab_rejects_invalid_paging(tmp_path, limit, offset):
     _offline(tmp_path)
     result = _adapter(tmp_path).find_authorized_lab("傷寒", None, limit, offset)
     assert (result.result_status, result.items) == ("invalid_request", [])
-    assert any("limit 為 1–5" in note for note in result.notes)
+    assert any("limit 為 1–20" in note for note in result.notes)
+
+
+@pytest.mark.parametrize(
+    ("query", "city", "expected"),
+    [
+        ("新北市 C型肝炎", None, [f"1000{number:02d}" for number in range(1, 9)]),
+        ("C型肝炎 新北", None, [f"1000{number:02d}" for number in range(1, 9)]),
+        ("台北 合成", None, ["098029"]),
+        ("臺北市　合成", None, ["098029"]),
+        ("097036 血清", None, ["097036"]),
+        ("高雄 傷寒 血清", None, ["097036"]),
+        ("合成 醫院", None, ["097036", "097036", "19SC0001"]),
+        ("台北 合成", "新北市", []),
+        ("台南 梅毒", None, []),
+    ],
+)
+def test_words_separated_by_spaces_each_must_match(tmp_path, query, city, expected):
+    # Owner 2026-09-15 chose A: 「台南 傷寒」 used to find nothing although 40 rows exist.
+    # A county or city word filters by 縣市別; every other word must match a searched column.
+    _offline(tmp_path)
+    result = _adapter(tmp_path).find_authorized_lab(query, city)
+    assert _certificates(result) == expected
+    assert result.result_status == ("ok" if expected else "not_found")
 
 
 def test_search_without_a_match_is_not_found_within_the_snapshot(tmp_path):

@@ -10,11 +10,11 @@ from ..sources import CDC_LABS, CDC_SPECIMEN
 from ..util import contains_any, norm
 from .base import invalid_result, load_sample, result_from_rows, unavailable_result
 
-# Owner 2026-09-15: 「A 加翻頁」. One page holds five rows like the NHI and TFDA searches
-# (「還是給5筆 有需要的話可以再進一步找」); offset pages to the last match.
-CDC_LABS_PAGE_MAX = 5
+# Owner 2026-09-15: 「A 加翻頁」, then 「一次 20 筆」 after a simulation showed five rows often
+# hold only two or three hospitals, because one hospital fills a row per method.
+CDC_LABS_PAGE_MAX = 20
 _LAB_SEARCH_NOTE = (
-    "query 必須是非空字串；city 若提供也必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0。"
+    "query 必須是非空字串；city 若提供也必須是非空字串；limit 為 1–20 的整數，offset 不得小於 0。"
 )
 
 

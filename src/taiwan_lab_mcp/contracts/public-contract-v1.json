@@ -230,7 +230,7 @@
           "type": "integer",
           "required": false,
           "nullable": false,
-          "default": 5
+          "default": 20
         },
         {
           "name": "offset",
@@ -266,7 +266,7 @@
           },
           "limit": {
             "type": "integer",
-            "default": 5
+            "default": 20
           },
           "offset": {
             "type": "integer",

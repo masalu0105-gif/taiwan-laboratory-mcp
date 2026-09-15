@@ -27,28 +27,62 @@ CDC_LABS_INTERNAL_SOURCE_ID = "cdc_authorized_labs"
 # project checks the page daily, so two missed daily checks mark the snapshot overdue.
 CDC_LABS_CHECK_OVERDUE_AFTER = timedelta(days=2)
 _TAIPEI = timezone(timedelta(hours=8))
-_SEARCH_SQL = """
-SELECT *, COUNT(*) OVER () AS total_matches
-FROM (
-    SELECT *,
-        CASE
-            WHEN certificate_search = :q OR disease_code_search = :q THEN 0
-            WHEN institution_search = :q OR disease_name_search = :q THEN 1
-            WHEN instr(certificate_search, :q) > 0
-                OR instr(disease_code_search, :q) > 0
-                OR instr(institution_search, :q) > 0
-                OR instr(department_search, :q) > 0
-                OR instr(disease_name_search, :q) > 0
-                OR instr(purpose_search, :q) > 0
-                OR instr(method_search, :q) > 0 THEN 2
-        END AS match_tier
-    FROM cdc_lab_row
-    WHERE :city IS NULL OR instr(city_search, :city) > 0
+_WORD_TIER_SQL = """CASE
+            WHEN certificate_search = :{p} OR disease_code_search = :{p} THEN 0
+            WHEN institution_search = :{p} OR disease_name_search = :{p} THEN 1
+            WHEN instr(certificate_search, :{p}) > 0
+                OR instr(disease_code_search, :{p}) > 0
+                OR instr(institution_search, :{p}) > 0
+                OR instr(department_search, :{p}) > 0
+                OR instr(disease_name_search, :{p}) > 0
+                OR instr(purpose_search, :{p}) > 0
+                OR instr(method_search, :{p}) > 0 THEN 2
+        END"""
+# Owner 2026-09-15 chose A: 「台南 傷寒」 found nothing. In a query with spaces, a county or city
+# word filters 縣市別 and every other word must match a searched column. The roster spells all 22
+# divisions with 台 (checked on the 1150914 roster); a word may also drop the final 市／縣.
+_CITY_NAMES = (
+    "台北市",
+    "新北市",
+    "桃園市",
+    "台中市",
+    "台南市",
+    "高雄市",
+    "基隆市",
+    "新竹市",
+    "嘉義市",
+    "新竹縣",
+    "苗栗縣",
+    "彰化縣",
+    "南投縣",
+    "雲林縣",
+    "嘉義縣",
+    "屏東縣",
+    "宜蘭縣",
+    "花蓮縣",
+    "台東縣",
+    "澎湖縣",
+    "金門縣",
+    "連江縣",
 )
-WHERE match_tier IS NOT NULL
-ORDER BY match_tier, certificate_no, expanded_row_number
-LIMIT :limit OFFSET :offset
-"""
+_CITY_WORDS = frozenset([*_CITY_NAMES, *(name[:-1] for name in _CITY_NAMES)])
+
+
+def _search_sql(words: int, city_words: int) -> str:
+    tiers = [_WORD_TIER_SQL.format(p=f"q{index}") for index in range(words)]
+    names = [f"tier_{index}" for index in range(words)]
+    order = names[0] if words == 1 else f"max({', '.join(names)})"
+    cities = "".join(f" AND instr(city_search, :c{index}) > 0" for index in range(city_words))
+    return (
+        "SELECT *, COUNT(*) OVER () AS total_matches FROM ("
+        "SELECT *, "
+        + ", ".join(f"{tier} AS {name}" for tier, name in zip(tiers, names))
+        + " FROM cdc_lab_row WHERE (:city IS NULL OR instr(city_search, :city) > 0)"
+        + cities
+        + ") WHERE "
+        + " AND ".join(f"{name} IS NOT NULL" for name in names)
+        + f" ORDER BY {order}, certificate_no, expanded_row_number LIMIT :limit OFFSET :offset"
+    )
 
 
 @dataclass(frozen=True)
@@ -182,16 +216,26 @@ def read_cdc_labs_state(
 def search_labs(
     connection: sqlite3.Connection, *, query: str, city: str | None, limit: int, offset: int
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Exact certificate or disease code first, then exact names, then any field containing it."""
+    """Exact certificate or disease code first, then exact names, then any field containing it.
 
+    Words separated by spaces must all match; county or city words filter 縣市別 instead.
+    """
+
+    words = tfda_search_normalize(query).split(" ")
+    city_words = [word for word in words if word in _CITY_WORDS] if len(words) > 1 else []
+    search_words = [word for word in words if word not in city_words]
+    if not search_words:
+        # Only place names (for example 「台南 台北」): search them as ordinary words.
+        search_words, city_words = words, []
+    parameters: dict[str, Any] = {
+        "city": tfda_search_normalize(city) if city is not None else None,
+        "limit": limit,
+        "offset": offset,
+    }
+    parameters.update({f"q{index}": word for index, word in enumerate(search_words)})
+    parameters.update({f"c{index}": word for index, word in enumerate(city_words)})
     rows = connection.execute(
-        _SEARCH_SQL,
-        {
-            "q": tfda_search_normalize(query),
-            "city": tfda_search_normalize(city) if city is not None else None,
-            "limit": limit,
-            "offset": offset,
-        },
+        _search_sql(len(search_words), len(city_words)), parameters
     ).fetchall()
     records = [dict(row) for row in rows]
     return (records[0]["total_matches"] if records else 0), records
