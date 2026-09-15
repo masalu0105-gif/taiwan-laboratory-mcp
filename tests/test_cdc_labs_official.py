@@ -277,9 +277,48 @@ def test_lab_01_02_official_search_returns_method_rows_with_ods_locators(tmp_pat
 )
 def test_find_authorized_lab_matching_order_and_city_filter(tmp_path, query, city, expected):
     _offline(tmp_path)
-    result = _adapter(tmp_path).find_authorized_lab(query, city)
-    assert _certificates(result) == expected
-    assert result.total_matches == len(expected)
+    adapter = _adapter(tmp_path)
+    certificates, offset = [], 0
+    while True:
+        result = adapter.find_authorized_lab(query, city, 5, offset)
+        assert result.total_matches == len(expected)
+        certificates += _certificates(result)
+        if not result.truncated:
+            break
+        offset += 5
+    assert certificates == expected
+
+
+def test_find_authorized_lab_pages_through_every_match(tmp_path):
+    # Owner 2026-09-15: 「A 加翻頁」; one page holds five rows like the NHI and TFDA searches.
+    _offline(tmp_path)
+    adapter = _adapter(tmp_path)
+
+    first = adapter.find_authorized_lab("C型肝炎", "新北市")
+    assert (first.total_matches, first.returned_count, first.limit, first.offset) == (8, 5, 5, 0)
+    assert first.truncated is True
+    assert first.query == {"query": "C型肝炎", "city": "新北市", "limit": 5, "offset": 0}
+    last = adapter.find_authorized_lab("C型肝炎", "新北市", 5, 5)
+    assert (last.returned_count, last.offset, last.truncated) == (3, 5, False)
+    assert _certificates(first) + _certificates(last) == [
+        f"1000{number:02d}" for number in range(1, 9)
+    ]
+    beyond = adapter.find_authorized_lab("C型肝炎", "新北市", 5, 8)
+    assert (beyond.total_matches, beyond.items) == (8, [])
+
+    alias = adapter.get_lab_scope("C型肝炎")
+    assert (alias.operation, alias.query) == ("get_lab_scope", {"query": "C型肝炎"})
+    assert (alias.total_matches, alias.returned_count, alias.truncated) == (8, 5, True)
+
+
+@pytest.mark.parametrize(
+    ("limit", "offset"), [(0, 0), (6, 0), ("5", 0), (True, 0), (5, -1), (5, "1"), (5, None)]
+)
+def test_find_authorized_lab_rejects_invalid_paging(tmp_path, limit, offset):
+    _offline(tmp_path)
+    result = _adapter(tmp_path).find_authorized_lab("傷寒", None, limit, offset)
+    assert (result.result_status, result.items) == ("invalid_request", [])
+    assert any("limit 為 1–5" in note for note in result.notes)
 
 
 def test_search_without_a_match_is_not_found_within_the_snapshot(tmp_path):

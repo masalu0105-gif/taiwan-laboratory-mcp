@@ -10,9 +10,12 @@ from ..sources import CDC_LABS, CDC_SPECIMEN
 from ..util import contains_any, norm
 from .base import invalid_result, load_sample, result_from_rows, unavailable_result
 
-# find_authorized_lab has no paging parameters in the public contract; it keeps the
-# default page and reports total_matches and truncated.
-CDC_LABS_PAGE_SIZE = 20
+# Owner 2026-09-15: 「A 加翻頁」. One page holds five rows like the NHI and TFDA searches
+# (「還是給5筆 有需要的話可以再進一步找」); offset pages to the last match.
+CDC_LABS_PAGE_MAX = 5
+_LAB_SEARCH_NOTE = (
+    "query 必須是非空字串；city 若提供也必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0。"
+)
 
 
 def _specimen_record(row: dict[str, Any]) -> CDCSpecimenRecord:
@@ -54,6 +57,15 @@ def _official_lab_record(row: dict[str, Any]) -> CDCLabRecord:
 
 def _valid_text(value: Any) -> bool:
     return isinstance(value, str) and 0 < len(value) <= 200 and bool(norm(value))
+
+
+def _valid_page(limit: Any, offset: Any) -> bool:
+    return (
+        type(limit) is int
+        and 1 <= limit <= CDC_LABS_PAGE_MAX
+        and type(offset) is int
+        and offset >= 0
+    )
 
 
 class CDCAdapter:
@@ -109,14 +121,20 @@ class CDCAdapter:
         payload["query"] = {"disease": disease}
         return ToolResult.model_validate(payload)
 
-    def find_authorized_lab(self, query: Any, city: Any = None) -> ToolResult:
-        request = {"query": query, "city": city}
-        if not _valid_text(query) or (city is not None and not _valid_text(city)):
+    def find_authorized_lab(
+        self, query: Any, city: Any = None, limit: Any = CDC_LABS_PAGE_MAX, offset: Any = 0
+    ) -> ToolResult:
+        request = {"query": query, "city": city, "limit": limit, "offset": offset}
+        if (
+            not _valid_text(query)
+            or (city is not None and not _valid_text(city))
+            or not _valid_page(limit, offset)
+        ):
             return invalid_result(
                 operation="find_authorized_lab",
                 query=request,
                 data_mode=self.context.mode,
-                note="query 必須是非空字串；city 若提供也必須是非空字串。",
+                note=_LAB_SEARCH_NOTE,
             )
         if self.context.mode == "sample":
             rows = [row for row in self.labs if contains_any(row, query, ["name", "scope"])]
@@ -129,6 +147,8 @@ class CDCAdapter:
                 provenance=CDC_LABS,
                 record_factory=_lab_record,
                 source_id="cdc_recognized_labs",
+                limit=limit,
+                offset=offset,
             )
         from ..cdc_labs_store import read_cdc_labs_state, search_labs
         from ..tfda_store import connect_readonly
@@ -145,8 +165,11 @@ class CDCAdapter:
             )
         with closing(connect_readonly(state.db_path)) as connection:
             total, rows = search_labs(
-                connection, query=query, city=city, limit=CDC_LABS_PAGE_SIZE, offset=0
+                connection, query=query, city=city, limit=limit, offset=offset
             )
+            if not rows and offset > 0:
+                # A page past the last match still reports how many matches exist.
+                total, _ = search_labs(connection, query=query, city=city, limit=1, offset=0)
         return result_from_rows(
             operation="find_authorized_lab",
             query=request,
@@ -156,12 +179,12 @@ class CDCAdapter:
             record_factory=_official_lab_record,
             source_id="cdc_recognized_labs",
             source_status=state.status,
-            limit=CDC_LABS_PAGE_SIZE,
-            offset=0,
+            limit=limit,
+            offset=offset,
         )
 
     def get_lab_scope(self, query: Any) -> ToolResult:
-        result = self.find_authorized_lab(query)
+        result = self.find_authorized_lab(query, None, CDC_LABS_PAGE_MAX, 0)
         payload = result.model_dump(mode="python")
         payload["operation"] = "get_lab_scope"
         payload["query"] = {"query": query}

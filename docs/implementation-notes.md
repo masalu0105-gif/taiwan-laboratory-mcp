@@ -1064,6 +1064,29 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：491 passed，import 路徑為該 venv；安裝後 contract 143,636 bytes 與 repo 相同。
   - 對真實官網跑一次（寫到 scratchpad，未進正式 data root）：passed；1150826 版；手冊 4,046,218 bytes `988654c0…`、修訂表 780,660 bytes `67326852…`，和版面試驗是同一份；raw revision `d9d84c9d0c351915…`。
 
+### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
+
+- owner 原話：「如果像那種 PDF，我覺得是不是可以用一些開源專案，例如說 MarkItDown，或者是有其他的工具？例如說，可以先把 PDF 變成 Markdown 之後，AI 再去讀 Markdown，應該就能完整判讀出原本的語意了吧？」（transcript timestamp `2026-09-15T14:43:28.643Z`）
+- 用本機已裝的工具對 1150826 手冊實測（沒有另外下載套件）：
+  - MarkItDown 0.1.6（pdfminer.six 20251230）：第 16–17 頁「傷寒／副傷寒 肛門拭子或糞便」被拆散，「傷寒」和「副傷寒」、「肛門拭子」和「或糞便」落在不同列；「裝)」「菌株(30日)」成了表格外的單獨一行；頁首「頁碼：第7頁/共119頁」混進表格。
+  - pdfplumber 0.11.10 `extract_tables`：第 14、16 頁的列大致正確，但合併格變空白（第 16 頁肛門拭子的保存欄其實和全血共用「菌株(30日)」），分不出真空白和合併；第 17 頁紅字修訂底線把「疑似菌株」一列切成 4 段；第 17 頁頂端「裝)」接不回第 16 頁。
+  - Docling 沒有安裝，這次沒有測。
+- 結論：Markdown 轉出來時已經失去格子和列的對應，AI 讀 Markdown 只能猜哪段送驗方式屬於哪個檢體；每日自動更新也需要每次結果相同。拆表維持 ADR 0003 的 PDFium 讀法；AI 用在拆完後逐列對照原頁面代審。
+- 證據（repo 外）：`taiwan-lab-mcp-data\cdc-manual-review\layout-spike-1150826\markitdown-vs-pdfplumber-1150826.txt`。
+
+### 疾管署認可檢驗機構查詢加翻頁（2026-09-15，OD-13）
+
+- owner 決定：翻頁 A／B 選項回「A 加翻頁」（transcript timestamp `2026-09-15T14:43:28.643Z`）。PRD OD-13 與 §5.3 已記。
+- 改動：
+  - `find_authorized_lab` 新增 `limit`（1–5，預設 5）與 `offset`；一頁筆數沿用健保、食藥署搜尋的 5 筆（OD-07「還是給5筆 有需要的話可以再進一步找」），原本固定回 20 筆。
+  - 翻過最後一筆時另查一次總筆數，`total_matches` 不會變成 0。
+  - `get_lab_scope` 固定回第一頁 5 筆；MCP 工具說明寫明用 `offset` 翻頁。
+  - public contract 補 `limit`／`offset`，名稱維持 `public-contract-v1`，檔案 144,134 bytes。
+- 測試：先改 `tests/test_cdc_labs_official.py`（新增翻頁 1 個、參數錯誤 7 個，比對順序測試改為逐頁翻完），跑出 14 failed；實作後全過。
+- 驗證：
+  - 全部測試 499 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，安裝包內容檢查通過。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：499 passed，import 路徑為該 venv；安裝後 contract 與 repo 位元組相同。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

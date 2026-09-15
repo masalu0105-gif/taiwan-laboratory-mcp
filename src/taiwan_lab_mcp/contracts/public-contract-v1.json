@@ -224,6 +224,20 @@
           "required": false,
           "nullable": true,
           "default": null
+        },
+        {
+          "name": "limit",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 5
+        },
+        {
+          "name": "offset",
+          "type": "integer",
+          "required": false,
+          "nullable": false,
+          "default": 0
         }
       ],
       "response_schema": "QueryResultV1",
@@ -249,6 +263,14 @@
               }
             ],
             "default": null
+          },
+          "limit": {
+            "type": "integer",
+            "default": 5
+          },
+          "offset": {
+            "type": "integer",
+            "default": 0
           }
         },
         "type": "object",

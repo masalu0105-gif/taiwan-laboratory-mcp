@@ -72,14 +72,16 @@ def get_submission_rule(disease: str) -> ToolResult:
 
 
 @mcp.tool()
-def find_authorized_lab(query: str, city: str | None = None) -> ToolResult:
-    """Find CDC recognized-lab rows. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; does_not_confirm_current_acceptance=true. 不得輸入病人資料。"""
-    return cdc.find_authorized_lab(query, city)
+def find_authorized_lab(
+    query: str, city: str | None = None, limit: int = 5, offset: int = 0
+) -> ToolResult:
+    """Find CDC recognized-lab rows. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; does_not_confirm_current_acceptance=true. 不得輸入病人資料。搜尋結果一次最多 5 筆，要看更多用 offset 翻頁。"""
+    return cdc.find_authorized_lab(query, city, limit, offset)
 
 
 @mcp.tool()
 def get_lab_scope(query: str) -> ToolResult:
-    """CDC recognized-lab compatibility alias. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; does_not_confirm_current_acceptance=true. 不得輸入病人資料。"""
+    """CDC recognized-lab compatibility alias. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; does_not_confirm_current_acceptance=true. 不得輸入病人資料。固定回前 5 筆，要看更多請用 find_authorized_lab 翻頁。"""
     return cdc.get_lab_scope(query)
 
 
