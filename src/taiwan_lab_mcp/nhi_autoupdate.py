@@ -131,7 +131,7 @@ def verify_nhi_roundtrip(
                 name_en or None,
                 name_zh or None,
                 note or None,
-                scopes.get(_normalize(code), "review_pending"),
+                scopes.get(_normalize(code), "in_scope"),
             )
             stored = cursor.fetchone()
             if stored is None or tuple(stored) != expected:
@@ -169,7 +169,7 @@ def select_nhi_golden_cases(
         raise AutoUpdateError("GOLDEN_CASES_UNAVAILABLE")
 
     def scope(values: list[str]) -> str:
-        return scopes.get(_normalize(values[0]), "review_pending")
+        return scopes.get(_normalize(values[0]), "in_scope")
 
     criteria = [
         lambda v: v[0].startswith("0"),
@@ -179,7 +179,6 @@ def select_nhi_golden_cases(
         lambda v: v[3] != _SENTINEL,
         lambda v: scope(v) == "in_scope",
         lambda v: scope(v) == "out_of_scope",
-        lambda v: scope(v) == "review_pending",
         lambda v: v[4] == "",
     ]
     chosen: dict[int, list[str]] = {}
@@ -197,11 +196,8 @@ def select_nhi_golden_cases(
             break
         chosen.setdefault(number, values)
 
-    warnings = (
-        ["coverage_review_incomplete"]
-        if any(scope(values) == "review_pending" for _, values in rows)
-        else []
-    )
+    # Every code has a scope in an official build (unreviewed codes count as lab items).
+    warnings: list[str] = []
     transform = active_nhi_transform()
     csv_sha256 = hashlib.sha256(payload).hexdigest()
     cases = []
@@ -237,7 +233,7 @@ def select_nhi_golden_cases(
                     "name_zh_raw": name_zh or None,
                     "name_en_raw": name_en or None,
                     "note_raw": note or None,
-                    "scope_status": scopes.get(_normalize(code), "review_pending"),
+                    "scope_status": scopes.get(_normalize(code), "in_scope"),
                 },
                 "expected_warnings": warnings,
                 "reviewer_id": AUTO_REVIEWER_ID,

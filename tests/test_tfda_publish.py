@@ -218,7 +218,7 @@ def test_official_build_publishes_the_delegated_ai_review(tmp_path, distribution
     build_dir = tmp_path / "curated" / "tfda_devices" / built["snapshot_id"]
     review = json.loads((build_dir / "audit" / "reviews" / "PUB-R1-OWNER.json").read_bytes())
     assert (review["reviewer_id"], review["reviewer_role"]) == (REVIEWER, ROLE)
-    assert (review["protocol_id"], review["protocol_version"]) == ("tfda-r1-ai-review", "1")
+    assert (review["protocol_id"], review["protocol_version"]) == ("tfda-r1-ai-review", "2")
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
     assert certificate["official_qualification_status"] == "approved"
     assert len(certificate["approved_distinct_case_ids"]) == 10

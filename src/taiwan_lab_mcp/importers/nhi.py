@@ -308,6 +308,9 @@ def _application_build_identity() -> tuple[str, str]:
 
 
 PRIMARY_ARTIFACT_ID = "nhi-primary-csv"
+# Owner 2026-09-15 (「先當成「算」」): official builds serve a code without an approved scope
+# rule as a lab item until it is reviewed, with this basis on the row.
+UNREVIEWED_CODE_SCOPE_LOCATOR = "尚未審核的代碼：依專案負責人 2026-09-15 決定先算檢驗，之後補審"
 _GOLDEN_NHI_FIELDS = frozenset(
     {
         "code_raw",
@@ -340,9 +343,14 @@ def _serving_warnings(rows: Iterable[Mapping[str, Any]]) -> list[str]:
 
 
 def _scope_capability_status(
-    parsed: NHIParseResult, scope_rules_by_code: Mapping[str, ScopeRule]
+    parsed: NHIParseResult,
+    scope_rules_by_code: Mapping[str, ScopeRule],
+    *,
+    unreviewed_in_scope: bool = False,
 ) -> str:
-    covered = all(row.code_normalized in scope_rules_by_code for row in parsed.rows)
+    covered = unreviewed_in_scope or all(
+        row.code_normalized in scope_rules_by_code for row in parsed.rows
+    )
     return "approved" if covered else "pending"
 
 
@@ -389,10 +397,25 @@ def active_nhi_transform() -> dict[str, Any]:
     return _nhi_transform(*_packaged_rule_bundles())
 
 
-def _curated_row(row: NHIParsedRow, scope_rules_by_code: Mapping[str, ScopeRule]) -> dict[str, Any]:
-    """Return the exact column values stored in the curated SQLite build."""
+def _curated_row(
+    row: NHIParsedRow,
+    scope_rules_by_code: Mapping[str, ScopeRule],
+    *,
+    unreviewed_in_scope: bool = False,
+) -> dict[str, Any]:
+    """Return the exact column values stored in the curated SQLite build.
+
+    Official builds pass unreviewed_in_scope=True (owner 2026-09-15): a code without an
+    approved scope rule counts as a lab item until it is reviewed.
+    """
 
     rule = scope_rules_by_code.get(row.code_normalized)
+    if rule is not None:
+        scope_status, basis_locator = rule.scope_status, rule.basis_locator
+    elif unreviewed_in_scope:
+        scope_status, basis_locator = "in_scope", UNREVIEWED_CODE_SCOPE_LOCATOR
+    else:
+        scope_status, basis_locator = "review_pending", None
     return {
         "source_row_sha256": row.source_row_sha256,
         "source_row_number": row.source_row_number,
@@ -411,9 +434,9 @@ def _curated_row(row: NHIParsedRow, scope_rules_by_code: Mapping[str, ScopeRule]
         "name_en_search": search_normalize(row.name_en_raw) or None,
         "note_raw": row.note_raw or None,
         "note_search": search_normalize(row.note_raw) or None,
-        "scope_status": rule.scope_status if rule else "review_pending",
+        "scope_status": scope_status,
         "scope_rule_version": ACTIVE_SCOPE_RULE_VERSION,
-        "scope_basis_locator": rule.basis_locator if rule else None,
+        "scope_basis_locator": basis_locator,
     }
 
 
@@ -479,6 +502,7 @@ def _golden_results(
     raw_artifact_sha256: str,
     transform: dict[str, Any],
     scope_rules_by_code: Mapping[str, ScopeRule],
+    unreviewed_in_scope: bool = False,
 ) -> list[dict[str, Any]]:
     validated: list[tuple[dict[str, Any], GoldenCaseV1]] = []
     try:
@@ -491,7 +515,10 @@ def _golden_results(
     if len(set(case_ids)) != len(case_ids):
         raise NHIImportError("GOLDEN_CASE_SCHEMA_INVALID", "duplicate case_id")
     rows_by_code = {
-        row.code_normalized: _curated_row(row, scope_rules_by_code) for row in parsed.rows
+        row.code_normalized: _curated_row(
+            row, scope_rules_by_code, unreviewed_in_scope=unreviewed_in_scope
+        )
+        for row in parsed.rows
     }
     results = []
     for raw_case, model in validated:
@@ -947,7 +974,11 @@ _NHI_TABLE_SQL = """
 
 
 def _write_curated_db(
-    db_path: Path, parsed: NHIParseResult, scope_rules_by_code: Mapping[str, ScopeRule]
+    db_path: Path,
+    parsed: NHIParseResult,
+    scope_rules_by_code: Mapping[str, ScopeRule],
+    *,
+    unreviewed_in_scope: bool = False,
 ) -> None:
     if db_path.exists():
         raise NHIImportError("IMMUTABLE_BUILD_EXISTS")
@@ -960,7 +991,9 @@ def _write_curated_db(
             [
                 tuple(
                     int(value) if isinstance(value, bool) else value
-                    for value in _curated_row(row, scope_rules_by_code).values()
+                    for value in _curated_row(
+                        row, scope_rules_by_code, unreviewed_in_scope=unreviewed_in_scope
+                    ).values()
                 )
                 for row in parsed.rows
             ],
@@ -980,7 +1013,9 @@ OWNER_REVIEW_PROTOCOL_ID = "nhi-r1-owner-review"
 OWNER_REVIEW_PROTOCOL_VERSION = "2"
 # Owner 2026-09-15: "好，那健保新版也改成自動更新".
 AUTO_REVIEW_PROTOCOL_ID = "nhi-r1-auto-review"
-AUTO_REVIEW_PROTOCOL_VERSION = "1"
+# Version 2 (owner 2026-09-15): also released as a GitHub Release bundle; unreviewed codes
+# count as lab items.
+AUTO_REVIEW_PROTOCOL_VERSION = "2"
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 _EVIDENCE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
@@ -1190,6 +1225,7 @@ def build_official_nhi_snapshot(
         raw_artifact_sha256=raw_digest,
         transform=transform,
         scope_rules_by_code=scope_rules_by_code,
+        unreviewed_in_scope=True,
     )
     failed_case_ids = [
         result["golden_case"]["case_id"]
@@ -1251,7 +1287,7 @@ def build_official_nhi_snapshot(
 
     build_dir.mkdir(parents=True)
     db_path = build_dir / "data.sqlite3"
-    _write_curated_db(db_path, parsed, scope_rules_by_code)
+    _write_curated_db(db_path, parsed, scope_rules_by_code, unreviewed_in_scope=True)
     db_digest = _file_sha256(db_path)
     if pre_publish_check is not None:
         # Runs on the finished database before any audit record or pointer refers to it.
@@ -1366,7 +1402,9 @@ def build_official_nhi_snapshot(
                 {
                     "capability": "nhi_lab_scope",
                     "gate_id": "NHI-R1-SCOPE",
-                    "status": _scope_capability_status(parsed, scope_rules_by_code),
+                    "status": _scope_capability_status(
+                        parsed, scope_rules_by_code, unreviewed_in_scope=True
+                    ),
                 }
             ],
         },

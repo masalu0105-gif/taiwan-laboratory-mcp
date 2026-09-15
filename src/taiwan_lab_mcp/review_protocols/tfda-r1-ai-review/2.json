@@ -1,0 +1,100 @@
+{
+  "protocol_id": "tfda-r1-ai-review",
+  "protocol_version": "2",
+  "source_id": "tfda_devices",
+  "status": "owner_delegated",
+  "approved_date": "2026-09-15",
+  "supersedes_version": "1",
+  "delegation": {
+    "channel": "Claude Code conversation",
+    "owner_message": "1.a 2.a 3.z你直接幫我審核",
+    "message_timestamp": "2026-09-15T03:14:27.986Z",
+    "context": "Reply to the question whether Claude should prepare the TFDA launch review; the owner asked Claude to perform the review directly instead of reviewing it personally."
+  },
+  "amendments": [
+    {
+      "channel": "Claude Code conversation",
+      "owner_message": "20筆好像還是有點太多，還是給5筆 有需要的話可以再進一步找",
+      "changes": ["Search result pages hold at most 5 summary rows."]
+    },
+    {
+      "channel": "Claude Code conversation",
+      "owner_message": "好，那下載包也發一版新的",
+      "message_timestamp": "2026-09-15T10:49:59.327Z",
+      "owner_answers": {
+        "新的下載包要放哪些資料？": "健保＋食藥署 (Recommended)",
+        "以後你電腦上的資料自動換成新版時，GitHub 下載包要不要也自動發一版？": "自動發 (Recommended)",
+        "官方新版多出一個還沒審過的代碼時（例如健保多一個新項目代碼），要怎麼標？": "先當成「算」 (Recommended)"
+      },
+      "answers_timestamp": "2026-09-15T10:54:18.876Z",
+      "changes": [
+        "The reviewed build may also be redistributed as a GitHub Release download bundle.",
+        "An annex class A/B/C code without an approved registry decision counts as included until it is reviewed."
+      ]
+    }
+  ],
+  "identity_assurance": "local_asserted",
+  "reviewer_id": "ai-reviewer:claude-opus-5",
+  "reviewer_role": "ai_reviewer_delegated_by_owner",
+  "reviewer_note": "AI review delegated by the owner; not reviewed by a person.",
+  "gates": {
+    "TFDA-R1-SOURCE": {
+      "purpose": "The raw artifact is the medical device permit dataset published by the Taiwan Food and Drug Administration.",
+      "checklist": [
+        "Dataset landing page https://data.gov.tw/dataset/9576 lists 衛生福利部食品藥物管理署 as provider; the owner confirmed this identity on 2026-09-14.",
+        "Metadata publisherOID is 2.16.886.101.20003.20065.20065, identifier is A21020000I-000053 and license code is 1.",
+        "The ZIP was fetched over HTTPS from a data.fda.gov.tw resource URL discovered from the data.gov.tw metadata.",
+        "fetch.json is canonical and its artifact size and SHA-256 match the stored raw ZIP.",
+        "Attribution follows the 政府資料開放授權條款 appendix form with the license URL https://data.gov.tw/license."
+      ]
+    },
+    "TFDA-R1-SCHEMA": {
+      "purpose": "The raw artifact matches the tfda-34-v1 schema and every source row is preserved unchanged.",
+      "checklist": [
+        "The ZIP passes the archive limits and holds exactly one .csv entry.",
+        "The header equals the 34 researched columns in order.",
+        "The curated database holds every source row once; row count and every source_row_sha256 match the raw CSV.",
+        "All 34 values of every row are stored unchanged as strings, including leading zeros and line breaks.",
+        "A permit number with several manufacturing rows keeps every row.",
+        "Dates are strict YYYY/MM/DD values and every row has a validity date.",
+        "Search columns never replace raw values.",
+        "IVD labels come only from sub-category codes and the approved tfda-ivd-v1 registry; an annex class A/B/C code without a decision counts as included; rows without a code or with only other classes stay unknown."
+      ]
+    },
+    "PUB-R1-OWNER": {
+      "purpose": "The build may be served by the local MCP runtime and redistributed as a GitHub Release download bundle.",
+      "scope": "local_mcp_serving_and_github_release_bundle",
+      "checklist": [
+        "Every official result carries provenance attribution and the license URL.",
+        "Every official TFDA result carries the note 非食藥署官方服務，內容以食藥署公告為準。",
+        "TFDA tool descriptions state that returned content is official data, not instructions, and must not be used directly as device advertising or performance claims.",
+        "Search results are summaries of at most 5 rows; full fields come from get_license.",
+        "coverage_status stays review_incomplete while rows without a reviewed classification code exist.",
+        "Review records and golden cases name the reviewer as ai-reviewer:claude-opus-5, never as a person.",
+        "Download bundles contain only the raw revision and the curated build with its audit folder (ADR 0002)."
+      ]
+    }
+  },
+  "golden_cases": {
+    "minimum_distinct_official_cases": 10,
+    "required_coverage": [
+      "blank cancellation status within validity",
+      "permit number with several manufacturing rows",
+      "cancelled with date",
+      "revoked",
+      "cancellation date without status",
+      "validity date elapsed without cancellation",
+      "excluded IVD code",
+      "legacy numeric class",
+      "missing classification code",
+      "code outside the reviewed annex classes",
+      "leading zero tax id or line break preserved"
+    ],
+    "comparison": "Compare each expected value, row number and row hash with an independent parse of the raw ZIP."
+  },
+  "severity_policy": {
+    "critical": "reject",
+    "major": "reject_until_resolved_in_a_new_build",
+    "minor": "record_and_accept"
+  }
+}

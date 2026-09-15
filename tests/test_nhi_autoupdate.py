@@ -135,7 +135,7 @@ def test_checked_new_version_is_published_automatically(tmp_path, distribution, 
     review = json.loads((build_dir / "audit" / "reviews" / "PUB-R1-OWNER.json").read_bytes())
     assert review["reviewer_id"] == "automated-check:nhi-auto-update"
     assert review["reviewer_role"] == "automated_checker_delegated_by_owner"
-    assert (review["protocol_id"], review["protocol_version"]) == ("nhi-r1-auto-review", "1")
+    assert (review["protocol_id"], review["protocol_version"]) == ("nhi-r1-auto-review", "2")
     assert any(ref["artifact_id"] == "nhi-auto-roundtrip" for ref in review["evidence_refs"])
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
     assert len(certificate["approved_distinct_case_ids"]) >= 10
@@ -143,12 +143,26 @@ def test_checked_new_version_is_published_automatically(tmp_path, distribution, 
     assert _points(tmp_path, monkeypatch, "09006C").points == 210
 
 
-def test_new_codes_without_a_scope_decision_are_listed(tmp_path, distribution):
+def test_new_codes_without_a_scope_decision_count_as_lab_items(tmp_path, distribution, monkeypatch):
+    # Owner 2026-09-15: a code nobody reviewed yet counts as a lab item until it is reviewed,
+    # so one new code no longer marks every result as review_incomplete.
+    from taiwan_lab_mcp.adapters.nhi import NHIAdapter
+
     build_nhi_snapshot(_csv(BASE), tmp_path)
     new_rows = BASE[:-1] + ["99999Z,100,20260901,29101231,,新增合成項目,"]
     summary = _auto(tmp_path, new_rows)
     assert summary["result"] == "published"
     assert summary["new_codes_without_scope"] == ["99999Z"]
+
+    monkeypatch.setenv("TAIWAN_LAB_DATA_MODE", "official_snapshot")
+    monkeypatch.setenv("TAIWAN_LAB_DATA_DIR", str(tmp_path))
+    result = NHIAdapter().get_points("99999Z")
+    record = result.items[0].record
+    assert record.scope_status == "in_scope"
+    assert "2026-09-15" in record.scope_basis_locator
+    assert "先算檢驗" in record.scope_basis_locator
+    assert result.coverage_status == "complete"
+    assert "coverage_review_incomplete" not in result.warnings
 
 
 def test_large_change_is_held_back_and_reported_once(tmp_path, distribution):
@@ -203,17 +217,18 @@ def test_manual_owner_review_path_keeps_its_protocol(tmp_path):
     assert _owner_review_protocol()[:2] == (OWNER_REVIEW_PROTOCOL_ID, "2")
 
 
-def test_independent_roundtrip_agrees_with_the_curated_build(tmp_path):
+def test_independent_roundtrip_agrees_with_the_official_build(tmp_path, distribution):
     from importlib.resources import files
 
     from taiwan_lab_mcp.nhi_autoupdate import verify_nhi_roundtrip
     from taiwan_lab_mcp.rules.nhi import ACTIVE_SCOPE_RULE_FILE
 
-    payload = _csv(BASE)
-    built = build_nhi_snapshot(payload, tmp_path)
-    db_path = tmp_path / "curated" / "nhi_fee" / built["snapshot_id"] / "data.sqlite3"
+    build_nhi_snapshot(_csv(BASE), tmp_path)
+    new_rows = ["09006C,210,20120101,29101231,HbA1c,醣化血紅素,"] + BASE[1:]
+    published = _auto(tmp_path, new_rows)
+    db_path = tmp_path / "curated" / "nhi_fee" / published["published_snapshot_id"] / "data.sqlite3"
     scope = files("taiwan_lab_mcp").joinpath("rules", "nhi_lab_scope", ACTIVE_SCOPE_RULE_FILE)
-    report = verify_nhi_roundtrip(db_path, payload, scope.read_bytes())
+    report = verify_nhi_roundtrip(db_path, _csv(new_rows), scope.read_bytes())
     assert (report["result"], report["rows_compared"]) == ("passed", 12)
 
 

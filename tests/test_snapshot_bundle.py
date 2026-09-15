@@ -89,7 +89,8 @@ def _approved_cases(payload, raw_revision_id):
             "source_row_sha256": row.source_row_sha256,
             "expected_status": "ok",
             "expected_fields": {"points": row.points},
-            "expected_warnings": ["coverage_review_incomplete"],
+            # Official builds count unreviewed codes as lab items (owner 2026-09-15).
+            "expected_warnings": [],
             "reviewer_id": "project-owner-alias",
             "reviewer_role": "project_owner",
             "identity_assurance": "local_asserted",

@@ -15,6 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 ACTIVE_IVD_RULE_VERSION = "tfda-ivd-v1"
 ACTIVE_IVD_RULE_FILE = "v1.json"
 IvdScope = Literal["included", "excluded", "ambiguous", "unknown"]
+# The reviewed annex covers classes A, B and C. Owner 2026-09-15: a code of these classes
+# without a decision yet counts as included ("先當成「算」").
+UNREVIEWED_ANNEX_CODE_SCOPE = {"A": "included", "B": "included", "C": "included"}
 
 # Only an uppercase A–P letter, a dot and four digits at the start of 醫器次類別 is a code;
 # legacy numeric classes and values such as "d.5630" stay without a code (owner 2026-09-14).
@@ -130,9 +133,16 @@ def main_category_letters(main_category_values: Iterable[str]) -> list[str]:
 
 
 def derive_ivd_scope(codes: Iterable[str], decisions: Mapping[str, IvdDecision]) -> IvdScope:
-    """SDD 10.2 join: codes from 醫器次類別 only; keywords never change the result."""
+    """SDD 10.2 join: codes from 醫器次類別 only; keywords never change the result.
 
-    scopes = [decisions[code].ivd_scope if code in decisions else None for code in codes]
+    Owner 2026-09-15: an annex class A/B/C code without a decision yet counts as included
+    until it is reviewed; codes of other classes stay unreviewed.
+    """
+
+    scopes = [
+        decisions[code].ivd_scope if code in decisions else UNREVIEWED_ANNEX_CODE_SCOPE.get(code[0])
+        for code in codes
+    ]
     if not scopes:
         return "unknown"
     if "ambiguous" in scopes:

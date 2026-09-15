@@ -443,11 +443,12 @@ TFDA_ATTRIBUTION = "資料提供機關：衛生福利部食品藥物管理署"
 TFDA_NORMALIZATION_VERSION = "tfda-text-v1"
 TFDA_SERVING_GATES = ("TFDA-R1-SOURCE", "TFDA-R1-SCHEMA", "PUB-R1-OWNER")
 # Owner 2026-09-15 delegated the TFDA launch review to AI ("你直接幫我審核").
+# Version 2 (owner 2026-09-15): the reviewed build may also be a GitHub Release bundle.
 TFDA_REVIEW_PROTOCOL_ID = "tfda-r1-ai-review"
-TFDA_REVIEW_PROTOCOL_VERSION = "1"
+TFDA_REVIEW_PROTOCOL_VERSION = "2"
 # Owner 2026-09-15 chose automatic weekly updates ("A變成成自動化 我不想花太多心力維護").
 TFDA_AUTO_REVIEW_PROTOCOL_ID = "tfda-r1-auto-review"
-TFDA_AUTO_REVIEW_PROTOCOL_VERSION = "1"
+TFDA_AUTO_REVIEW_PROTOCOL_VERSION = "2"
 _DELEGATED_REVIEW_PROTOCOLS = frozenset(
     {
         (TFDA_REVIEW_PROTOCOL_ID, TFDA_REVIEW_PROTOCOL_VERSION),
@@ -568,7 +569,9 @@ class IvdCoverage:
         # The reviewed annex covers classes A, B and C; other letters are unreviewed codes.
         self._codes.update(code for code in codes if code[0] in "ABC")
         if codes:
-            if not any(code in self._decisions for code in codes):
+            # Unreviewed A/B/C codes count as included (owner 2026-09-15), so only rows with
+            # nothing but other classes stay unknown.
+            if not any(code in self._decisions or code[0] in "ABC" for code in codes):
                 self.unknown_code_rows += 1
         elif any(row[name].strip()[:1].isdigit() for name in (*_MAIN_FIELDS, *_SUB_FIELDS)):
             self.legacy_code_rows += 1

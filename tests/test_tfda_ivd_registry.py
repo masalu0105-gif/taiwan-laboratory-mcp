@@ -88,6 +88,9 @@ def test_main_category_letters_ignore_legacy_numbers():
         (["B.9195", "B.9245"], "excluded"),
         (["B.9195", "D.1100"], "unknown"),
         (["D.1100"], "unknown"),
+        # Owner 2026-09-15: an annex class A/B/C code nobody reviewed yet counts as IVD.
+        (["A.5555"], "included"),
+        (["C.8888", "B.9195"], "ambiguous"),
         ([], "unknown"),
     ],
 )

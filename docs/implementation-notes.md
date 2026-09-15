@@ -800,6 +800,38 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 尚未實際發生過：官方健保新版上線後走「發布」或「擋下」；兩條路目前只有合成資料測試。
 - 限制：GitHub Release 下載包不會跟著本機自動更新換版；其他安裝者仍拿到 owner 審核過的舊包。
 
+### Owner 決定：下載包加入食藥署、自動發布、未審核代碼先算、疾管署由 AI 審（2026-09-15，OD-04／OD-10～12）
+
+- owner 在 Claude Code 對話中說「好，那下載包也發一版新的 目前有什麼還需要我做裁決的嗎？」（transcript timestamp `2026-09-15T10:49:59.327Z`，uuid `f3015e4d-1abd-441d-bad0-ea202bffdf4e`）。
+- 先查證：GitHub 最新 Release `nhi-data-20260914-lab-scope` 的健保 build 結尾 `57bdfe9ebe98`，與本機服務中的健保 build 相同；只重發健保，資料不會變。
+- 以選項題問四件事，owner 回答（`2026-09-15T10:54:18.876Z`，uuid `a7cbc03c-07e5-4f0f-83f6-4cdcfc13fcad`）：
+  1. 新的下載包要放哪些資料：「健保＋食藥署 (Recommended)」→ OD-10。
+  2. 本機自動換版後 GitHub 下載包要不要自動發：「自動發 (Recommended)」→ OD-11。
+  3. 官方新版多出還沒審過的代碼怎麼標：「先當成「算」 (Recommended)」→ OD-12。
+  4. 疾管署採檢手冊與認可檢驗機構名單誰審：owner 自填「Ai全程代審 不用特別備注未經人工審核」→ OD-04。新版處理時間沒有問到，仍未決定。
+- 規格同步：PRD §9 填入 OD-04、新增 OD-10～12，OD-01／07／08／09 相關句加刪除線；SDD 新增 `D-019`～`D-021`，`D-007`／`D-011`／`D-016`／`D-018` 加註，OD 對照表；新增 `docs/adr/0002-tfda-bundle-and-automatic-release.md`，ADR 0001 §6 標出被取代部分；TDD。
+- 審核規則第 2 版（第 1 版保留，現有 build 仍引用）：
+  - `nhi-r1-auto-review/2.json`、`tfda-r1-auto-review/2.json`、`tfda-r1-ai-review/2.json`：`PUB-R1-OWNER` 範圍改為 `local_mcp_serving_and_github_release_bundle`，`amendments` 記錄 owner 原話與時間。
+  - `tfda-r1-ai-review/2` 另把「搜尋摘要最多 20 筆」改為 5 筆（owner 同日決定；那則原話沒有逐字查 transcript 時間，未填 timestamp）。
+  - importer 常數 `TFDA_REVIEW_PROTOCOL_VERSION`、`TFDA_AUTO_REVIEW_PROTOCOL_VERSION`、NHI `AUTO_REVIEW_PROTOCOL_VERSION` 改為 `"2"`。
+- 未審核代碼先算（OD-12／D-021）：
+  - 健保：`_curated_row`、驗收題比對、寫資料庫與 `NHI-R1-SCOPE` capability 狀態加上 `unreviewed_in_scope`，只有 `build_official_nhi_snapshot` 與 `prepare-review` 傳 `True`。
+    - 改前（正式建置）：沒有核准規則的代碼 `scope_status=review_pending`，整份查詢 `coverage_status=review_incomplete`、警告 `coverage_review_incomplete`。
+    - 改後（正式建置）：`scope_status=in_scope`、`scope_basis_locator`「尚未審核的代碼：依專案負責人 2026-09-15 決定先算檢驗，之後補審」，查詢 `coverage_status=complete`。
+    - 離線合成建置不變，仍是 `review_pending`。
+  - 健保自動更新的獨立逐列比對與挑題改用同一個預設，拿掉「未判定」挑題條件與 `coverage_review_incomplete` 預期警告；`new_codes_without_scope` 照常列出。
+  - 食藥署：`derive_ivd_scope` 對附表 A/B/C 類、registry 沒有決定的代碼回 `included`（`UNREVIEWED_ANNEX_CODE_SCOPE`），所有建置都適用；獨立比對 `_scope` 同規則；`IvdCoverage.unknown_code_rows` 不再計入這些列。D–P 類與沒有分類代碼的列仍為 `unknown`。
+    - 上線資料用到的 A/B/C 代碼在 2026-09-15 已全部審過（見「食藥署每週新版自動更新」一節：未審核代碼 0 個），所以現有標籤不會因這次修改而變。
+  - 每日排程通知信（repo 外 `Invoke-NhiDailyCheck.ps1`）的「暫時標未判定」改為「依你 2026-09-15 的決定先算檢驗／先算體外診斷，之後補審」。
+- 測試：
+  - 先改 5 個測試檔（新增 2 個測試、2 組判定參數、3 處 protocol 版本、package 清單），跑出 7 failed、42 passed。
+  - 實作後，原本以「未審代碼 → `coverage_review_incomplete`」為前提的正式建置測試資料跟著改：`test_snapshot_bundle.py`、`test_nhi_review.py`、`test_nhi_importer.py` 的預期警告改為空；`test_nhi_review.py` 一題的前後差異改為沒有差異；`test_nhi_autoupdate.py` 的逐列比對改用自動發布出來的正式建置。
+- 驗證：
+  - in-repo `pytest` 396 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check`、`git diff --check` 通過。
+  - wheel 328,282 bytes，SHA-256 `c853391b5b776141b91aaf6350f8d08ab9552689f8e2e53efd760bb2c86f6482`，61 個檔案，含 8 份審核規則；sdist 589,297 bytes。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：394 passed、2 skipped；import 路徑來自該 venv；安裝後 contract 與 repo 位元組相同。
+- 這一段尚未做：食藥署下載包的匯出與安裝、本機食藥署以第 2 版規則重建、自動發布腳本與新的 GitHub Release、疾管署資料本身。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

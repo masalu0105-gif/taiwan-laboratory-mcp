@@ -149,7 +149,8 @@ def _approved_cases(payload, raw_revision_id):
                 "source_row_sha256": row.source_row_sha256,
                 "expected_status": "ok",
                 "expected_fields": {"points": row.points, "name_zh_raw": row.name_zh_raw},
-                "expected_warnings": ["coverage_review_incomplete"],
+                # Official builds count unreviewed codes as lab items (owner 2026-09-15).
+                "expected_warnings": [],
                 "reviewer_id": "unit-test-only-reviewer",
                 "reviewer_role": "project_owner",
                 "identity_assurance": "local_asserted",
@@ -346,9 +347,8 @@ def test_review_packet_rebinds_expected_warnings_to_candidate_scope_coverage(
 
     assert [case["expected_warnings"] for case in packet["proposed_cases"]] == [[]] * 10
     unchanged_points = next(item for item in packet["case_comparisons"] if item["code"] == "90001C")
-    assert unchanged_points["changes"] == [
-        {"field": "expected_warnings", "before": ["coverage_review_incomplete"], "after": []}
-    ]
+    # Official builds already served unreviewed codes as lab items, so nothing changes.
+    assert unchanged_points["changes"] == []
 
 
 def test_review_packet_reports_golden_codes_missing_from_candidate(tmp_path, distribution_identity):

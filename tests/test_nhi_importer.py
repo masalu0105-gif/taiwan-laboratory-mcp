@@ -296,6 +296,8 @@ def _approved_official_cases(payload: bytes, raw_revision_id: str) -> list[dict]
                 f"UNIT-OFFICIAL-G-{index:03d}",
                 row.code_raw,
                 {"points": row.points, "name_zh_raw": row.name_zh_raw},
+                # Official builds count unreviewed codes as lab items (owner 2026-09-15).
+                expected_warnings=[],
                 official_source=True,
                 evidence_data_root_relative_path=(
                     f"raw/nhi_fee/{raw_revision_id}/artifacts/source.csv"

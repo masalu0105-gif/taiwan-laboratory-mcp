@@ -1,0 +1,80 @@
+{
+  "protocol_id": "tfda-r1-auto-review",
+  "protocol_version": "2",
+  "source_id": "tfda_devices",
+  "status": "owner_delegated",
+  "approved_date": "2026-09-15",
+  "supersedes_version": "1",
+  "supersedes_for_weekly_updates": "tfda-r1-ai-review/2",
+  "delegation": {
+    "channel": "Claude Code conversation",
+    "owner_message": "A變成成自動化 我不想花太多心力維護",
+    "message_timestamp": "2026-09-15T06:06:13.559Z",
+    "context": "Reply to the question whether new weekly TFDA versions should be checked and published without waiting for the owner; the owner chose automatic publishing to avoid maintenance work."
+  },
+  "amendments": [
+    {
+      "channel": "Claude Code conversation",
+      "owner_message": "好，那下載包也發一版新的",
+      "message_timestamp": "2026-09-15T10:49:59.327Z",
+      "owner_answers": {
+        "新的下載包要放哪些資料？": "健保＋食藥署 (Recommended)",
+        "以後你電腦上的資料自動換成新版時，GitHub 下載包要不要也自動發一版？": "自動發 (Recommended)",
+        "官方新版多出一個還沒審過的代碼時（例如健保多一個新項目代碼），要怎麼標？": "先當成「算」 (Recommended)"
+      },
+      "answers_timestamp": "2026-09-15T10:54:18.876Z",
+      "changes": [
+        "A version published by this protocol is also released as a GitHub Release download bundle without asking the owner.",
+        "An annex class A/B/C code without an approved registry decision counts as included until it is reviewed."
+      ]
+    }
+  ],
+  "identity_assurance": "local_asserted",
+  "reviewer_id": "automated-check:tfda-auto-update",
+  "reviewer_role": "automated_checker_delegated_by_owner",
+  "reviewer_note": "Automated checks run by the daily schedule under the owner's delegation; no person or AI reads each weekly version.",
+  "gates": {
+    "TFDA-R1-SOURCE": {
+      "purpose": "The new raw artifact comes from the confirmed TFDA dataset.",
+      "checklist": [
+        "Metadata publisherOID, identifier and license code equal the values confirmed on 2026-09-14.",
+        "The ZIP was fetched over HTTPS from a data.fda.gov.tw resource URL discovered from the data.gov.tw metadata.",
+        "fetch.json is canonical and its artifact size and SHA-256 match the stored raw ZIP."
+      ]
+    },
+    "TFDA-R1-SCHEMA": {
+      "purpose": "The new version keeps the approved schema and changed by an ordinary weekly amount.",
+      "checklist": [
+        "The ZIP passes the archive limits and the header equals the 34 researched columns in order.",
+        "Row count and distinct permit count each changed by at most 10 percent from the serving version.",
+        "The blank rate of each key column rose by at most 2 percentage points.",
+        "No cancellation status value other than blank, 已註銷 or 已廢止 appears that the serving version did not have.",
+        "At least 10 golden cases chosen and parsed by an independent parser pass against the new raw ZIP.",
+        "Before the pointer switches, an independent parser compares every curated row with the raw ZIP: row numbers, row hashes, all 34 raw values, classification codes, main category letters and IVD labels."
+      ]
+    },
+    "PUB-R1-OWNER": {
+      "purpose": "A version that passes every automated check may replace the served version on the local MCP runtime and be released as a GitHub Release download bundle.",
+      "scope": "local_mcp_serving_and_github_release_bundle",
+      "checklist": [
+        "Only an installed distribution may publish.",
+        "A version that fails any check is not published; the approved version keeps serving and is marked as having a newer candidate.",
+        "An annex class A/B/C code without an approved registry decision is labelled included and listed in the owner email for a later review; codes of other classes stay unknown.",
+        "The owner is emailed after each automatic publish and after each held-back version.",
+        "Review records name the reviewer as automated-check:tfda-auto-update, never as a person or as the owner.",
+        "The daily schedule releases the serving build as a GitHub Release download bundle only after it serves locally, and only from a program commit whose package files equal the installed program and whose CI passed.",
+        "Download bundles contain only the raw revision and the curated build with its audit folder (ADR 0002)."
+      ]
+    }
+  },
+  "golden_cases": {
+    "minimum_distinct_official_cases": 10,
+    "selection": "Rows matching the fixed coverage list first, then evenly spaced rows until at least 10 cases exist.",
+    "comparison": "Compare each expected value, row number and row hash with an independent parse of the raw ZIP."
+  },
+  "severity_policy": {
+    "critical": "reject",
+    "major": "reject_until_resolved_in_a_new_build",
+    "minor": "record_and_accept"
+  }
+}

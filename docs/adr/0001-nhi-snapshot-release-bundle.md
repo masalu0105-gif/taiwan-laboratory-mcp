@@ -1,7 +1,7 @@
 # ADR 0001：NHI 審核版資料以 GitHub Release 下載包散布
 
 - 狀態：Accepted（owner 決定，2026-09-14）
-- 範圍：只限 `nhi_fee`。TFDA、CDC 手冊、CDC ODS 另案決定。
+- 範圍：只限 `nhi_fee`。~~TFDA、~~CDC 手冊、CDC ODS 另案決定（TFDA 見 ADR 0002）。
 - 關聯：PRD `OD-01`、`REL-G4`；SDD §6、§7.1、§8.2、§8.3、`D-007`；`docs/implementation-notes.md`「Owner 決定：過期處理、再散布、下一步與平台」。
 
 ## 背景
@@ -53,11 +53,11 @@ owner 在 2026-09-14 選擇把 owner 審核過的 NHI snapshot 放上 GitHub Rel
 
 下載包含原始 CSV，安裝後 `local_artifact_available=true`，runtime 會逐次驗證原始檔 hash。`currently_reproducible_from_upstream` 維持 `false`（runtime 不連網）。
 
-### 6. 發布節奏與審核人
+### 6. 發布節奏與審核人（2026-09-15 部分由 ADR 0002 §4 取代）
 
-- 只有「上游有變、owner 審核通過並在本機發布」之後，才匯出新的下載包並建立新的 Release。
+- ~~只有「上游有變、owner 審核通過並在本機發布」之後，才匯出新的下載包並建立新的 Release。~~ 改為本機自動換版成功後由排程發布（ADR 0002 §2）。
 - 公開審核紀錄的 `reviewer_id` 使用「專案負責人」代號，`reviewer_role=project_owner`、`identity_assurance=local_asserted`。
-- 建立 GitHub Release 屬對外公開動作；每一次都要把實際檔名、大小、SHA-256 交 owner 確認後才執行。
+- 建立 GitHub Release 屬對外公開動作；~~每一次都要把實際檔名、大小、SHA-256 交 owner 確認後才執行。~~ owner 2026-09-15 選擇自動發布（ADR 0002 §2）。
 
 ## 不做
 

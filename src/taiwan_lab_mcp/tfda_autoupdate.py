@@ -155,7 +155,8 @@ def _letters(values: list[str]) -> str:
 
 
 def _scope(codes: list[str], decisions: dict[str, str]) -> str:
-    scopes = [decisions.get(code) for code in codes]
+    # Owner 2026-09-15: an unreviewed annex class A/B/C code counts as included.
+    scopes = [decisions.get(code, "included" if code[0] in "ABC" else None) for code in codes]
     if not scopes:
         return "unknown"
     if "ambiguous" in scopes or ("included" in scopes and "excluded" in scopes):

@@ -235,7 +235,8 @@ def prepare_nhi_review_packet(data_root: Path, *, output_dir: Path) -> dict[str,
     scope_rules = parse_scope_bundle(_packaged_rule_bundles()[0])
     scope_rules_by_code = {search_normalize(code): rule for code, rule in scope_rules.items()}
     rows_by_code = {
-        row.code_normalized: _curated_row(row, scope_rules_by_code) for row in parsed.rows
+        row.code_normalized: _curated_row(row, scope_rules_by_code, unreviewed_in_scope=True)
+        for row in parsed.rows
     }
     raw_sha256 = sha256_bytes(payload)
     candidate_warnings = _serving_warnings(rows_by_code.values())

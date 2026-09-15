@@ -159,7 +159,7 @@ def test_checked_new_version_is_published_automatically(tmp_path, distribution):
     review = json.loads((build_dir / "audit" / "reviews" / "PUB-R1-OWNER.json").read_bytes())
     assert review["reviewer_id"] == "automated-check:tfda-auto-update"
     assert review["reviewer_role"] == "automated_checker_delegated_by_owner"
-    assert (review["protocol_id"], review["protocol_version"]) == ("tfda-r1-auto-review", "1")
+    assert (review["protocol_id"], review["protocol_version"]) == ("tfda-r1-auto-review", "2")
     assert any(ref["artifact_id"] == "tfda-auto-roundtrip" for ref in review["evidence_refs"])
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
     assert len(certificate["approved_distinct_case_ids"]) >= 10
@@ -168,6 +168,20 @@ def test_checked_new_version_is_published_automatically(tmp_path, distribution):
     adapter = TFDAAdapter(DataContext(mode="official_snapshot", data_root=tmp_path))
     record = adapter.get_license("衛部醫器輸字第000012號").items[0].record
     assert record.name_zh_raw == "改過的品名"
+
+
+def test_unreviewed_annex_code_counts_as_ivd_and_is_listed(tmp_path, distribution):
+    # Owner 2026-09-15 chose to count a new, not yet reviewed A/B/C code as IVD.
+    build_tfda_snapshot(_zip(ROWS), tmp_path)
+    new_rows = ROWS[:-1] + [_row(12, 醫器次類別一="A.5555 新增合成品項")]
+
+    summary = _auto(tmp_path, _zip(new_rows))
+
+    assert summary["result"] == "published"
+    assert summary["unreviewed_annex_codes"] == ["A.5555"]
+    adapter = TFDAAdapter(DataContext(mode="official_snapshot", data_root=tmp_path))
+    record = adapter.get_license("衛部醫器輸字第000012號").items[0].record
+    assert (record.classification_codes, record.ivd_scope) == (["A.5555"], "included")
 
 
 def test_large_change_is_held_back_and_reported_once(tmp_path, distribution):
