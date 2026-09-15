@@ -119,6 +119,45 @@ def test_search_disease_ignores_spaces_and_line_breaks(tmp_path):
     assert adapter.search_disease("狂犬病").result_status == "not_found"
 
 
+def test_search_disease_finds_the_manual_wording_through_common_aliases(tmp_path):
+    # Owner 2026-09-16 (OD-16): 「COVID-19」「HIV」「猴痘」 are not how the manual writes them.
+    _offline(tmp_path)
+    adapter = _adapter(tmp_path)
+
+    assert [
+        item.evidence[0].locator.pdf_page for item in adapter.search_disease("typhoid").items
+    ] == [
+        16,
+        17,
+        14,
+    ]
+    assert adapter.search_disease("dengue").total_matches == 1
+    # An alias whose disease is not in this manual still reports nothing found.
+    assert adapter.search_disease("malaria").result_status == "not_found"
+
+
+def test_the_alias_table_version_is_part_of_the_build_fingerprint(tmp_path):
+    from taiwan_lab_mcp.importers.cdc_manual import (
+        CDC_MANUAL_ALIAS_RULE_VERSION,
+        cdc_disease_alias_sha256,
+    )
+
+    built = _offline(tmp_path)
+    manifest = json.loads(
+        (
+            tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"] / "manifest.json"
+        ).read_bytes()
+    )
+
+    assert manifest["build_fingerprint"]["rules"] == [
+        {
+            "name": "cdc_disease_alias",
+            "version": CDC_MANUAL_ALIAS_RULE_VERSION,
+            "bundle_sha256": cdc_disease_alias_sha256(),
+        }
+    ]
+
+
 def test_database_keeps_raw_text_display_text_edition_and_row_hash(tmp_path):
     from taiwan_lab_mcp.importers.cdc_manual_layout import parse_cdc_specimen_layout
 

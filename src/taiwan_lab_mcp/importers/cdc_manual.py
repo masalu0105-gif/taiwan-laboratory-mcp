@@ -15,6 +15,7 @@ import sqlite3
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
+from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -128,8 +129,49 @@ _SYNTHETIC_MANUAL = b"%PDF-1.7\n% offline synthetic CDC manual fixture\n%%EOF\n"
 _SYNTHETIC_REVISION = b"%PDF-1.7\n% offline synthetic CDC manual revision table fixture\n%%EOF\n"
 
 
+CDC_MANUAL_ALIAS_RULE = "cdc_disease_alias"
+CDC_MANUAL_ALIAS_RULE_VERSION = "cdc-disease-alias-v1"
+
+
 def _utc_now_text() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _alias_bytes() -> bytes:
+    resource = files("taiwan_lab_mcp").joinpath("rules", CDC_MANUAL_ALIAS_RULE, "v1.json")
+    try:
+        return resource.read_bytes()
+    except OSError as exc:
+        raise CdcManualImportError("ALIAS_RULES_INVALID") from exc
+
+
+def cdc_disease_alias_sha256() -> str:
+    return sha256_bytes(_alias_bytes())
+
+
+@lru_cache(maxsize=1)
+def load_cdc_disease_aliases() -> dict[str, str]:
+    """Common names people type mapped to text the manual's own disease names contain (OD-16).
+
+    Both sides are normalized the same way the search column is, so 「COVID-19」 and 「covid 19」
+    are one alias. The answer still shows the manual's wording; only the search term changes.
+    """
+
+    try:
+        document = json.loads(_alias_bytes().decode("utf-8"))
+        entries = document["entries"]
+        aliases = {norm(entry["alias"]): norm(entry["query"]) for entry in entries}
+    except (AttributeError, KeyError, TypeError, UnicodeDecodeError, ValueError) as exc:
+        raise CdcManualImportError("ALIAS_RULES_INVALID") from exc
+    if (
+        document.get("rule_version") != CDC_MANUAL_ALIAS_RULE_VERSION
+        or document.get("source_id") != CDC_MANUAL_SOURCE_ID
+        or len(aliases) != len(entries)
+        or not all(aliases)
+        or not all(aliases.values())
+    ):
+        raise CdcManualImportError("ALIAS_RULES_INVALID")
+    return aliases
 
 
 def _thousandths(value: Any) -> Any:
@@ -227,7 +269,13 @@ def active_cdc_manual_transform(layout_sha256: str | None) -> dict[str, Any]:
             "version": CDC_MANUAL_NORMALIZATION_VERSION,
             "bundle_sha256": sha256_json({"rule": "display-text-NFKC-lower-without-spaces"}),
         },
-        "rules": [],
+        "rules": [
+            {
+                "name": CDC_MANUAL_ALIAS_RULE,
+                "version": CDC_MANUAL_ALIAS_RULE_VERSION,
+                "bundle_sha256": cdc_disease_alias_sha256(),
+            }
+        ],
         "qualifier": {
             "name": spec["spec_id"],
             "version": spec["package_version"],

@@ -154,6 +154,14 @@ def read_cdc_manual_state(
 
 
 def search_specimen_rows(connection: sqlite3.Connection, *, query: str) -> list[dict[str, Any]]:
-    """Chapter 2 rows whose disease name matches, ignoring spaces, line breaks and brackets."""
+    """Chapter 2 rows whose disease name matches, ignoring spaces, line breaks and brackets.
 
-    return [dict(row) for row in connection.execute(_SEARCH_SQL, {"query": norm(query)})]
+    A common name the manual does not use (「COVID-19」, 「HIV」, 「猴痘」) is replaced by the
+    manual's own wording through the packaged alias table (OD-16).
+    """
+
+    from .importers.cdc_manual import load_cdc_disease_aliases
+
+    term = norm(query)
+    term = load_cdc_disease_aliases().get(term, term)
+    return [dict(row) for row in connection.execute(_SEARCH_SQL, {"query": term})]

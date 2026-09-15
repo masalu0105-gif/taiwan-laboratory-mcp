@@ -1214,6 +1214,31 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 接進本機：CI 通過後，把同一個 wheel（SHA-256 `4e18143f…`，含 `cdc-manual` extra）以 `uv pip install --python <uv tool 環境>` 就地裝進 uv tool 環境；安裝身分 `distribution`，安裝檔與 repo 逐檔相同。
 - 真實手冊檢查（只跑手冊這一段，沒有手動跑整份排程；整份排程還會跑健保、食藥署檢查與 GitHub 下載包發布）：`taiwan-lab-data check cdc_specimen_manual --actor claude-code-cdc-manual-launch --data-dir <data-root> --auto-publish --json` exit 0、`result=unchanged`、1150826、generation 1→2、`stale=false`。`taiwan-lab-data status`：手冊、名冊、健保、食藥署四個來源都 available、沒有過期。
 
+### Owner 決定（2026-09-16，transcript timestamp `2026-09-15T23:31:29.972Z`）
+
+owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手冊第七章也都必須要做。」對應我上一則列的 5 題：
+
+| 題目 | 決定 | 記在哪 |
+| --- | --- | --- |
+| 1 格內換行：作者自己換的行要不要保留 | 保留（照建議 A） | PRD OD-15 補上 owner 確認 |
+| 2 常見病名查不到（COVID-19、HIV、猴痘） | 做對照表（照建議 B） | PRD OD-16 |
+| 3 手冊查詢要不要翻頁 | 維持一次最多 20 筆（照建議 A） | PRD OD-17 |
+| 4 手冊第 7 章與修訂對照表 | 要做 | PRD OD-18 |
+| 5 疾管署資料放不放進 GitHub 下載包 | 放進去 | PRD OD-19 |
+
+### 疾管署採檢手冊：常見病名對照表（2026-09-16，OD-16）
+
+- 問題：手冊寫的疾病名稱和一般人打的字不一樣。查「COVID-19」「嚴重特殊傳染性肺炎」「HIV」「猴痘」原本都回「查無」。
+- 做法：程式包內放一份版本化對照表 `rules/cdc_disease_alias/v1.json`（95 個別名）。查詢時先把輸入正規化（全形轉半形、轉小寫、去掉空白、破折號、斜線與括號），對得上別名就換成手冊自己的寫法再查；回答仍然是手冊原文與顯示文字，不改疾病名稱。對照表版本與檔案 hash 寫進 build fingerprint 的 `rules`，改版就要重新審核。
+- 對真實手冊（1150826）實查：95 個別名全部都查得到列。
+  - 改前：查「COVID-19」→ 查無。改後：6 列，疾病名稱是手冊寫的「新冠併發重症」。
+  - 改前：查「HIV」→ 查無。改後：3 列，「人類免疫缺乏病毒( 愛滋病毒)感染」與「人類免疫缺乏病毒感染」。
+  - 改前：查「猴痘」→ 查無。改後：2 列，「M 痘」。
+  - 其他例子：「肺結核」8 列（結核病、結核病接觸者潛伏感染、多重抗藥性結核病）、「flu」9 列、「ebola」6 列、「typhus」7 列（流行性斑疹傷寒、恙蟲病/地方性斑疹傷寒）。
+- 影響：加了對照表之後，讀手冊的規則版本變了。本機正在服務的手冊建置是舊規則建的，每日自動更新會先擋下並回 `manual_reading_rules_changed`；要等下載包那一步一起重建、重新發布本機建置後才會恢復。
+- 測試：先寫 2 個測試跑出 2 failed；實作後全過。`tests/test_package_contents.py` 必含檔加上對照表。
+- 驗證：全部測試 561 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 內含對照表，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 561 passed，contract 與 repo 位元組相同（144,136 bytes）。
+
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
 - owner 原話：「如果像那種 PDF，我覺得是不是可以用一些開源專案，例如說 MarkItDown，或者是有其他的工具？例如說，可以先把 PDF 變成 Markdown 之後，AI 再去讀 Markdown，應該就能完整判讀出原本的語意了吧？」（transcript timestamp `2026-09-15T14:43:28.643Z`）

@@ -26,6 +26,7 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/review_protocols/tfda-r1-ai-review/2.json",
     "taiwan_lab_mcp/review_protocols/tfda-r1-auto-review/1.json",
     "taiwan_lab_mcp/review_protocols/tfda-r1-auto-review/2.json",
+    "taiwan_lab_mcp/rules/cdc_disease_alias/v1.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v1.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v2.json",
     "taiwan_lab_mcp/rules/tfda_ivd/v1.json",
