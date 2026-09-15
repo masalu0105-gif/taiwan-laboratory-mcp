@@ -39,7 +39,7 @@ SDD 要求第一個 CDC 手冊切片先驗 LiteParse JSON 能不能把表格拆�
    - 跨頁：頁首列裡依標記順序判定為溢出的文字，接到上一頁同一欄最後一格後面；共用那一格的每一筆都拿到完整原文。
    - 以下任一情況整批擋下，不猜欄位：TD 數和欄數不同；頁中出現溢出；找不到上一頁可以接的格子；表格範圍內有字不屬於任何格；頁面沒有文字層。
 4. 讀出來的中間結果仍正規化成專案自己的 `CdcLayoutV1`（每頁尺寸、格線、字元框與順序、TR／TD 順序），hash 納入 curated build fingerprint；`pypdfium2` 版本與 PDFium build 寫進 extractor identity。
-5. `CDC-R1-LAYOUT` 仍逐列核對：用 Word 標記裡每個 TD 的文字，和按座標拆出的格子原文交叉比對。
+5. `CDC-R1-LAYOUT` 仍逐列核對：用 Word 標記裡每個 TD 的文字，和按座標拆出的格子原文交叉比對。（2026-09-16 已實作 `verify_cdc_manual_rows_against_tags`，正式建置在切換 current 前一定會跑：一個 TR 是一列、一個 TD 是一格，只借用直線判斷 TD 在第幾欄；1150826 版 370 列、2,960 格全部相同。）
 
 ## 取捨
 

@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timezone
+from importlib.resources import files
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -25,18 +27,43 @@ from ..cdc_manual_source import (
     CDC_MANUAL_SOURCE_ID,
     PDF_MEDIA_TYPE,
     CdcManualImportError,
+    _validate_pdf,
     cdc_manual_raw_revision_id,
 )
+from ..fetch import FetchedArtifact
+from ..models import GoldenCaseV1
 from ..publish import publish_current_descriptor
 from ..util import norm
 from .cdc_manual_layout import (
+    _HEADERS,
     CDC_MANUAL_LAYOUT_RULES_VERSION,
     CDC_SPECIMEN_FIELDS,
     CdcSpecimenLayoutResult,
     CdcSpecimenRow,
+    _read_page,
+    _squeeze,
     parse_cdc_specimen_layout,
 )
-from .cdc_manual_pdf import load_pdfium_qualifier_spec, pdfium_qualifier_spec_sha256
+from .cdc_manual_pdf import (
+    extract_cdc_manual_layout,
+    load_pdfium_qualifier_spec,
+    pdfium_qualifier_spec_sha256,
+)
+
+# Owner 2026-09-15: 「Ai全程代審 不用特別備注未經人工審核」 covers the specimen manual (OD-04).
+CDC_MANUAL_REVIEW_PROTOCOL_ID = "cdc-manual-r1-ai-review"
+CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "1"
+_DELEGATED_REVIEW_PROTOCOLS = frozenset(
+    {(CDC_MANUAL_REVIEW_PROTOCOL_ID, CDC_MANUAL_REVIEW_PROTOCOL_VERSION)}
+)
+_MINIMUM_OFFICIAL_GOLDEN_CASES = 10
+_HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+_EVIDENCE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
+_OWNER_REVIEW_KEYS = frozenset(
+    {"gate_id", "reviewer_id", "reviewer_role", "reviewed_at", "finding_counts", "comments"}
+)
+# role in fetch.json, stored file name
+_RAW_FILES = (("manual", "manual.pdf"), ("revision_table", "revision.pdf"))
 
 CDC_MANUAL_PRIMARY_ARTIFACT_ID = "cdc-manual-pdf"
 CDC_MANUAL_REVISION_ARTIFACT_ID = "cdc-manual-revision-pdf"
@@ -263,7 +290,7 @@ def _publish_build(
     publisher_actor_id: str,
     evidence_inputs: Sequence[tuple[str, str, bytes]],
     official: bool,
-    pre_publish_check: Callable[[Path], tuple[str, str, bytes]] | None = None,
+    pre_publish_checks: Sequence[Callable[[Path], tuple[str, str, bytes]]] = (),
 ) -> dict[str, Any]:
     """Write the curated build and its audit bundle, then publish it with generation CAS."""
 
@@ -290,9 +317,8 @@ def _publish_build(
     db_path = data_root / PurePosixPath(db_relative)
     _write_curated_db(db_path, parsed)
     db_digest = _sha256_file(db_path)
-    if pre_publish_check is not None:
-        # Runs on the finished database before any audit record or pointer refers to it.
-        evidence_inputs = [*evidence_inputs, pre_publish_check(db_path)]
+    # Checks run on the finished database before any audit record or pointer refers to it.
+    evidence_inputs = [*evidence_inputs, *(check(db_path) for check in pre_publish_checks)]
     audit_prefix = f"{build_prefix}/audit"
     rows = len(parsed.rows)
     row_counts = {"input_rows": rows, "curated_rows": rows, "quarantined_rows": 0}
@@ -719,4 +745,539 @@ def build_cdc_manual_snapshot(
         publisher_actor_id="offline-test-builder",
         evidence_inputs=(),
         official=False,
+    )
+
+
+def _review_protocol(protocol_id: str, protocol_version: str) -> tuple[str, str, str, str, str]:
+    """Return protocol id, version, SHA-256 and the reviewer id and role it names."""
+
+    if (protocol_id, protocol_version) not in _DELEGATED_REVIEW_PROTOCOLS:
+        raise CdcManualImportError("REVIEW_PROTOCOL_INVALID")
+    try:
+        payload = (
+            files("taiwan_lab_mcp")
+            .joinpath("review_protocols", protocol_id, f"{protocol_version}.json")
+            .read_bytes()
+        )
+        document = json.loads(payload.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise CdcManualImportError("REVIEW_PROTOCOL_INVALID") from exc
+    if (
+        not isinstance(document, dict)
+        or document.get("protocol_id") != protocol_id
+        or document.get("protocol_version") != protocol_version
+        or document.get("source_id") != CDC_MANUAL_SOURCE_ID
+        or document.get("status") != "owner_delegated"
+        or sorted(document.get("gates", {})) != sorted(CDC_MANUAL_SERVING_GATES)
+        or not isinstance(document.get("reviewer_id"), str)
+        or not document["reviewer_id"]
+        or not isinstance(document.get("reviewer_role"), str)
+        or not document["reviewer_role"]
+    ):
+        raise CdcManualImportError("REVIEW_PROTOCOL_INVALID")
+    return (
+        protocol_id,
+        protocol_version,
+        sha256_bytes(payload),
+        document["reviewer_id"],
+        document["reviewer_role"],
+    )
+
+
+def _validated_owner_reviews(owner_reviews: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    reviews = [dict(review) for review in owner_reviews]
+    if [review.get("gate_id") for review in reviews] != list(CDC_MANUAL_SERVING_GATES):
+        raise CdcManualImportError("OWNER_REVIEW_GATES_INVALID")
+    for review in reviews:
+        counts = review.get("finding_counts")
+        if (
+            set(review) != _OWNER_REVIEW_KEYS
+            or not isinstance(review["reviewer_id"], str)
+            or not review["reviewer_id"].strip()
+            or not isinstance(review["reviewer_role"], str)
+            or not review["reviewer_role"].strip()
+            or not isinstance(review["comments"], str)
+            or not isinstance(counts, dict)
+            or set(counts) != {"critical", "major", "minor"}
+            or any(type(value) is not int or value < 0 for value in counts.values())
+        ):
+            raise CdcManualImportError("OWNER_REVIEW_SCHEMA_INVALID", str(review.get("gate_id")))
+        try:
+            reviewed_at = datetime.fromisoformat(str(review["reviewed_at"]).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise CdcManualImportError("OWNER_REVIEW_SCHEMA_INVALID", review["gate_id"]) from exc
+        if reviewed_at.utcoffset() is None:
+            raise CdcManualImportError("OWNER_REVIEW_SCHEMA_INVALID", review["gate_id"])
+        if counts["critical"] or counts["major"]:
+            raise CdcManualImportError("OWNER_REVIEW_REJECTED", review["gate_id"])
+    return reviews
+
+
+def _evidence_inputs(evidence_files: Sequence[Mapping[str, Any]]) -> list[tuple[str, str, bytes]]:
+    evidence = []
+    for item in evidence_files:
+        name = Path(str(item.get("path", ""))).name
+        artifact_id = item.get("artifact_id")
+        if (
+            not isinstance(artifact_id, str)
+            or not artifact_id
+            or not _EVIDENCE_NAME_RE.fullmatch(name)
+        ):
+            raise CdcManualImportError("EVIDENCE_FILE_INVALID")
+        try:
+            evidence.append((artifact_id, name, Path(str(item["path"])).read_bytes()))
+        except OSError as exc:
+            raise CdcManualImportError("EVIDENCE_FILE_INVALID", artifact_id) from exc
+    if len({name for _, name, _ in evidence}) != len(evidence):
+        raise CdcManualImportError("EVIDENCE_FILE_INVALID", "duplicate evidence file name")
+    return evidence
+
+
+def _load_official_raw_revision(data_root: Path, raw_revision_id: str) -> dict[str, Any]:
+    """Read one fetched manual revision and prove both PDFs still match fetch.json."""
+
+    if not isinstance(raw_revision_id, str) or not _HEX64_RE.fullmatch(raw_revision_id):
+        raise CdcManualImportError("RAW_REVISION_INTEGRITY", "raw revision id is invalid")
+    revision_dir = PurePosixPath("raw", CDC_MANUAL_SOURCE_ID, raw_revision_id)
+    relatives = {role: str(revision_dir / "artifacts" / name) for role, name in _RAW_FILES}
+    fetch_relative = str(revision_dir / "fetch.json")
+    try:
+        fetch_bytes = (data_root / PurePosixPath(fetch_relative)).read_bytes()
+        fetch_record = json.loads(fetch_bytes.decode("utf-8"))
+        records = {record["role"]: record for record in fetch_record["artifacts"]}
+        payloads = {
+            role: (data_root / PurePosixPath(relative)).read_bytes()
+            for role, relative in relatives.items()
+        }
+        discovery = fetch_record["discovery"]
+        artifacts = {
+            role: FetchedArtifact(
+                requested_url=records[role]["requested_url"],
+                final_url=records[role]["final_url"],
+                status_code=records[role]["status_code"],
+                payload=payloads[role],
+                sha256=sha256_bytes(payloads[role]),
+                fetched_at=records[role]["fetched_at"],
+                headers=dict(records[role]["headers"]),
+                redirect_trace=tuple(records[role]["redirect_trace"]),
+            )
+            for role in relatives
+        }
+        recomputed = cdc_manual_raw_revision_id(discovery=discovery, artifacts=artifacts)
+        urls = [_document(discovery, role)["pdf_url"] for role in relatives]
+    except (KeyError, OSError, TypeError, UnicodeDecodeError, ValueError, AttributeError) as exc:
+        raise CdcManualImportError("RAW_REVISION_INTEGRITY", "raw revision is unreadable") from exc
+    required_discovery = (
+        "provider",
+        "dataset_name",
+        "landing_url",
+        "manual_version_raw",
+        "license_name",
+        "license_url",
+    )
+    if (
+        canonical_json_bytes(fetch_record) != fetch_bytes
+        or fetch_record.get("fetch_record_schema_version") != 1
+        or fetch_record.get("source_id") != CDC_MANUAL_SOURCE_ID
+        or fetch_record.get("raw_revision_id") != raw_revision_id
+        or len(fetch_record["artifacts"]) != len(relatives)
+        or set(records) != set(relatives)
+        or any(
+            records[role].get("data_root_relative_path") != relatives[role]
+            or records[role].get("sha256") != sha256_bytes(payloads[role])
+            or records[role].get("bytes") != len(payloads[role])
+            or records[role].get("media_type_verified") != PDF_MEDIA_TYPE
+            or not isinstance(records[role].get("fetched_at"), str)
+            for role in relatives
+        )
+        or recomputed != raw_revision_id
+        or any(not isinstance(url, str) or not url for url in urls)
+        or any(
+            not isinstance(discovery.get(key), str) or not discovery[key]
+            for key in required_discovery
+        )
+    ):
+        raise CdcManualImportError(
+            "RAW_REVISION_INTEGRITY", "raw revision does not match fetch record"
+        )
+    return {
+        "manual_payload": payloads["manual"],
+        "revision_payload": payloads["revision_table"],
+        "discovery": discovery,
+        "fetched_at": records["manual"]["fetched_at"],
+        "artifact_relative": relatives["manual"],
+        "revision_relative": relatives["revision_table"],
+        "fetch_relative": fetch_relative,
+    }
+
+
+_EXPECTED_FIELDS = frozenset([*CDC_SPECIMEN_FIELDS, *DISPLAY_COLUMNS])
+
+
+def _golden_failure_codes(
+    case: GoldenCaseV1,
+    rows: Sequence[CdcSpecimenRow],
+    *,
+    raw_artifact_sha256: str,
+    transform: dict[str, Any],
+) -> list[str]:
+    codes: list[str] = []
+    if case.source_id != CDC_MANUAL_SOURCE_ID:
+        codes.append("SOURCE_MISMATCH")
+    if (
+        case.artifact_id != CDC_MANUAL_PRIMARY_ARTIFACT_ID
+        or case.raw_artifact_sha256 != raw_artifact_sha256
+    ):
+        codes.append("ARTIFACT_MISMATCH")
+    if case.transform != transform:
+        codes.append("TRANSFORM_MISMATCH")
+    if case.expected_status != "ok":
+        codes.append("EXPECTED_STATUS_UNSUPPORTED")
+    locator = case.source_locator
+    if locator.locator_type != "cdc_pdf_row":
+        codes.append("LOCATOR_UNSUPPORTED")
+    if not case.expected_fields:
+        codes.append("EXPECTED_FIELDS_EMPTY")
+    codes.extend(
+        f"EXPECTED_FIELD_UNSUPPORTED:{field}"
+        for field in sorted(set(case.expected_fields) - _EXPECTED_FIELDS)
+    )
+    disease = case.input.get("disease") if set(case.input) == {"disease"} else None
+    if not disease or not norm(disease):
+        codes.append("INPUT_UNSUPPORTED")
+        return codes
+    located = [row for row in rows if row.locator == locator.model_dump()]
+    # The case must name a disease that the search tool matches against this row.
+    if len(located) != 1 or norm(disease) not in norm(located[0].display_fields()["disease"]):
+        codes.append("STATUS_MISMATCH")
+        return codes
+    row = located[0]
+    if case.source_row_sha256 != row.source_row_sha256:
+        codes.append("LOCATOR_MISMATCH")
+    values = {
+        **row.fields(),
+        **{f"{name}_display": value for name, value in row.display_fields().items()},
+    }
+    codes.extend(
+        f"FIELD_MISMATCH:{field}"
+        for field in sorted(set(case.expected_fields) & _EXPECTED_FIELDS)
+        if case.expected_fields[field] != values[field]
+    )
+    if case.expected_warnings:
+        codes.append("WARNINGS_MISMATCH")
+    return codes
+
+
+def evaluate_cdc_manual_golden_cases(
+    layout: Mapping[str, Any],
+    cases: Sequence[Mapping[str, Any]],
+    *,
+    raw_artifact_sha256: str,
+) -> list[dict[str, Any]]:
+    """Re-run golden cases against a page layout read from the manual; no writes or approval."""
+
+    parsed = parse_cdc_specimen_layout(dict(layout))
+    transform = active_cdc_manual_transform(cdc_layout_sha256(layout))
+    validated: list[tuple[dict[str, Any], GoldenCaseV1]] = []
+    try:
+        for case in cases:
+            case_bytes = canonical_json_bytes(dict(case))
+            validated.append((json.loads(case_bytes), GoldenCaseV1.model_validate_json(case_bytes)))
+    except (TypeError, ValueError) as exc:
+        raise CdcManualImportError("GOLDEN_CASE_SCHEMA_INVALID") from exc
+    case_ids = [model.case_id for _, model in validated]
+    if len(set(case_ids)) != len(case_ids):
+        raise CdcManualImportError("GOLDEN_CASE_SCHEMA_INVALID", "duplicate case_id")
+    results = []
+    for raw_case, model in validated:
+        failure_codes = _golden_failure_codes(
+            model, parsed.rows, raw_artifact_sha256=raw_artifact_sha256, transform=transform
+        )
+        results.append(
+            {
+                "golden_case": raw_case,
+                "golden_case_sha256": sha256_bytes(canonical_json_bytes(raw_case)),
+                "evaluation_status": "failed" if failure_codes else "passed",
+                "failure_codes": failure_codes,
+            }
+        )
+    return results
+
+
+CDC_MANUAL_TAG_CHECK = "cdc-manual-word-tag-text-v1"
+_MAX_REPORTED_MISMATCHES = 20
+
+
+def _column_at(xs: Sequence[float], x: float) -> int | None:
+    return next((index for index in range(len(xs) - 1) if xs[index] <= x < xs[index + 1]), None)
+
+
+def _word_tag_rows(layout: Mapping[str, Any], pages: Sequence[int]) -> list[dict[str, str | None]]:
+    """Rebuild chapter 2 rows from the Word TR/TD tags (ADR 0003 decision 5).
+
+    Each TR is one row and each TD's marked-content text is one cell. A TD's column is the space
+    between the vertical rules where its characters sit (its marked-content box when it has no
+    characters); horizontal rules and character-to-cell grouping are not used. Word lists the
+    cells continued from rows above first and this row's own cells last in column order; on a
+    page's first row a continued cell with text carries on the previous page's cell.
+    """
+
+    wanted = set(pages)
+    records: list[dict[str, list[str] | None]] = []
+    names: tuple[str | None, ...] = ()
+    current: dict[int, list[str]] = {}
+    for page in sorted(layout["pages"], key=lambda item: int(item["page_number"])):
+        number = int(page["page_number"])
+        if number not in wanted:
+            continue
+        texts: dict[int, list[str]] = {}
+        points: dict[int, list[float]] = {}
+        for char in page["chars"]:
+            mcid = char.get("mcid")
+            if mcid is None:
+                continue
+            texts.setdefault(mcid, []).append(char["text"])
+            if char["text"].strip():
+                points.setdefault(mcid, []).append((char["x0"] + char["x1"]) / 2)
+        boxes: dict[int, list[float]] = {}
+        for item in page.get("marked_content", ()):
+            boxes.setdefault(item["mcid"], []).append((item["x0"] + item["x1"]) / 2)
+
+        def text_of(child: Sequence[int], texts: dict[int, list[str]] = texts) -> str:
+            return _squeeze("".join("".join(texts.get(mcid, ())) for mcid in child))
+
+        def center_of(
+            child: Sequence[int],
+            points: dict[int, list[float]] = points,
+            boxes: dict[int, list[float]] = boxes,
+        ) -> float | None:
+            found = [x for mcid in child for x in points.get(mcid, ())]
+            if not found:
+                # Only a cell without visible characters falls back to its marked-content boxes.
+                found = [x for mcid in child for x in boxes.get(mcid, ())]
+            return sum(found) / len(found) if found else None
+
+        table = _read_page(page)
+        if table is None:
+            raise CdcManualImportError("LAYOUT_TAG_TEXT_MISMATCH", f"page {number} has no table")
+
+        def column_of(
+            child: Sequence[int], xs: Sequence[float] = table.xs, center_of: Any = center_of
+        ) -> int | None:
+            center = center_of(child)
+            return None if center is None else _column_at(xs, center)
+
+        rows = [row for row in page.get("table_rows") or () if any(c is not None for c in row)]
+        header_rows = [
+            index
+            for index, row in enumerate(rows)
+            if any(child is not None and text_of(child) == "傳染病名稱" for child in row)
+        ]
+        if header_rows:
+            header = rows[header_rows[-1]]
+            header_names: list[str | None] = [None] * (len(table.xs) - 1)
+            for child in header:
+                column = None if child is None else column_of(child)
+                if column is not None:
+                    header_names[column] = _HEADERS.get(text_of(child))
+            if len(header) != len(header_names) or None in header_names:
+                raise CdcManualImportError("LAYOUT_TAG_TEXT_MISMATCH", f"page {number} header")
+            if len(header_names) != len(names):
+                current = {}
+            names = tuple(header_names)
+            rows = rows[header_rows[-1] + 1 :]
+        if not names:
+            raise CdcManualImportError("LAYOUT_TAG_TEXT_MISMATCH", f"page {number} has no header")
+        for position, row in enumerate(rows):
+            if len(row) != len(names):
+                raise CdcManualImportError("LAYOUT_TAG_TEXT_MISMATCH", f"page {number} row width")
+            columns = [None if child is None else column_of(child) for child in row]
+            boundary = len(row)
+            last = None
+            for index in range(len(row) - 1, -1, -1):
+                if row[index] is None:
+                    break
+                column = columns[index]
+                if column is not None:
+                    if last is not None and column >= last:
+                        break
+                    last = column
+                boundary = index
+            for index in range(boundary):
+                child = row[index]
+                if child is None or not text_of(child):
+                    continue
+                column = columns[index]
+                if position > 0 or column is None or column not in current:
+                    raise CdcManualImportError(
+                        "LAYOUT_TAG_TEXT_MISMATCH", f"page {number} continued cell"
+                    )
+                current[column].append(text_of(child))
+            # An own cell without characters or position takes the column left between its
+            # neighbours; anything else cannot be placed safely.
+            gap: list[Sequence[int]] = []
+            previous = -1
+            for index in [*range(boundary, len(row)), None]:
+                column = len(names) if index is None else columns[index]
+                if column is None:
+                    gap.append(row[index])  # type: ignore[index]
+                    continue
+                if gap:
+                    between = range(previous + 1, column)
+                    if len(between) != len(gap):
+                        raise CdcManualImportError(
+                            "LAYOUT_TAG_TEXT_MISMATCH", f"page {number} empty cell"
+                        )
+                    for gap_column, child in zip(between, gap):
+                        current[gap_column] = [text_of(child)]
+                    gap = []
+                if index is not None:
+                    current[column] = [text_of(row[index])]  # type: ignore[arg-type]
+                previous = column
+            records.append({name: current.get(column) for column, name in enumerate(names) if name})
+    return [
+        {
+            field: None if record.get(field) is None else "".join(record[field] or ())
+            for field in CDC_SPECIMEN_FIELDS
+        }
+        for record in records
+    ]
+
+
+def verify_cdc_manual_rows_against_tags(
+    layout: Mapping[str, Any], db_path: Path
+) -> tuple[str, str, bytes]:
+    """Compare every stored row's raw cells with the Word tag reading; raise on any difference."""
+
+    connection = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        stored = [
+            dict(row)
+            for row in connection.execute(f"SELECT * FROM {CDC_MANUAL_TABLE} ORDER BY row_number")
+        ]
+    finally:
+        connection.close()
+    tagged = _word_tag_rows(layout, sorted({row["pdf_page"] for row in stored}))
+    mismatches: list[dict[str, Any]] = []
+    if len(tagged) != len(stored):
+        mismatches.append(
+            {"row_number": None, "field": "rows", "stored": len(stored), "tags": len(tagged)}
+        )
+    for row, record in zip(stored, tagged):
+        for field in CDC_SPECIMEN_FIELDS:
+            value = None if row[field] is None else _squeeze(row[field])
+            if value != record[field]:
+                mismatches.append(
+                    {
+                        "row_number": row["row_number"],
+                        "pdf_page": row["pdf_page"],
+                        "field": field,
+                        "stored": value,
+                        "tags": record[field],
+                    }
+                )
+    if mismatches:
+        raise CdcManualImportError(
+            "LAYOUT_TAG_TEXT_MISMATCH",
+            json.dumps(mismatches[:_MAX_REPORTED_MISMATCHES], ensure_ascii=False),
+        )
+    report = {
+        "check": CDC_MANUAL_TAG_CHECK,
+        "rows_compared": len(stored),
+        "cells_compared": len(stored) * len(CDC_SPECIMEN_FIELDS),
+        "mismatches": [],
+    }
+    return "cdc-manual-tag-check", "word-tag-check.json", canonical_json_bytes(report)
+
+
+def build_official_cdc_manual_snapshot(
+    data_root: Path,
+    *,
+    raw_revision_id: str,
+    approved_golden_cases: Sequence[Mapping[str, Any]],
+    owner_reviews: Sequence[Mapping[str, Any]],
+    publisher_actor_id: str,
+    evidence_files: Sequence[Mapping[str, Any]] = (),
+    review_protocol: tuple[str, str] = (
+        CDC_MANUAL_REVIEW_PROTOCOL_ID,
+        CDC_MANUAL_REVIEW_PROTOCOL_VERSION,
+    ),
+    pre_publish_check: Callable[[Path], tuple[str, str, bytes]] | None = None,
+) -> dict[str, Any]:
+    """Build and publish an AI-reviewed manual snapshot from a fetched raw revision.
+
+    Every precondition is checked before the first curated write: both PDFs still match
+    fetch.json, the application runs from an installed distribution, all four gates carry
+    reviews by the reviewer the protocol names without critical or major findings, every table
+    page prints the attachment edition, and at least ten approved golden cases pass.
+    """
+
+    from .nhi import _application_build_identity
+
+    data_root = Path(data_root)
+    raw = _load_official_raw_revision(data_root, raw_revision_id)
+    _validate_pdf(raw["manual_payload"])
+    _validate_pdf(raw["revision_payload"])
+    identity_kind, application_build_hash = _application_build_identity()
+    if identity_kind != "distribution":
+        raise CdcManualImportError("APPLICATION_BUILD_IDENTITY_MISSING")
+    if not isinstance(publisher_actor_id, str) or not publisher_actor_id.strip():
+        raise CdcManualImportError("PUBLISHER_ACTOR_INVALID")
+    review_inputs = _validated_owner_reviews(owner_reviews)
+    evidence_inputs = _evidence_inputs(evidence_files)
+    protocol_id, protocol_version, protocol_sha256, reviewer_id, reviewer_role = _review_protocol(
+        *review_protocol
+    )
+    # The review is delegated to the reviewer the protocol names; nobody else may sign it.
+    for review in review_inputs:
+        if (review["reviewer_id"], review["reviewer_role"]) != (reviewer_id, reviewer_role):
+            raise CdcManualImportError("OWNER_REVIEW_REVIEWER_MISMATCH", review["gate_id"])
+
+    layout = extract_cdc_manual_layout(raw["manual_payload"])
+    parsed = parse_cdc_specimen_layout(layout)
+    discovery = raw["discovery"]
+    if parsed.summary["manual_version"] != discovery["manual_version_raw"]:
+        raise CdcManualImportError("MANUAL_VERSION_MISMATCH", parsed.summary["manual_version"])
+    raw_digest = sha256_bytes(raw["manual_payload"])
+    golden_results = evaluate_cdc_manual_golden_cases(
+        layout, approved_golden_cases, raw_artifact_sha256=raw_digest
+    )
+    failed = [r["golden_case"]["case_id"] for r in golden_results if r["failure_codes"]]
+    if failed:
+        raise CdcManualImportError("GOLDEN_CASE_FAILED", ", ".join(failed))
+    if len(golden_results) < _MINIMUM_OFFICIAL_GOLDEN_CASES:
+        raise CdcManualImportError("GOLDEN_CASES_INSUFFICIENT")
+    for result in golden_results:
+        case = result["golden_case"]
+        if (
+            case["review_status"] != "approved"
+            or case["official_source"] is not True
+            or case["evidence_data_root_relative_path"] != raw["artifact_relative"]
+            or case["reviewer_id"] != reviewer_id
+        ):
+            raise CdcManualImportError("GOLDEN_CASE_NOT_APPROVED", case["case_id"])
+    return _publish_build(
+        data_root,
+        manual_payload=raw["manual_payload"],
+        revision_payload=raw["revision_payload"],
+        parsed=parsed,
+        layout_sha256=cdc_layout_sha256(layout),
+        raw_revision_id=raw_revision_id,
+        artifact_relative=raw["artifact_relative"],
+        revision_relative=raw["revision_relative"],
+        fetch_relative=raw["fetch_relative"],
+        discovery=discovery,
+        fetched_at=raw["fetched_at"],
+        application_build_hash=application_build_hash,
+        golden_results=golden_results,
+        review_inputs=review_inputs,
+        protocol=(protocol_id, protocol_version, protocol_sha256),
+        publisher_actor_id=publisher_actor_id,
+        evidence_inputs=evidence_inputs,
+        official=True,
+        pre_publish_checks=[
+            lambda db_path: verify_cdc_manual_rows_against_tags(layout, db_path),
+            *([pre_publish_check] if pre_publish_check is not None else []),
+        ],
     )

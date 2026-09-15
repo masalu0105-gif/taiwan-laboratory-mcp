@@ -1156,6 +1156,22 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 發現：第一次試建用了較長的 scratchpad 資料夾名稱，資料庫完整路徑超過 Windows 260 字元，SQLite 回 `unable to open database file`；改短資料夾名後成功。名冊的建置資料夾名稱一樣長（都是來源名＋`-build-`＋64 字元），正式 data root 若放在很深的資料夾也會遇到。
 - 測試：先寫 `tests/test_cdc_manual_official.py`（7 個），跑出 6 failed（沒有正式資料的那一個原本就成立）；實作後全過。
 - 驗證：全部測試 541 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 含兩個新模組，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 541 passed，安裝版的改動模組與 repo 相同，contract 與 repo 位元組相同（144,136 bytes，公開契約不用改）。
+- 提交：commit `44e8400`，CI 通過（run 34996584330）。
+
+### 疾管署採檢手冊第四步（下半）：AI 代審的正式建置與 Word 標記比對（2026-09-16，OD-04）
+
+- 依據：owner 2026-09-15「Ai全程代審 不用特別備注未經人工審核」涵蓋採檢手冊（PRD OD-04）。SDD §10.3 原本寫 `CDC-R1-CONTENT` 由醫檢專業人員審；照 owner 決定改由 AI 代審，審核規則檔寫明這一點，reviewer 標 `ai-reviewer:claude-opus-5`，不寫成人或 owner。
+- 審核規則檔 `review_protocols/cdc-manual-r1-ai-review/1.json`：四關（`CDC-R1-SOURCE` 來源、`CDC-R1-LAYOUT` 版面、`CDC-R1-CONTENT` 內容、`PUB-R1-OWNER` 上線）各自的檢查清單；附 owner 原話與時間（含「A 開始做疾管署」「我選 B」）；驗收題至少 10 題，要涵蓋同疾病多檢體、合併格、跨頁接續、7 欄沒有保存欄、注意事項有編號、顯示文字有接行、2.7 節的列。
+- `build_official_cdc_manual_snapshot`（寫檔前依序檢查，任一項不過就不寫 current）：
+  1. 兩份 PDF 和 fetch.json 的大小、SHA-256 相同，重算 raw revision id 相同；兩份都是 `%PDF-` 開頭、`%%EOF` 結尾。
+  2. 必須是安裝版；四關審核都由 protocol 指定的 AI reviewer 簽、沒有 critical／major。
+  3. 用 PDFium 讀手冊（不讀修訂對照表），頁首版次必須等於附件版本，否則 `MANUAL_VERSION_MISMATCH`。
+  4. 驗收題：用手冊讀出的列比對定位、row hash、原文或顯示文字；驗收題的疾病名稱必須找得到那一列（查詢工具實際會用的比對方式）。
+  5. 資料庫寫好、切換 current 之前，跑 Word 標記比對（下一點）；比對報告存進審核證據。
+- Word 標記比對（`verify_cdc_manual_rows_against_tags`，ADR 0003 決定 5）：另一種讀法。拆表程式靠橫線切列、靠字的位置分格；比對程式改用 Word 表格標記，一個 TR 就是一列，一個 TD 的文字就是一格，合併格照 Word「延續格在前、本列的格在後」的順序處理，跨頁的延續格接回上一頁。只借用直線決定 TD 在第幾欄（原本用「最接近表頭中心」，在真實手冊第 22 頁一個空白格的標記框靠近欄線左側，被判到隔壁欄，改用直線）。資料庫每一列 8 格去掉空白後要和標記文字完全相同。
+- 真實手冊（1150826，scratchpad `m2` 試建，未進正式 data root）：370 列、2,960 格全部相同，沒有不符。
+- 測試：`tests/test_cdc_manual_official.py` 增為 17 個；先寫正式建置測試跑出 9 errors（還沒有正式建置函式），再補 Word 標記比對測試跑出 2 failed；實作後全過。`tests/test_package_contents.py` 必含檔加上新的審核規則檔。
+- 驗證：全部測試 551 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 含新的審核規則檔，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 551 passed，contract 與 repo 位元組相同（144,136 bytes）。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 

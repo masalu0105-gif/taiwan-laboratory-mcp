@@ -18,6 +18,7 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/2.json",
     "taiwan_lab_mcp/review_protocols/cdc-labs-r1-ai-review/1.json",
     "taiwan_lab_mcp/review_protocols/cdc-labs-r1-auto-review/1.json",
+    "taiwan_lab_mcp/review_protocols/cdc-manual-r1-ai-review/1.json",
     "taiwan_lab_mcp/review_protocols/nhi-r1-auto-review/1.json",
     "taiwan_lab_mcp/review_protocols/nhi-r1-auto-review/2.json",
     "taiwan_lab_mcp/review_protocols/tfda-r1-ai-review/1.json",

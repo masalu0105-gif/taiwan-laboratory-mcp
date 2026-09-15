@@ -5,14 +5,24 @@ Owner 2026-09-15 delegated every CDC review to AI (OD-04) and chose B for line b
 the row hash for source checks. Fixtures are synthetic page layouts; no official PDF is read.
 """
 
+import hashlib
 import importlib.util
 import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+import taiwan_lab_mcp.importers.nhi as nhi_importer
 from taiwan_lab_mcp.adapters.cdc import CDCAdapter
 from taiwan_lab_mcp.config import DataContext
+
+REVIEWER = "ai-reviewer:claude-opus-5"
+ROLE = "ai_reviewer_delegated_by_owner"
+REVIEWED_AT = "2026-09-16T09:00:00+08:00"
+MANUAL_PDF = b"%PDF-1.7\n% synthetic manual for the official build test\n%%EOF\n"
+REVISION_PDF = b"%PDF-1.7\n% synthetic revision table for the official build test\n%%EOF\n"
 
 
 def _pages():
@@ -215,3 +225,303 @@ def test_tampered_manual_database_is_not_served(tmp_path):
         "serving_integrity_failure"
     )
     assert _adapter(tmp_path).search_disease("傷寒").result_status == "data_unavailable"
+
+
+@pytest.fixture
+def distribution(monkeypatch):
+    monkeypatch.setattr(
+        nhi_importer, "_application_build_identity", lambda: ("distribution", "d" * 64)
+    )
+
+
+@pytest.fixture
+def pdf_reader(monkeypatch):
+    # Word table tags cannot be produced in a test PDF, so the reader returns a synthetic layout.
+    import taiwan_lab_mcp.importers.cdc_manual as manual
+
+    layout = _layout()
+
+    def read(payload):
+        assert payload == MANUAL_PDF, "rows come from the manual, never the revision table"
+        return layout
+
+    monkeypatch.setattr(manual, "extract_cdc_manual_layout", read)
+    return layout
+
+
+def _fetched(data_root, *, version="1150826", manual=MANUAL_PDF):
+    from taiwan_lab_mcp.cdc_manual_source import (
+        CDC_MANUAL_LANDING_URL,
+        _write_raw_revision,
+        cdc_manual_raw_revision_id,
+    )
+    from taiwan_lab_mcp.cdc_source import CDC_LICENSE_NAME, CDC_LICENSE_URL, CDC_PROVIDER
+    from taiwan_lab_mcp.fetch import FetchedArtifact
+
+    documents = [
+        (
+            "manual",
+            f"衛生福利部疾病管制署傳染病檢體採檢手冊-{version}版.pdf",
+            "https://www.cdc.gov.tw/Uploads/manual.pdf",
+            manual,
+        ),
+        (
+            "revision_table",
+            f"傳染病檢體採檢手冊修訂對照表-{version}.pdf",
+            "https://www.cdc.gov.tw/Uploads/revision.pdf",
+            REVISION_PDF,
+        ),
+    ]
+    discovery = {
+        "provider": CDC_PROVIDER,
+        "dataset_name": "傳染病檢體採檢手冊",
+        "landing_url": CDC_MANUAL_LANDING_URL,
+        "manual_version_raw": version,
+        "documents": [
+            {"role": role, "attachment_label": label, "pdf_url": url}
+            for role, label, url, _ in documents
+        ],
+        "license_name": CDC_LICENSE_NAME,
+        "license_url": CDC_LICENSE_URL,
+    }
+    artifacts = {
+        role: FetchedArtifact(
+            requested_url=url,
+            final_url=url,
+            status_code=200,
+            payload=payload,
+            sha256=hashlib.sha256(payload).hexdigest(),
+            fetched_at="2026-09-16T01:00:00Z",
+            headers={"Content-Type": "application/pdf"},
+            redirect_trace=(),
+        )
+        for role, _, url, payload in documents
+    }
+    raw_revision_id = cdc_manual_raw_revision_id(discovery=discovery, artifacts=artifacts)
+    paths, _ = _write_raw_revision(data_root, raw_revision_id, artifacts, discovery)
+    return raw_revision_id, paths["manual"]
+
+
+def _cases(layout, artifact_relative, count=10):
+    from taiwan_lab_mcp.cdc_manual_source import CDC_MANUAL_LANDING_URL
+    from taiwan_lab_mcp.importers.cdc_manual import (
+        active_cdc_manual_transform,
+        cdc_layout_sha256,
+    )
+    from taiwan_lab_mcp.importers.cdc_manual_layout import parse_cdc_specimen_layout
+
+    rows = parse_cdc_specimen_layout(layout).rows
+    transform = active_cdc_manual_transform(cdc_layout_sha256(layout))
+    cases = []
+    for number in range(count):
+        row = rows[number % len(rows)]
+        cases.append(
+            {
+                "golden_case_schema_version": 1,
+                "case_id": f"CDC-G-{number + 1:03d}",
+                "source_id": "cdc_specimen_manual",
+                "acceptance_id": "CDC-01",
+                "source_title": "傳染病檢體採檢手冊",
+                "official_landing_url": CDC_MANUAL_LANDING_URL,
+                "official_version_or_modified_at": "1150826",
+                "official_source": True,
+                "artifact_id": "cdc-manual-pdf",
+                "raw_artifact_sha256": hashlib.sha256(MANUAL_PDF).hexdigest(),
+                "evidence_data_root_relative_path": artifact_relative,
+                "fixture_file": None,
+                "fixture_sha256": None,
+                "transform": transform,
+                "input": {"disease": row.display_fields()["disease"].split("\n")[-1]},
+                "source_locator": row.locator,
+                "source_row_sha256": row.source_row_sha256,
+                "expected_status": "ok",
+                "expected_fields": {
+                    "specimen": row.fields()["specimen"],
+                    "purpose_display": row.display_fields()["purpose"],
+                },
+                "expected_warnings": [],
+                "reviewer_id": REVIEWER,
+                "reviewer_role": ROLE,
+                "identity_assurance": "local_asserted",
+                "reviewed_at": REVIEWED_AT,
+                "review_status": "approved",
+            }
+        )
+    return cases
+
+
+def _reviews(**changes):
+    from taiwan_lab_mcp.importers.cdc_manual import CDC_MANUAL_SERVING_GATES
+
+    return [
+        {
+            "gate_id": gate_id,
+            "reviewer_id": REVIEWER,
+            "reviewer_role": ROLE,
+            "reviewed_at": REVIEWED_AT,
+            "finding_counts": {"critical": 0, "major": 0, "minor": 0},
+            "comments": "Synthetic delegated review for the unit test.",
+            **changes,
+        }
+        for gate_id in CDC_MANUAL_SERVING_GATES
+    ]
+
+
+def _official(data_root, layout, *, version="1150826", **overrides):
+    from taiwan_lab_mcp.importers.cdc_manual import build_official_cdc_manual_snapshot
+
+    raw_revision_id, artifact_relative = _fetched(data_root, version=version)
+    arguments = {
+        "raw_revision_id": raw_revision_id,
+        "approved_golden_cases": _cases(layout, artifact_relative),
+        "owner_reviews": _reviews(),
+        "publisher_actor_id": "unit-test-publisher",
+    }
+    arguments.update({key: value(layout, artifact_relative) for key, value in overrides.items()})
+    return build_official_cdc_manual_snapshot(data_root, **arguments)
+
+
+def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution, pdf_reader):
+    built = _official(tmp_path, pdf_reader)
+
+    assert (built["rows"], built["generation"]) == (4, 1)
+    build_dir = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"]
+    review = json.loads((build_dir / "audit" / "reviews" / "CDC-R1-CONTENT.json").read_bytes())
+    assert (review["reviewer_id"], review["reviewer_role"]) == (REVIEWER, ROLE)
+    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "1")
+    # The revision table stays in the same raw revision and is listed as review evidence.
+    references = {reference["artifact_id"]: reference for reference in review["evidence_refs"]}
+    assert {"cdc-manual-pdf", "cdc-manual-revision-pdf", "cdc-manual-fetch-record"} <= set(
+        references
+    )
+    # Before the pointer switched, every stored row was compared with the Word table tags.
+    tag_check = json.loads((tmp_path / references["cdc-manual-tag-check"]["path"]).read_bytes())
+    assert tag_check == {
+        "check": "cdc-manual-word-tag-text-v1",
+        "rows_compared": 4,
+        "cells_compared": 32,
+        "mismatches": [],
+    }
+    certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
+    assert certificate["official_qualification_status"] == "approved"
+    assert len(certificate["approved_distinct_case_ids"]) == 10
+    result = _adapter(tmp_path).search_disease("登革熱")
+    assert (result.result_status, result.provenance.curated_build_id) == (
+        "ok",
+        built["snapshot_id"],
+    )
+    assert result.provenance.resource_url == "https://www.cdc.gov.tw/Uploads/manual.pdf"
+
+
+def _nine_cases(layout, artifact_relative):
+    return _cases(layout, artifact_relative, count=9)
+
+
+def _wrong_expected_value(layout, artifact_relative):
+    cases = _cases(layout, artifact_relative)
+    cases[0]["expected_fields"]["purpose_display"] = "病原體檢測；血清\n型別鑑定"
+    return cases
+
+
+def _disease_the_row_does_not_name(layout, artifact_relative):
+    # Searching this disease would not return the row, so the case cannot pass.
+    cases = _cases(layout, artifact_relative)
+    cases[0]["input"] = {"disease": "登革熱"}
+    return cases
+
+
+def _other_reviewer(layout, artifact_relative):
+    return _reviews(reviewer_id="someone-else")
+
+
+def _major_finding(layout, artifact_relative):
+    return _reviews(finding_counts={"critical": 0, "major": 1, "minor": 0})
+
+
+@pytest.mark.parametrize(
+    ("argument", "factory", "expected_code"),
+    [
+        ("approved_golden_cases", _nine_cases, "GOLDEN_CASES_INSUFFICIENT"),
+        ("approved_golden_cases", _wrong_expected_value, "GOLDEN_CASE_FAILED"),
+        ("approved_golden_cases", _disease_the_row_does_not_name, "GOLDEN_CASE_FAILED"),
+        ("owner_reviews", _other_reviewer, "OWNER_REVIEW_REVIEWER_MISMATCH"),
+        ("owner_reviews", _major_finding, "OWNER_REVIEW_REJECTED"),
+    ],
+)
+def test_official_build_rejects_insufficient_evidence_before_writing(
+    tmp_path, distribution, pdf_reader, argument, factory, expected_code
+):
+    from taiwan_lab_mcp.cdc_manual_source import CdcManualImportError
+
+    with pytest.raises(CdcManualImportError) as error:
+        _official(tmp_path, pdf_reader, **{argument: factory})
+    assert error.value.code == expected_code
+    assert not (tmp_path / "curated").exists()
+    assert not (tmp_path / "manifests").exists()
+
+
+def test_official_build_rejects_rows_that_differ_from_the_word_table_tags(
+    tmp_path, distribution, pdf_reader
+):
+    from taiwan_lab_mcp.cdc_manual_source import CdcManualImportError
+
+    # Move 「液」 of 「尿液」 down into the dengue row below: the ruling lines now read 「尿」 and
+    # 「液血清」, while the Word tags still keep 「液」 in the urine cell.
+    page = next(page for page in pdf_reader["pages"] if page["page_number"] == 17)
+    char = next(
+        char
+        for char in page["chars"]
+        if char["text"] == "液" and char["x0"] < 130.3 and char["y0"] < 200
+    )
+    char["y0"] += 62
+    char["y1"] += 62
+
+    with pytest.raises(CdcManualImportError) as error:
+        _official(tmp_path, pdf_reader)
+    assert error.value.code == "LAYOUT_TAG_TEXT_MISMATCH"
+    assert not (tmp_path / "manifests" / "current" / "cdc_specimen_manual.json").exists()
+
+
+def test_official_build_rejects_a_manual_whose_pages_print_another_edition(
+    tmp_path, distribution, pdf_reader
+):
+    from taiwan_lab_mcp.cdc_manual_source import CdcManualImportError
+
+    # The attachment says 1150827 but every table page header prints 1150826.
+    with pytest.raises(CdcManualImportError) as error:
+        _official(tmp_path, pdf_reader, version="1150827")
+    assert error.value.code == "MANUAL_VERSION_MISMATCH"
+    assert not (tmp_path / "curated").exists()
+
+
+def test_official_build_rejects_raw_pdfs_that_no_longer_match_the_fetch_record(
+    tmp_path, distribution, pdf_reader
+):
+    from taiwan_lab_mcp.cdc_manual_source import CdcManualImportError
+    from taiwan_lab_mcp.importers.cdc_manual import build_official_cdc_manual_snapshot
+
+    raw_revision_id, artifact_relative = _fetched(tmp_path)
+    (tmp_path / artifact_relative).write_bytes(MANUAL_PDF.replace(b"synthetic", b"edited!!!"))
+
+    with pytest.raises(CdcManualImportError) as error:
+        build_official_cdc_manual_snapshot(
+            tmp_path,
+            raw_revision_id=raw_revision_id,
+            approved_golden_cases=_cases(pdf_reader, artifact_relative),
+            owner_reviews=_reviews(),
+            publisher_actor_id="unit-test-publisher",
+        )
+    assert error.value.code == "RAW_REVISION_INTEGRITY"
+    assert not (tmp_path / "curated").exists()
+
+
+def test_official_build_requires_an_installed_distribution(tmp_path, monkeypatch, pdf_reader):
+    from taiwan_lab_mcp.cdc_manual_source import CdcManualImportError
+
+    monkeypatch.setattr(
+        nhi_importer, "_application_build_identity", lambda: ("development", "d" * 64)
+    )
+    with pytest.raises(CdcManualImportError) as error:
+        _official(tmp_path, pdf_reader)
+    assert error.value.code == "APPLICATION_BUILD_IDENTITY_MISSING"
+    assert not (tmp_path / "curated").exists()
