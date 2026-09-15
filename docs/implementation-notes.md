@@ -689,6 +689,38 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
     - `search_payment_items("檢")`：共 1,270 筆，回 5 筆，8,790 字（粗估 2,544 tokens；原本 20 筆 26,264 字）；`offset=1265` 回最後 5 筆、`truncated=false`；`search_lab_code("檢")` 同樣 5 筆。
   - 第一次查詢 1,407 ms（含完整性檢查），之後 110–193 ms。
 
+### 食藥署每週新版自動更新（2026-09-15，OD-08／D-017）
+
+- owner 在 Claude Code 對話中回覆（transcript timestamp `2026-09-15T06:06:13.559Z`，uuid `297f1356-831a-4d5d-90dd-769c6747955e`）：「A變成成自動化 我不想花太多心力維護」。A 是上一則回報的選項「每次新版比對完直接換上，事後寄信」。
+- 規格同步：PRD §9 新增 OD-08、OD-07「官方新版仍需再審」加刪除線；SDD 新增 `D-017`、`D-016` 對應句加刪除線、OD 對照表 `OD-08`；TDD 加 `tests/test_tfda_autoupdate.py`；README。
+- 程式：
+  - 審核規則檔 `src/taiwan_lab_mcp/review_protocols/tfda-r1-auto-review/1.json`：`status=owner_delegated`，記錄 owner 原話與時間；reviewer `automated-check:tfda-auto-update`、role `automated_checker_delegated_by_owner`，寫明沒有人或 AI 逐版審。
+  - `build_official_tfda_snapshot` 新增 `review_protocol`（只接受 `tfda-r1-ai-review/1` 與 `tfda-r1-auto-review/1`）與 `pre_publish_check`：資料庫建好後、寫任何審核紀錄與切換版本前執行，回傳的報告成為審核證據。
+  - 新模組 `src/taiwan_lab_mcp/tfda_autoupdate.py`，`run_tfda_auto_update` 流程：
+    1. 跑原本的每日檢查；沒有新版就結束。
+    2. 新版和上線版比，下列任一項成立就擋下（`blocked`），不建置：資料列數或許可證字號數變動超過 10%；中文品名、英文品名、申請商、製造商、主類別一、次類別一、級數、製造國別的空白比例上升超過 2 個百分點；出現上線版沒有、也不是空白／已註銷／已廢止的註銷狀態。
+    3. 用自己的 ZIP／CSV 解析（不經過 importer）挑驗收題：先挑固定涵蓋清單的列，再補平均分布的列到至少 10 題，逐欄寫預期值。
+    4. 建置；切換前以獨立解析逐列比對資料庫（列號、row hash、34 欄原文、分類代碼、主類別字母、IVD 標籤），不符就不切換（`auto_publish_failed`）。
+    5. 全部通過才發布（`published`），審核證據含 `tfda-auto-roundtrip.json`。
+  - 同一個被擋下或失敗的新版每天都會再被發現，`already_reported=true` 時排程不重寄信。
+  - CLI：`taiwan-lab-data check tfda_devices --auto-publish`，只限 `tfda_devices`；`blocked` exit 5、`auto_publish_failed` exit 6。
+  - 每日排程 `Invoke-NhiDailyCheck.ps1`（SHA-256 `f78d148f…`）改帶 `--auto-publish`：`published` 寄「已自動更新」信（附差異摘要，附表 A/B/C 出現未審核代碼時列出）；`blocked`、`auto_publish_failed` 寄信並把 STATUS 第一行改成「異常」，已通知過的只寫 STATUS 不寄信。
+- 規格解讀：
+  1. SDD §15 寫「NHI 或 TFDA row／distinct key count 相對 current 超過 ±10%：啟動期 block review」「TFDA 關鍵欄 null rate 增加超過 2 個百分點、未知 status／code 出現：block review」。依 owner 決定，TFDA 改成「超過才擋、沒超過自動發布」；關鍵欄清單由我訂（見上）。
+  2. 「未知 code 出現」沒有列入擋下條件：附表 A/B/C 出現未審核代碼時，這些列本來就標 `unknown`，不會被說成體外診斷；改在通知信列出代碼。依 owner 2026-09-14「寧可錯殺一百」原則，之後可請 AI 補判。
+  3. 健保新版不在這次決定範圍，仍照原流程等 owner 審核。
+- 測試：先寫 `tests/test_tfda_autoupdate.py` 8 個，跑出 8 failed，實作後全過。
+- 驗證：
+  - in-repo `pytest` 379 passed（`TAIWAN_LAB_ARTIFACT_DIR` 指向新 build）；`ruff check`、`ruff format --check` 通過。
+  - wheel 310,294 bytes，SHA-256 `64e48801d54dd11323ef4af3a8f5424a38298d67cbcd02300e431943eba1d9e9`；sdist 565,629 bytes；wheel 含 `tfda_autoupdate.py` 與新規則檔。
+  - repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑：377 passed、2 skipped；安裝後 contract 與 repo 位元組相同。
+  - 真實資料演練（唯讀，不換版）：對目前上線的資料庫跑獨立逐列比對：104,619 列 0 不符，2.5 秒；從原始檔挑出 14 題驗收題，1.5 秒，程式比對全部通過；附表 A/B/C 未審核代碼 0 個；上線版和自己比的擋下條件為空。
+  - 新 wheel 裝進 uv tool 環境，每日排程以 `-EmailDryRun` 試跑：exit 0，STATUS「OK：健保支付標準表沒有變動」＋「食藥署醫材許可證：沒有變動（104,619 筆）」，TFDA 回 `unchanged`、`already_reported=false`。
+  - 真的有新版時會走「擋下」或「發布」哪條路，要等官方下一次更新才看得到；兩條路都只有合成資料測試。
+- 風險：
+  - 硬碟：每換一版多一份約 160 MB 資料庫和 16 MB 原始檔，舊版不會自動刪（留著可以退回）；一年約 9 GB。C 槽目前剩 68 GB（已用 93%）。
+  - 自動發布只擋「變動量」與「解析正確」，擋不住官方內容本身寫錯。
+
 ### 食藥署「哪些醫材算體外診斷」AI 審核（2026-09-14）
 
 - owner 要求：「食藥署哪些醫療器材算體外診斷試劑，你幫我摘下來，然後幫我做一個判別」；`TFDA-R1-IVD` reviewer 為 AI（上方 Owner 決定 2A）。

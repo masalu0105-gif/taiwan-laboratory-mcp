@@ -17,7 +17,7 @@ import tempfile
 import zipfile
 import zlib
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from importlib.resources import files
@@ -445,6 +445,15 @@ TFDA_SERVING_GATES = ("TFDA-R1-SOURCE", "TFDA-R1-SCHEMA", "PUB-R1-OWNER")
 # Owner 2026-09-15 delegated the TFDA launch review to AI ("你直接幫我審核").
 TFDA_REVIEW_PROTOCOL_ID = "tfda-r1-ai-review"
 TFDA_REVIEW_PROTOCOL_VERSION = "1"
+# Owner 2026-09-15 chose automatic weekly updates ("A變成成自動化 我不想花太多心力維護").
+TFDA_AUTO_REVIEW_PROTOCOL_ID = "tfda-r1-auto-review"
+TFDA_AUTO_REVIEW_PROTOCOL_VERSION = "1"
+_DELEGATED_REVIEW_PROTOCOLS = frozenset(
+    {
+        (TFDA_REVIEW_PROTOCOL_ID, TFDA_REVIEW_PROTOCOL_VERSION),
+        (TFDA_AUTO_REVIEW_PROTOCOL_ID, TFDA_AUTO_REVIEW_PROTOCOL_VERSION),
+    }
+)
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 _EVIDENCE_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
@@ -892,6 +901,7 @@ def _publish_tfda_build(
     publisher_actor_id: str,
     evidence_inputs: Sequence[tuple[str, str, bytes]],
     official: bool,
+    pre_publish_check: Callable[[Path], tuple[str, str, bytes]] | None = None,
 ) -> dict[str, Any]:
     """Write the curated build, its audit bundle and publish it with generation CAS."""
 
@@ -918,6 +928,13 @@ def _publish_tfda_build(
         data_root / PurePosixPath(db_relative), csv_payload, decisions
     )
     db_digest = _sha256_file(data_root / PurePosixPath(db_relative))
+    if pre_publish_check is not None:
+        # Runs on the finished database before any audit record or pointer refers to it;
+        # its report becomes review evidence.
+        evidence_inputs = [
+            *evidence_inputs,
+            pre_publish_check(data_root / PurePosixPath(db_relative)),
+        ]
     audit_prefix = f"{build_prefix}/audit"
     rows = summary["rows"]
     row_counts = {"input_rows": rows, "curated_rows": rows, "quarantined_rows": 0}
@@ -1338,17 +1355,15 @@ def build_tfda_snapshot(
     )
 
 
-def _review_protocol() -> tuple[str, str, str, str, str]:
+def _review_protocol(protocol_id: str, protocol_version: str) -> tuple[str, str, str, str, str]:
     """Return protocol id, version, SHA-256 and the reviewer id and role it names."""
 
+    if (protocol_id, protocol_version) not in _DELEGATED_REVIEW_PROTOCOLS:
+        raise TFDAImportError("REVIEW_PROTOCOL_INVALID")
     try:
         payload = (
             files("taiwan_lab_mcp")
-            .joinpath(
-                "review_protocols",
-                TFDA_REVIEW_PROTOCOL_ID,
-                f"{TFDA_REVIEW_PROTOCOL_VERSION}.json",
-            )
+            .joinpath("review_protocols", protocol_id, f"{protocol_version}.json")
             .read_bytes()
         )
         document = json.loads(payload.decode("utf-8"))
@@ -1356,8 +1371,8 @@ def _review_protocol() -> tuple[str, str, str, str, str]:
         raise TFDAImportError("REVIEW_PROTOCOL_INVALID") from exc
     if (
         not isinstance(document, dict)
-        or document.get("protocol_id") != TFDA_REVIEW_PROTOCOL_ID
-        or document.get("protocol_version") != TFDA_REVIEW_PROTOCOL_VERSION
+        or document.get("protocol_id") != protocol_id
+        or document.get("protocol_version") != protocol_version
         or document.get("status") != "owner_delegated"
         or sorted(document.get("gates", {})) != sorted(TFDA_SERVING_GATES)
         or not isinstance(document.get("reviewer_id"), str)
@@ -1367,8 +1382,8 @@ def _review_protocol() -> tuple[str, str, str, str, str]:
     ):
         raise TFDAImportError("REVIEW_PROTOCOL_INVALID")
     return (
-        TFDA_REVIEW_PROTOCOL_ID,
-        TFDA_REVIEW_PROTOCOL_VERSION,
+        protocol_id,
+        protocol_version,
         sha256_bytes(payload),
         document["reviewer_id"],
         document["reviewer_role"],
@@ -1464,6 +1479,8 @@ def build_official_tfda_snapshot(
     owner_reviews: Sequence[Mapping[str, Any]],
     publisher_actor_id: str,
     evidence_files: Sequence[Mapping[str, Any]] = (),
+    review_protocol: tuple[str, str] = (TFDA_REVIEW_PROTOCOL_ID, TFDA_REVIEW_PROTOCOL_VERSION),
+    pre_publish_check: Callable[[Path], tuple[str, str, bytes]] | None = None,
 ) -> dict[str, Any]:
     """Build and publish an owner-reviewed TFDA snapshot from a fetched raw revision.
 
@@ -1501,7 +1518,9 @@ def build_official_tfda_snapshot(
             raise TFDAImportError("EVIDENCE_FILE_INVALID", artifact_id) from exc
     if len({name for _, name, _ in evidence_inputs}) != len(evidence_inputs):
         raise TFDAImportError("EVIDENCE_FILE_INVALID", "duplicate evidence file name")
-    protocol_id, protocol_version, protocol_sha256, reviewer_id, reviewer_role = _review_protocol()
+    protocol_id, protocol_version, protocol_sha256, reviewer_id, reviewer_role = _review_protocol(
+        *review_protocol
+    )
     # The review is delegated to the reviewer the protocol names; nobody else may sign it.
     for review in review_inputs:
         if (review["reviewer_id"], review["reviewer_role"]) != (reviewer_id, reviewer_role):
@@ -1552,4 +1571,5 @@ def build_official_tfda_snapshot(
         publisher_actor_id=publisher_actor_id,
         evidence_inputs=evidence_inputs,
         official=True,
+        pre_publish_check=pre_publish_check,
     )

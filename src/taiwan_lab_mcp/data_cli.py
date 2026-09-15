@@ -36,6 +36,11 @@ def main(argv: list[str] | None = None) -> int:
     check_parser.add_argument("--publisher-oid", required=True)
     check_parser.add_argument("--actor", required=True)
     check_parser.add_argument("--data-dir", required=True, type=Path)
+    check_parser.add_argument(
+        "--auto-publish",
+        action="store_true",
+        help="tfda_devices only: publish a changed version when every automated check passes.",
+    )
     check_parser.add_argument("--json", action="store_true")
     rollback_parser = subparsers.add_parser("rollback")
     rollback_parser.add_argument("source_id", choices=["nhi_fee"])
@@ -157,8 +162,18 @@ def main(argv: list[str] | None = None) -> int:
         from .publish import PublishError
         from .sync import SyncError, run_nhi_upstream_check
 
+        if args.auto_publish and args.source_id != "tfda_devices":
+            parser.error("check --auto-publish is only available for tfda_devices")
         try:
-            if args.source_id == "tfda_devices":
+            if args.auto_publish:
+                from . import tfda_autoupdate
+
+                summary = tfda_autoupdate.run_tfda_auto_update(
+                    args.data_dir,
+                    expected_publisher_oid=args.publisher_oid,
+                    actor=args.actor,
+                )
+            elif args.source_id == "tfda_devices":
                 from . import tfda_source
 
                 summary = tfda_source.run_tfda_upstream_check(
@@ -182,6 +197,10 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 6
         print(json.dumps(summary, ensure_ascii=False, separators=(",", ":")))
+        if summary.get("result") == "blocked":
+            return 5
+        if summary.get("result") == "auto_publish_failed":
+            return 6
         if summary.get("failed_stage") in {"discover", "fetch"}:
             return 3
         if summary.get("failed_stage"):

@@ -907,7 +907,8 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-013` local integrity threat model | Accepted | hash不宣稱抵抗可寫data root的惡意writer；runtime read-only principal，若需authenticity另做signed manifest ADR |
 | `D-014` NHI `29101231` sentinel對外語意 | OWNER GATE | 目前只保留raw/parsed date與`possible_open_end_sentinel=true` inference，禁止顯示「永久有效」；需由OD-02 owner核准官方語意後另建rule/build |
 | `D-015` TFDA全收錄、標籤與查詢排序 | Accepted（owner 2026-09-15） | 全部104,619列可查；標籤只取官方欄位與approved registry；預設依命中程度排序、不偏類別；語意由host AI判斷後以`prefer_*`（只調順序）或篩選參數表達，不在server端猜意圖或加隱藏權重；缺分類代碼列維持`unknown`；不輸出分數、等效或採購排序 |
-| `D-016` TFDA上線審核與每日檢查 | Accepted（owner 2026-09-15：「1.a 2.a 3.z你直接幫我審核」） | 三關與正式驗收題由AI代審，protocol `tfda-r1-ai-review` v1；正式build只接受protocol指定的reviewer id與role；範圍只限本機MCP服務；附表A/B/C以外代碼維持`unknown`；每日`check tfda_devices`同檔記成功檢查、新檔標`newer_candidate_pending_review`並寫差異摘要、失敗標`upstream_verification_failed`；新版仍需再審才發布 |
+| `D-016` TFDA上線審核與每日檢查 | Accepted（owner 2026-09-15：「1.a 2.a 3.z你直接幫我審核」） | 三關與正式驗收題由AI代審，protocol `tfda-r1-ai-review` v1；正式build只接受protocol指定的reviewer id與role；範圍只限本機MCP服務；附表A/B/C以外代碼維持`unknown`；每日`check tfda_devices`同檔記成功檢查、新檔標`newer_candidate_pending_review`並寫差異摘要、失敗標`upstream_verification_failed`；~~新版仍需再審才發布~~（見`D-017`） |
+| `D-017` TFDA每週自動更新 | Accepted（owner 2026-09-15：「A變成成自動化 我不想花太多心力維護」） | 每日`check tfda_devices --auto-publish`（`tfda_autoupdate.run_tfda_auto_update`）：同檔記成功檢查；新檔先比上線版：列數與字號數變動≤10%、主要欄位空白率上升≤2個百分點、沒有新的註銷狀態值；再以獨立解析挑≥10題驗收題；建置後、切換前以獨立解析逐列比對資料庫；全過才以protocol `tfda-r1-auto-review`發布，否則保留現行版、標`newer_candidate_pending_review`；CLI結果`published`／`blocked`（exit 5）／`auto_publish_failed`（exit 6），同一候選版`already_reported=true`時排程不重寄信；只接受正式安裝版；SDD §15「±10%啟動期block review」對TFDA改為超過才擋、未超過自動發布 |
 
 PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列出的工程decision不得冒充owner決議：
 
@@ -920,6 +921,7 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 | `OD-05` | `D-008`、`D-012` | NHI不hard-stop、支援Windows與macOS（2026-09-14）；TFDA／CDC stale門檻仍依各來源另定 |
 | `OD-06` | `D-015` | TFDA全收錄＋標籤＋host AI指定偏好／篩選（2026-09-15）；~~TFDA curated build、adapter與contract參數尚未實作~~ 已實作（2026-09-15） |
 | `OD-07` | `D-016` | TFDA上線審核由AI代審、D–P代碼維持unknown、摘要不再減（2026-09-15） |
+| `OD-08` | `D-017` | TFDA每週新版自動檢查、自動發布（2026-09-15） |
 
 `REL-G5` pilot 已由 owner 於 2026-09-14 取消，改為公開上線並以 GitHub Issues 收集使用者回饋（PRD §8.2、§8.4）；本文件中以 pilot 為前提的 `PilotResultV1` 等設計保留為歷史，不再是發布條件。
 
