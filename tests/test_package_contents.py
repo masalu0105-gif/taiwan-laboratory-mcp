@@ -13,6 +13,7 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/publish.py",
     "taiwan_lab_mcp/sync.py",
     "taiwan_lab_mcp/importers/nhi.py",
+    "taiwan_lab_mcp/qualifier_specs/pdfium-layout-v1.json",
     "taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/1.json",
     "taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/2.json",
     "taiwan_lab_mcp/review_protocols/cdc-labs-r1-ai-review/1.json",

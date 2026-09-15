@@ -68,8 +68,8 @@
     },
     {
       "requirement_id": "SDD-QUAL-01",
-      "node_id": "tests/test_cdc_pdf_importer.py::test_sdd_qual_01_liteparse_identity_and_resource_resolution",
-      "implementation_status": "planned"
+      "node_id": "tests/test_cdc_pdf_importer.py::test_sdd_qual_01_pdfium_identity_and_resource_resolution",
+      "implementation_status": "executable"
     },
     {
       "requirement_id": "NHI-01",

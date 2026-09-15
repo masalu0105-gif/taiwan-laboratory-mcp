@@ -1,0 +1,9 @@
+{
+  "spec_id": "pdfium-layout-v1",
+  "extractor": "pdfium",
+  "python_package": "pypdfium2",
+  "package_version": "5.13.0",
+  "pdfium_build": "153.0.7999.0",
+  "rules_version": "cdc-manual-layout-v1",
+  "adr": "docs/adr/0003-cdc-manual-pdf-layout.md"
+}

@@ -1094,6 +1094,19 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
 - 測試：`tests/test_cdc_manual_layout.py` 增為 18 個。驗證：全部測試 517 passed；ruff、git diff --check 通過；wheel／sdist 建到 scratchpad；repo 外 venv 以 `--import-mode=importlib` 跑 517 passed，contract 與 repo 位元組相同。
 - 證據（repo 外）：`taiwan-lab-mcp-data\cdc-manual-review\layout-spike-1150826\extract_proto.py`、`rows-proto.jsonl`（370 列，SHA-256 `c4409b81…`）、`p21.png`、`p52.png`、`p55.png`。
 
+### 疾管署採檢手冊第三步（下半）：PDFium 讀取進正式程式（2026-09-15）
+
+- owner 重開 Claude Desktop 後說「我重開了，你可以再繼續去做了」。重開後在本對話用 MCP 工具實查 `find_authorized_lab("台南 傷寒")`：ok、共 40 筆、回 20 筆、10 家、`truncated=true`，工具說明已是新版（一次 20 筆、可空格分開）。commit `2d6e596` 的 CI 通過（run 34990159093）。
+- `importers/cdc_manual_pdf.py`：
+  - `cdc_manual_extractor_identity()` 讀 package resource `qualifier_specs/pdfium-layout-v1.json`（pypdfium2 5.13.0、PDFium 153.0.7999.0、讀表規則 `cdc-manual-layout-v1`），和安裝版本比對；不符 `QUALIFIER_IDENTITY_MISMATCH`，沒裝 `QUALIFIER_DEPENDENCY_MISSING`。
+  - `extract_cdc_manual_layout(payload)` 把每頁讀成 `CdcLayoutV1`：座標從左上角起算、取到小數第 3 位；path 的外框與顏色（填色優先，沒有才用線色）；每個字元的框與 marked content id（依 PDF 內順序）；marked content 位置框；Word TR／TD 標記。打不開的檔回 `PDF_UNREADABLE`。沒有 OCR、不連網、不寫檔。
+  - 規格檔原本打算放容差數字；拆表程式不會讀它，放進去只是裝飾，所以只放版本與讀表規則版本，SDD 那句同步更正。
+- `pyproject.toml` 新增 optional extra `cdc-manual = ["pypdfium2==5.13.0"]`；CI 改裝 `.[dev,cdc-manual]`；`acceptance-contract-v1.json` 的 `SDD-QUAL-01` 改為 `test_sdd_qual_01_pdfium_identity_and_resource_resolution`、`executable`；安裝包必含檔加上規格檔。
+- 真實手冊（1150826，scratchpad，未進正式 data root）用正式程式讀：130 頁 3.6 秒，layout JSON 9,588,395 bytes；拆表 370 列（8 欄 208、7 欄 162、跨頁接格 127）。和試用版 `rows-proto.jsonl` 逐列比對：8 個文字欄位 370 列全部相同；6 列的 row_bbox 差 1 pt（第 40、51、61 頁各兩列交界，例如第 40 頁 `[23, 554, 558, 659]` → `[23, 554, 558, 660]`），原因是正式程式先把座標取到小數第 3 位再算格線位置。之後以正式程式結果為準：`rows-package.jsonl`（SHA-256 `0cb7f55a…`）。
+- 還沒決定：專案的 canonical JSON 不收浮點數，layout 若要納入 build fingerprint，得在建資料庫那一步決定座標怎麼存（例如千分之一 pt 整數）。
+- 測試：先寫 `tests/test_cdc_pdf_importer.py`（3 個），跑出 3 failed；實作後全過。
+- 驗證：全部測試 529 passed（沒有 skip）；ruff、git diff --check 通過；wheel 含規格檔與 `Provides-Extra: cdc-manual`；repo 外 venv（另裝 pypdfium2 5.13.0）以 `--import-mode=importlib` 跑 529 passed，contract 與 repo 位元組相同。
+
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
 - owner 原話：「如果像那種 PDF，我覺得是不是可以用一些開源專案，例如說 MarkItDown，或者是有其他的工具？例如說，可以先把 PDF 變成 Markdown 之後，AI 再去讀 Markdown，應該就能完整判讀出原本的語意了吧？」（transcript timestamp `2026-09-15T14:43:28.643Z`）
