@@ -1,4 +1,8 @@
-"""CDC specimen collection manual chapter 2: rebuild table rows from a normalized page layout.
+"""CDC specimen collection manual: rebuild table rows from a normalized page layout.
+
+Each kind of table the manual prints is one CdcTableSpec: chapter 2 specimen requirements,
+chapter 7 testing locations and the chapter 7 receiving-unit contacts. A page belongs to the spec
+whose column names its header row matches, so a chapter only ever reads its own tables.
 
 ADR 0003 (engineering decision 2026-09-15). The input is CdcLayoutV1: per page, ruling segments
 with their colour, characters with boxes in PDF stream order, optional marked-content boxes and
@@ -28,25 +32,123 @@ CDC_SPECIMEN_FIELDS = (
     "retention_raw",
     "notes",
 )
-_HEADERS = {
-    "傳染病名稱": "disease",
-    "採檢項目": "specimen",
-    "採檢目的": "purpose",
-    "採檢時間": "collection_time",
-    "採檢量及規定": "volume_requirement",
-    "送驗方式": "transport_method",
-    "應保存種類(應保存時間)": "retention_raw",
-    "注意事項": "notes",
-}
-_EIGHT_COLUMNS = CDC_SPECIMEN_FIELDS
-_SEVEN_COLUMNS = tuple(name for name in CDC_SPECIMEN_FIELDS if name != "retention_raw")
-# A row ends where one of these columns has a boundary; other columns may be merged cells.
-_KEY_FIELDS = frozenset({"disease", "specimen", "purpose", "collection_time", "volume_requirement"})
+CDC_TESTING_LOCATION_FIELDS = (
+    "disease",
+    "collecting_unit",
+    "specimen",
+    "method",
+    "turnaround_raw",
+    "testing_period_raw",
+    "receiving_unit",
+    "bsl_raw",
+    "notes",
+)
+CDC_RECEIVING_UNIT_FIELDS = ("unit_name", "phone", "fax", "address")
+
+
+def _section_pattern(chapter: str) -> re.Pattern[str]:
+    return re.compile(rf"^({chapter}(?:\.[0-9]+)+)\.?(\D.*)$")
+
+
+@dataclass(frozen=True)
+class CdcTableSpec:
+    """One kind of table in the manual: its columns, where a row ends and how sections are named.
+
+    `anchor` is the header text of the first column, `variants` the column orders the manual
+    actually prints, and `key_fields` the columns whose boundaries end a row (other columns may
+    be merged cells covering several rows).
+    """
+
+    name: str
+    fields: tuple[str, ...]
+    headers: dict[str, str]
+    variants: tuple[tuple[str, ...], ...]
+    key_fields: frozenset[str]
+    section_re: re.Pattern[str]
+    anchor: str
+
+
+CDC_SPECIMEN_SPEC = CdcTableSpec(
+    name="cdc_specimen_requirement",
+    fields=CDC_SPECIMEN_FIELDS,
+    headers={
+        "傳染病名稱": "disease",
+        "採檢項目": "specimen",
+        "採檢目的": "purpose",
+        "採檢時間": "collection_time",
+        "採檢量及規定": "volume_requirement",
+        "送驗方式": "transport_method",
+        "應保存種類(應保存時間)": "retention_raw",
+        "注意事項": "notes",
+    },
+    variants=(
+        CDC_SPECIMEN_FIELDS,
+        tuple(name for name in CDC_SPECIMEN_FIELDS if name != "retention_raw"),
+    ),
+    key_fields=frozenset(
+        {"disease", "specimen", "purpose", "collection_time", "volume_requirement"}
+    ),
+    section_re=_section_pattern("2"),
+    anchor="傳染病名稱",
+)
+# Chapter 7 (owner 2026-09-16, OD-18). Section 7.7 prints 檢驗期間 instead of 檢驗期限 and has no
+# BSL column, so those two official column names stay separate fields.
+CDC_TESTING_LOCATION_SPEC = CdcTableSpec(
+    name="cdc_testing_location",
+    fields=CDC_TESTING_LOCATION_FIELDS,
+    headers={
+        "傳染病名稱": "disease",
+        "採檢單位": "collecting_unit",
+        "採檢項目": "specimen",
+        "檢驗方法": "method",
+        "檢驗期限": "turnaround_raw",
+        "檢驗期間": "testing_period_raw",
+        "收件單位": "receiving_unit",
+        "實驗室生物安全等級(BSL)": "bsl_raw",
+        "備註": "notes",
+    },
+    variants=(
+        (
+            "disease",
+            "collecting_unit",
+            "specimen",
+            "method",
+            "turnaround_raw",
+            "receiving_unit",
+            "bsl_raw",
+            "notes",
+        ),
+        (
+            "disease",
+            "collecting_unit",
+            "specimen",
+            "method",
+            "testing_period_raw",
+            "receiving_unit",
+            "notes",
+        ),
+    ),
+    key_fields=frozenset({"disease", "collecting_unit", "specimen", "method", "receiving_unit"}),
+    section_re=_section_pattern("7"),
+    anchor="傳染病名稱",
+)
+CDC_RECEIVING_UNIT_SPEC = CdcTableSpec(
+    name="cdc_receiving_unit",
+    fields=CDC_RECEIVING_UNIT_FIELDS,
+    headers={"單位名稱": "unit_name", "電話": "phone", "傳真": "fax", "地址": "address"},
+    variants=(CDC_RECEIVING_UNIT_FIELDS,),
+    key_fields=frozenset(CDC_RECEIVING_UNIT_FIELDS),
+    section_re=_section_pattern("7"),
+    anchor="單位名稱",
+)
+_SPECS = (CDC_SPECIMEN_SPEC, CDC_TESTING_LOCATION_SPEC, CDC_RECEIVING_UNIT_SPEC)
+_HEADERS = {text: field for spec in _SPECS for text, field in spec.headers.items()}
+_ANCHORS = frozenset(spec.anchor for spec in _SPECS)
 _RULE_END_TOLERANCE = 0.5
+_RULE_JOIN_GAP = 1.0
 _WIDTH_TOLERANCE = 1.0
 _COLUMN_RULE_MIN_HEIGHT = 25.0
 _CLUSTER_GAP = 2.0
-_SECTION_RE = re.compile(r"^2\.([1-9][0-9]*)\.?(\D.*)$")
 _PRINTED_PAGE_RE = re.compile(r"頁碼:第([0-9]+)頁")
 # Page header 「版次：1150826 核准日期：115年08月26日」.
 _VERSION_RE = re.compile(r"版次:([0-9]{7})")
@@ -76,14 +178,15 @@ class CdcSpecimenRow:
     locator: dict[str, Any]
     source_row_sha256: str
     display_values: tuple[str | None, ...] = ()
+    field_names: tuple[str, ...] = CDC_SPECIMEN_FIELDS
 
     def fields(self) -> dict[str, str | None]:
-        return dict(zip(CDC_SPECIMEN_FIELDS, self.values))
+        return dict(zip(self.field_names, self.values))
 
     def display_fields(self) -> dict[str, str | None]:
         """Cell text for reading: wrapped lines joined, author line breaks and list items kept."""
 
-        return dict(zip(CDC_SPECIMEN_FIELDS, self.display_values))
+        return dict(zip(self.field_names, self.display_values))
 
 
 @dataclass(frozen=True)
@@ -243,7 +346,9 @@ class _PageTable:
     printed_page: int | None
     version: str | None
     approved_date_raw: str | None
-    section: str | None
+    # The heading above the table, per table kind: 「2.2 第二類法定傳染病檢體」, 「7.1 第一類法定傳染病」.
+    sections: dict[str, str]
+    spec: CdcTableSpec | None
     xs: list[float]
     columns: list[list[float]]
     cells: dict[tuple[int, int], _Cell]
@@ -254,6 +359,8 @@ class _PageTable:
     mcid_columns: dict[int, set[int]]
     mcid_box_columns: dict[int, set[int]]
     mcid_text: dict[int, str]
+    # Filled while reading a chapter: the section this page's rows belong to.
+    resolved_section: str | None = None
 
     @property
     def widths(self) -> list[float]:
@@ -279,6 +386,18 @@ class _PageTable:
         return self.cells[(col, len(ys) - 2)] if len(ys) >= 2 else None
 
 
+def _joined_runs(pieces: list[tuple[float, float]]) -> list[list[float]]:
+    """Return the pieces joined where they touch; Word draws one ruling piece per cell."""
+
+    joined: list[list[float]] = []
+    for low, high in sorted(pieces):
+        if joined and low <= joined[-1][1] + _RULE_JOIN_GAP:
+            joined[-1][1] = max(joined[-1][1], high)
+        else:
+            joined.append([low, high])
+    return joined
+
+
 def _read_page(page: dict[str, Any]) -> _PageTable | None:
     segments = page["segments"]
     chars = page["chars"]
@@ -295,21 +414,54 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
     # The table spans its column rules; the page header box above has lines too (1150826 manual).
     table_top = min(s["y0"] for s in verticals)
     table_bottom = max(s["y1"] for s in verticals)
+    # A column rule is drawn per cell, so a short row's pieces can each be under the minimum
+    # height and drop out (1150826 page 121: the 15.6 pt header row of 7.9). The table reaches as
+    # far as pieces that touch the columns already found, and no further.
+    top, bottom = table_top, table_bottom
+    for x in xs:
+        for low, high in _joined_runs(
+            [
+                (s["y0"], s["y1"])
+                for s in segments
+                if _is_black(s.get("color"))
+                and s["x1"] - s["x0"] < 3
+                and abs((s["x0"] + s["x1"]) / 2 - x) <= _CLUSTER_GAP
+            ]
+        ):
+            if low <= table_top <= high:
+                top = min(top, low)
+            if low <= table_bottom <= high:
+                bottom = max(bottom, high)
+    table_top, table_bottom = top, bottom
+    # Word draws a row rule as one piece per cell plus a short piece over each column rule, and a
+    # cell's own piece can start beside its column rule (1150826 page 93: 0.6 pt right of it), so
+    # the pieces at one height are joined before asking which columns that rule spans.
+    horizontals = [
+        s
+        for s in segments
+        if _is_black(s.get("color"))
+        and s["y1"] - s["y0"] < 3
+        and table_top - 1 <= (s["y0"] + s["y1"]) / 2 <= table_bottom + 1
+    ]
+    levels = _cluster([(s["y0"] + s["y1"]) / 2 for s in horizontals])
+    at_level: list[list[tuple[float, float]]] = [[] for _ in levels]
+    for s in horizontals:
+        middle = (s["y0"] + s["y1"]) / 2
+        at_level[min(range(len(levels)), key=lambda k: abs(levels[k] - middle))].append(
+            (s["x0"], s["x1"])
+        )
+    runs = [_joined_runs(pieces) for pieces in at_level]
     columns = []
     for left, right in zip(xs, xs[1:]):
         columns.append(
-            _cluster(
-                [
-                    (s["y0"] + s["y1"]) / 2
-                    for s in segments
-                    if _is_black(s.get("color"))
-                    and s["y1"] - s["y0"] < 3
-                    and s["x1"] - s["x0"] > 3
-                    and s["x0"] <= left + _RULE_END_TOLERANCE
-                    and s["x1"] >= right - _RULE_END_TOLERANCE
-                    and table_top - 1 <= (s["y0"] + s["y1"]) / 2 <= table_bottom + 1
-                ]
-            )
+            [
+                level
+                for level, joined in zip(levels, runs)
+                if any(
+                    x0 <= left + _RULE_END_TOLERANCE and x1 >= right - _RULE_END_TOLERANCE
+                    for x0, x1 in joined
+                )
+            ]
         )
     cells = {
         (col, k): _Cell(right=xs[col + 1])
@@ -373,12 +525,14 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
             lines[-1][1].append((index, text))
         else:
             lines.append([cy, [(index, text)]])
-    section = None
+    sections: dict[str, str] = {}
     for _, parts in lines:
         joined = "".join(text for _, text in sorted(parts))
-        match = _SECTION_RE.fullmatch("".join(joined.split()))
-        if match:
-            section = f"2.{match.group(1)} {match.group(2)}"
+        squeezed = "".join(joined.split())
+        for item in _SPECS:
+            match = item.section_re.fullmatch(squeezed)
+            if match:
+                sections[item.name] = f"{match.group(1)} {match.group(2)}"
     page_text = _squeeze("".join(char["text"] for char in chars))
     printed = _PRINTED_PAGE_RE.search(page_text)
     version = _VERSION_RE.search(page_text)
@@ -386,9 +540,10 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
 
     header_bottom = None
     names = None
+    spec = None
     first_column = columns[0]
     for k in range(len(first_column) - 1):
-        if _squeeze(cells[(0, k)].own_text()) == "傳染病名稱":
+        if _squeeze(cells[(0, k)].own_text()) in _ANCHORS:
             header_bottom = first_column[k + 1]
             middle = (first_column[k] + first_column[k + 1]) / 2
             found = []
@@ -404,7 +559,8 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
                 header = "" if index is None else _squeeze(cells[(col, index)].own_text())
                 found.append(_HEADERS.get(header))
             names = tuple(found)  # type: ignore[arg-type]
-            if names not in (_EIGHT_COLUMNS, _SEVEN_COLUMNS):
+            spec = next((item for item in _SPECS if names in item.variants), None)
+            if spec is None:
                 raise CdcManualLayoutError("LAYOUT_HEADER_MISMATCH", f"page {page['page_number']}")
             break
     return _PageTable(
@@ -412,7 +568,8 @@ def _read_page(page: dict[str, Any]) -> _PageTable | None:
         printed_page=int(printed.group(1)) if printed else None,
         version=version.group(1) if version else None,
         approved_date_raw=approved.group(1) if approved else None,
-        section=section,
+        sections=sections,
+        spec=spec,
         xs=xs,
         columns=columns,
         cells=cells,
@@ -501,8 +658,8 @@ def _continued_columns(table: _PageTable, children: list[Any]) -> set[int]:
     return known | pool
 
 
-def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
-    """Return chapter 2 specimen rows in page order, or raise CdcManualLayoutError."""
+def _parse_table(layout: dict[str, Any], spec: CdcTableSpec) -> CdcSpecimenLayoutResult:
+    """Return one kind of table's rows in page order, or raise CdcManualLayoutError."""
 
     if not isinstance(layout, dict) or layout.get("layout_schema_version") != 1:
         raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID")
@@ -513,10 +670,10 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
             table = _read_page(page)
             if table is not None and not table.has_text:
                 raise CdcManualLayoutError("LAYOUT_NO_TEXT_LAYER", f"page {page['page_number']}")
-            if not tables and (table is None or table.names is None):
+            if not tables and (table is None or table.spec is not spec):
                 continue
-            if table is None:
-                # Chapter 2 ends at the first page without a table.
+            if table is None or (table.names is not None and table.spec is not spec):
+                # This kind of table ends at the first page without one, or with another header.
                 break
             tables.append(table)
     except (KeyError, TypeError, ValueError) as exc:
@@ -540,10 +697,10 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
                 raise CdcManualLayoutError("LAYOUT_HEADER_MISSING", f"page {table.number}")
             table.names = previous.names
             continuation_pages.append(table.number)
-        section = table.section or section
+        section = table.sections.get(spec.name) or section
         if section is None:
             raise CdcManualLayoutError("LAYOUT_SECTION_MISSING", f"page {table.number}")
-        table.section = section
+        table.resolved_section = section
         if table.version is None or table.approved_date_raw is None:
             raise CdcManualLayoutError("LAYOUT_VERSION_MISSING", f"page {table.number}")
         if (table.version, table.approved_date_raw) != (
@@ -559,7 +716,7 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
             if any(
                 child is not None
                 and _squeeze("".join(table.mcid_text.get(mcid, "") for mcid in child))
-                == "傳染病名稱"
+                == spec.anchor
                 for child in row
             )
         ]
@@ -590,7 +747,7 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
                 _link(earlier, later)
                 joins += 1
 
-        key_columns = [index for index, name in enumerate(table.names) if name in _KEY_FIELDS]
+        key_columns = [index for index, name in enumerate(table.names) if name in spec.key_fields]
         bounds = _cluster(
             [y for index in key_columns for y in table.columns[index] if y >= table.body_top - 1]
         )
@@ -611,12 +768,12 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
             name: cell.group.text()  # type: ignore[union-attr]
             for name, cell in zip(table.names or (), covering)
         }
-        values = tuple(by_name.get(name) for name in CDC_SPECIMEN_FIELDS)
+        values = tuple(by_name.get(name) for name in spec.fields)
         display = {
             name: cell.group.display_text()  # type: ignore[union-attr]
             for name, cell in zip(table.names or (), covering)
         }
-        display_values = tuple(display.get(name) for name in CDC_SPECIMEN_FIELDS)
+        display_values = tuple(display.get(name) for name in spec.fields)
         if not any(values):
             raise CdcManualLayoutError("LAYOUT_EMPTY_ROW", f"page {table.number}")
         result_rows.append(
@@ -626,7 +783,7 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
                     "locator_type": "cdc_pdf_row",
                     "pdf_page": table.number,
                     "printed_page": table.printed_page,
-                    "table_section": table.section,
+                    "table_section": table.resolved_section,
                     "row_bbox": [
                         round(table.xs[0]),
                         round(top),
@@ -636,19 +793,41 @@ def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
                 },
                 source_row_sha256=sha256_bytes(canonical_json_bytes(list(values))),
                 display_values=display_values,
+                field_names=spec.fields,
             )
         )
     return CdcSpecimenLayoutResult(
         rows=result_rows,
         summary={
             "rules_version": CDC_MANUAL_LAYOUT_RULES_VERSION,
+            "table": spec.name,
             "manual_version": tables[0].version,
             "approved_date_raw": tables[0].approved_date_raw,
             "table_pages": [table.number for table in tables],
             "continuation_pages": continuation_pages,
             "page_joins": joins,
             "rows": len(result_rows),
-            "eight_column_rows": sum(1 for table, *_ in bands if table.names == _EIGHT_COLUMNS),
-            "seven_column_rows": sum(1 for table, *_ in bands if table.names == _SEVEN_COLUMNS),
+            # One count per column order the manual prints for this table, in spec order.
+            "variant_rows": [
+                sum(1 for table, *_ in bands if table.names == variant) for variant in spec.variants
+            ],
         },
     )
+
+
+def parse_cdc_specimen_layout(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
+    """Return chapter 2 specimen rows in page order, or raise CdcManualLayoutError."""
+
+    return _parse_table(layout, CDC_SPECIMEN_SPEC)
+
+
+def parse_cdc_testing_locations(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
+    """Return chapter 7 testing-location rows in page order, or raise CdcManualLayoutError."""
+
+    return _parse_table(layout, CDC_TESTING_LOCATION_SPEC)
+
+
+def parse_cdc_receiving_units(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
+    """Return the chapter 7 receiving-unit contacts, or raise CdcManualLayoutError."""
+
+    return _parse_table(layout, CDC_RECEIVING_UNIT_SPEC)
