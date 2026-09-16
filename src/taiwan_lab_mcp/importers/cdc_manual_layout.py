@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -48,6 +49,9 @@ CDC_RECEIVING_UNIT_FIELDS = ("unit_name", "phone", "fax", "address")
 CDC_REVISION_FIELDS = ("page_reference_raw", "subject_raw", "explanation_raw")
 CDC_REVISION_TABLE = "cdc_revision_entry"
 CDC_REVISION_SECTION = "修訂對照表"
+# Chapters 3-6 are numbered steps, not tables (owner 2026-09-16).
+CDC_CLAUSE_FIELDS = ("block_kind", "clause_number", "chapter", "text")
+CDC_CLAUSE_TABLE = "cdc_manual_clause"
 
 
 def _section_pattern(chapter: str) -> re.Pattern[str]:
@@ -164,6 +168,27 @@ _REVISION_HEADER = "修正規定"
 _COMPILED_DATE_RE = re.compile(r"製表日期:([0-9]+年[0-9]+月[0-9]+日)")
 # A revision page's outer frame is drawn with the tallest rules on the page.
 _FRAME_TOLERANCE = 2.0
+# Chapters 3-6: a clause number, a figure caption, the repeated page header, and how far a
+# clause may be indented (measured on 1150826: clauses start at 59-115 pt, wrapped lines at
+# 116 pt or more).
+_CLAUSE_NUMBER_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*")
+_FIGURE_RE = re.compile(r"^圖\s*([0-9]+(?:\.[0-9]+)*)")
+_CLAUSE_CHAPTERS = frozenset("3456")
+_CLAUSE_INDENT = 120.0
+_LINE_HEIGHT = 5.0
+# Chapters 3-6 keep a table row's cells apart with this mark.
+_CELL_SEPARATOR = "｜"
+# Table-of-contents lines carry dot leaders before the page number.
+_LEADER_RE = re.compile(r"[…\.]{4,}")
+# A table row inside a clause starts on its own line.
+_CELL_BREAK = chr(10)
+_PAGE_HEADER_LINES = (
+    "衛生福利部疾病管制署",
+    "編號：",
+    "傳染病檢體採檢手冊",
+    "頁碼：",
+    "版次：",
+)
 # Page header 「版次：1150826 核准日期：115年08月26日」.
 _VERSION_RE = re.compile(r"版次:([0-9]{7})")
 _APPROVED_DATE_RE = re.compile(r"核准日期:([0-9]+年[0-9]+月[0-9]+日)")
@@ -1030,6 +1055,248 @@ def parse_cdc_revision_entries(layout: dict[str, Any]) -> CdcSpecimenLayoutResul
             "table": CDC_REVISION_TABLE,
             "compiled_date_raw": compiled_date,
             "table_pages": pages_with_table,
+            "rows": len(rows),
+        },
+    )
+
+
+def _clause_number(text: str) -> tuple[str, str] | None:
+    """Return (number, rest) when a line starts a numbered clause, else None.
+
+    The manual prints 「3.5.糞便檢體」 and 「3.2 抗凝固全血」, and refers to a figure inside a
+    sentence as 「(圖 3.3B)」. The longest run of digits is taken without backtracking and a bare
+    chapter number must print its dot, so a line starting 「3.4B)內旋緊瓶蓋」 starts no clause.
+    """
+
+    found = _CLAUSE_NUMBER_RE.match(text)
+    if not found:
+        return None
+    number = found.group(0)
+    rest = text[len(number) :]
+    if rest.startswith("."):
+        rest = rest[1:]
+    elif rest[:1].isspace():
+        if "." not in number:
+            return None
+    else:
+        return None
+    rest = rest.strip()
+    return (number, rest) if rest else None
+
+
+def _starts_clause(text: str, x0: float) -> tuple[str, str] | None:
+    # The table of contents lists 「3.1 全血……59」 with dot leaders; those lines start nothing.
+    if clause_leaders := _LEADER_RE.search(text):
+        del clause_leaders
+        return None
+    clause = _clause_number(text)
+    if clause is None or x0 >= _CLAUSE_INDENT:
+        return None
+    return clause if clause[0].split(".")[0] in _CLAUSE_CHAPTERS else None
+
+
+def _clause_order(number: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in number.split("."))
+
+
+def _page_text_lines(page: dict[str, Any]) -> list[tuple[str, float, float, float, float, bool]]:
+    """Return the page's text as lines in PDF stream order, each with its own box.
+
+    Chapters 3-6 are prose, but two pages of the 1150826 manual hold a small table (「4.6 不良
+    檢體判定標準」). Word tags those rows, so each table row is read as one line with its cells
+    kept apart by 「｜」 instead of running the cells into one sentence.
+    """
+
+    rows = page.get("table_rows") or []
+    row_of: dict[int, int] = {}
+    for index, row in enumerate(rows):
+        for child in row or ():
+            for mcid in child or ():
+                row_of[mcid] = index
+    mcid_text: dict[int, list[str]] = {}
+    for char in page["chars"]:
+        mcid = char.get("mcid")
+        if mcid is not None:
+            mcid_text.setdefault(mcid, []).append(char["text"])
+
+    def row_line(index: int) -> str:
+        cells = []
+        for child in rows[index] or ():
+            text = "".join("".join(mcid_text.get(mcid, ())) for mcid in child or ()).strip()
+            if text:
+                cells.append(text)
+        return _CELL_SEPARATOR.join(cells)
+
+    lines: list[list[Any]] = []
+    emitted: set[int] = set()
+    for order, char in enumerate(page["chars"]):
+        index = row_of.get(char.get("mcid"))
+        if index is not None:
+            if index not in emitted:
+                emitted.add(index)
+                text = row_line(index)
+                if text:
+                    chars = [
+                        item for item in page["chars"] if row_of.get(item.get("mcid")) == index
+                    ]
+                    lines.append(
+                        [(chars[0]["y0"] + chars[0]["y1"]) / 2, [(order, text)], chars, True]
+                    )
+            continue
+        middle = (char["y0"] + char["y1"]) / 2
+        if lines and abs(middle - lines[-1][0]) <= _LINE_HEIGHT and not lines[-1][3]:
+            lines[-1][1].append((order, char["text"]))
+            lines[-1][2].append(char)
+        else:
+            lines.append([middle, [(order, char["text"])], [char], False])
+    out = []
+    for _, parts, chars, from_table in lines:
+        text = "".join(piece for _, piece in sorted(parts)).strip()
+        if not text:
+            continue
+        out.append(
+            (
+                text,
+                min(char["x0"] for char in chars),
+                min(char["y0"] for char in chars),
+                max(char["x1"] for char in chars),
+                max(char["y1"] for char in chars),
+                from_table,
+            )
+        )
+    return out
+
+
+def _join_wrapped(lines: Sequence[str]) -> str:
+    """Join lines the page width broke; a space only where letters or digits meet."""
+
+    text = ""
+    for line in lines:
+        if text and text[-1].isascii() and text[-1].isalnum() and line[:1].isalnum():
+            text += " "
+        text += line
+    return text
+
+
+def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
+    """Return chapters 3-6 as numbered clauses and figure captions, or raise.
+
+    These chapters are written as numbered steps, not tables: one row per clause (3.5.2) or
+    figure caption (圖 3.6), with the text as printed. Apart from the repeated page header, every
+    character of those pages belongs to exactly one row.
+    """
+
+    if not isinstance(layout, dict) or layout.get("layout_schema_version") != 1:
+        raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID")
+    blocks: list[dict[str, Any]] = []
+    version: str | None = None
+    approved: str | None = None
+    started = False
+    finished = False
+    try:
+        for page in sorted(layout["pages"], key=lambda item: int(item["page_number"])):
+            if finished:
+                break
+            number = int(page["page_number"])
+            page_text = _squeeze("".join(char["text"] for char in page["chars"]))
+            found_version = _VERSION_RE.search(page_text)
+            found_approved = _APPROVED_DATE_RE.search(page_text)
+            printed = _PRINTED_PAGE_RE.search(page_text)
+            for text, x0, y0, x1, y1, from_table in _page_text_lines(page):
+                if any(_squeeze(text).startswith(_squeeze(item)) for item in _PAGE_HEADER_LINES):
+                    continue
+                if from_table:
+                    # A numbered line inside a table cell is table content, never a clause.
+                    if started and blocks:
+                        blocks[-1]["lines"].append(_CELL_BREAK + text)
+                        pages_after = blocks[-1]["continues_on_pages"]
+                        if number != blocks[-1]["page"] and number not in pages_after:
+                            pages_after.append(number)
+                    continue
+                numbered = _clause_number(text) if started and x0 < _CLAUSE_INDENT else None
+                if numbered is not None and int(numbered[0].split(".")[0]) > 6:
+                    # Chapter 7 is a table again, and the appendices after it are numbered too.
+                    finished = True
+                    break
+                clause = _starts_clause(text, x0)
+                if clause is None and not started:
+                    # Everything before chapter 3 is read as tables, not as clauses.
+                    continue
+                if version is None or approved is None:
+                    if not (found_version and found_approved):
+                        raise CdcManualLayoutError("LAYOUT_VERSION_MISSING", f"page {number}")
+                    version, approved = found_version.group(1), found_approved.group(1)
+                figure = _FIGURE_RE.match(text)
+                if clause is not None:
+                    started = True
+                    previous = next(
+                        (item["number"] for item in reversed(blocks) if item["kind"] == "clause"),
+                        None,
+                    )
+                    if previous is not None and _clause_order(clause[0]) <= _clause_order(previous):
+                        raise CdcManualLayoutError("LAYOUT_CLAUSE_ORDER", clause[0])
+                    # The text keeps the number as printed, so a coverage check can compare
+                    # the stored rows with the page character by character.
+                    kind, block_number, first = "clause", clause[0], text
+                elif figure is not None:
+                    kind, block_number, first = "figure", figure.group(1), text
+                else:
+                    blocks[-1]["lines"].append(text)
+                    pages_after = blocks[-1]["continues_on_pages"]
+                    if number != blocks[-1]["page"] and number not in pages_after:
+                        pages_after.append(number)
+                    continue
+                blocks.append(
+                    {
+                        "kind": kind,
+                        "number": block_number,
+                        "lines": [first],
+                        "page": number,
+                        "printed": int(printed.group(1)) if printed else None,
+                        "box": [x0, y0, x1, y1],
+                        "continues_on_pages": [],
+                    }
+                )
+    except (KeyError, TypeError, ValueError) as exc:
+        if isinstance(exc, CdcManualLayoutError):
+            raise
+        raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID") from exc
+    if not blocks:
+        raise CdcManualLayoutError("LAYOUT_NO_CLAUSES")
+    # 「3. 傳染病檢體採檢步驟」 names chapter 3 in every row's locator.
+    headings = {
+        block["number"]: (_clause_number(_join_wrapped(block["lines"])) or ("", ""))[1]
+        for block in blocks
+        if block["kind"] == "clause" and "." not in block["number"]
+    }
+    rows = []
+    for block in blocks:
+        chapter = block["number"].split(".")[0]
+        values = (block["kind"], block["number"], chapter, _join_wrapped(block["lines"]))
+        rows.append(
+            CdcSpecimenRow(
+                values=values,
+                locator={
+                    "locator_type": "cdc_pdf_row",
+                    "pdf_page": block["page"],
+                    "printed_page": block["printed"],
+                    "table_section": f"{chapter} {headings.get(chapter, '')}".strip(),
+                    "row_bbox": [round(value) for value in block["box"]],
+                },
+                source_row_sha256=sha256_bytes(canonical_json_bytes(list(values))),
+                display_values=values,
+                field_names=CDC_CLAUSE_FIELDS,
+                continues_on_pages=tuple(block["continues_on_pages"]),
+            )
+        )
+    return CdcSpecimenLayoutResult(
+        rows=rows,
+        summary={
+            "rules_version": CDC_MANUAL_LAYOUT_RULES_VERSION,
+            "table": CDC_CLAUSE_TABLE,
+            "manual_version": version,
+            "approved_date_raw": approved,
+            "table_pages": sorted({block["page"] for block in blocks}),
             "rows": len(rows),
         },
     )
