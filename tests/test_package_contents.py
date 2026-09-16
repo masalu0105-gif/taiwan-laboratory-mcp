@@ -62,6 +62,9 @@ def _denied(path: str) -> bool:
         or any(token in name for token in ("secret", "token", "credential"))
         or "__pycache__/" in lowered
         or lowered.endswith(".pyc")
+        # Local tool caches must not travel inside the package: the release script compares the
+        # installed files with origin/main and refuses to publish when extra files appear.
+        or ".impeccable" in PurePosixPath(lowered).parts
         or path.startswith(("/", "\\"))
         or (len(path) >= 2 and path[1] == ":")
     )

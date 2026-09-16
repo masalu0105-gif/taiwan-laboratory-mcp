@@ -1249,6 +1249,9 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
   - 程式的預設審核規則版本改成第 2 版；本機已上線的名冊與手冊建置要用第 2 版重新建一次才會發布下載包。
 - 測試：先寫 `tests/test_cdc_bundle.py`（3 個），跑出 3 failed；實作後全過。另外把四份第 2 版規則檔加進安裝包必含檔清單。
 - 驗證：全部測試 564 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 內含四份第 2 版規則檔，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 564 passed，contract 與 repo 位元組相同（144,136 bytes）。
+- 提交：commit `2aa3cef`，CI 通過（run 35037651962）。
+- 本機重建（以第 2 版規則）：名冊 build `cdc_authorized_labs-build-9de0bd3b…`（3,584 列、generation 3，換版前獨立解析逐列比對 0 不符）；手冊 build `cdc_specimen_manual-build-2c40d87b…`（370 列、generation 3）。重建後查「COVID-19」6 列、「猴痘」2 列、「登革熱」4 列，名冊查「台南 傷寒」40 筆，四個來源都 available。
+- 順手修掉的包裝問題：本機某個工具在程式資料夾內留下快取檔 `.impeccable/hook.cache.json`（git 已忽略，但打包時被收進 wheel 與 sdist）。發布腳本比對「安裝版檔案」與 `origin/main` 時，因為這兩個多出來的檔案回 `blocked`，下載包發不出去。修法：`pyproject.toml` 加 `[tool.hatch.build] exclude = ["**/.impeccable"]`，並在安裝包內容檢查加一條「路徑不得含 .impeccable」。先加檢查跑出 2 failed，改完重建後全過，wheel 檔案數 82。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 

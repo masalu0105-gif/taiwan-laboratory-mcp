@@ -26,6 +26,11 @@ taiwan-lab-data = "taiwan_lab_mcp.data_cli:main"
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build]
+# Local tool caches sit inside the package folder but are not part of the program; the release
+# script compares the installed files with origin/main and refuses to publish extra files.
+exclude = ["**/.impeccable"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/taiwan_lab_mcp"]
 
