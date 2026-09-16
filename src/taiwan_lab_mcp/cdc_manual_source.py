@@ -379,16 +379,16 @@ def _read_cdc_manual_serving(data_root: Path) -> dict[str, Any] | None:
         raise SyncError("CURRENT_POINTER_INTEGRITY", "check") from exc
 
 
-def _served_rows(db_path: Path) -> list[dict[str, Any]]:
+def _served_rows(db_path: Path, table: str = "cdc_specimen_requirement") -> list[dict[str, Any]]:
+    from .importers.cdc_manual_layout import CDC_MANUAL_TABLE_NAMES
     from .tfda_store import connect_readonly
 
+    if table not in CDC_MANUAL_TABLE_NAMES:
+        raise ValueError(table)
     connection = connect_readonly(db_path)
     try:
         return [
-            dict(row)
-            for row in connection.execute(
-                "SELECT * FROM cdc_specimen_requirement ORDER BY row_number"
-            )
+            dict(row) for row in connection.execute(f"SELECT * FROM {table} ORDER BY row_number")
         ]
     finally:
         connection.close()

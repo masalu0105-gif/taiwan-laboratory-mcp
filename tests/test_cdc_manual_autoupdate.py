@@ -147,7 +147,8 @@ def test_large_change_is_held_back_and_reported_once(tmp_path, distribution, rea
     from taiwan_lab_mcp.stores import read_source_status
 
     built = _serve(tmp_path, readers)
-    readers[NEW_PDF] = PAGES._layout(PAGES._display_page())
+    # Chapter 2 drops from four rows to one; chapter 7 is unchanged.
+    readers[NEW_PDF] = PAGES._layout(PAGES._display_page(), *CHAPTER7.chapter7_pages())
 
     first = _auto(tmp_path, NEW_PDF)
     assert (first["result"], first["already_reported"]) == ("blocked", False)
@@ -161,6 +162,45 @@ def test_large_change_is_held_back_and_reported_once(tmp_path, distribution, rea
     status = read_source_status(tmp_path, "cdc_manual")
     assert status.serving_curated_build_id == built["snapshot_id"]
     assert status.stale_reason_codes == ["newer_candidate_pending_review"]
+
+
+def test_a_new_manual_that_loses_chapter_7_rows_is_held_back(tmp_path, distribution, readers):
+    # Owner 2026-09-16 (OD-18): chapter 7 has to look sane too before a version switches itself.
+    built = _serve(tmp_path, readers)
+    pages = CHAPTER7.chapter7_pages()
+    # The same manual minus the chapter 7 testing-location page: 3 rows become 1.
+    readers[NEW_PDF] = PAGES._layout(
+        PAGES._display_page(), *PAGES._typhoid_pages(), pages[1], pages[2]
+    )
+
+    summary = _auto(tmp_path, NEW_PDF)
+
+    assert summary["result"] == "blocked"
+    assert summary["block_reasons"] == [
+        "cdc_testing_location:row_count_change_exceeds_10_percent",
+        "cdc_testing_location:disease_count_change_exceeds_10_percent",
+    ]
+    from taiwan_lab_mcp.stores import read_source_status
+
+    assert (
+        read_source_status(tmp_path, "cdc_manual").serving_curated_build_id
+        == (built["snapshot_id"])
+    )
+
+
+def test_a_new_manual_without_chapter_7_is_not_published(tmp_path, distribution, readers):
+    built = _serve(tmp_path, readers)
+    readers[NEW_PDF] = PAGES._layout(PAGES._display_page(), *PAGES._typhoid_pages())
+
+    summary = _auto(tmp_path, NEW_PDF)
+
+    assert (summary["result"], summary["error_code"]) == ("auto_publish_failed", "LAYOUT_NO_TABLE")
+    from taiwan_lab_mcp.stores import read_source_status
+
+    assert (
+        read_source_status(tmp_path, "cdc_manual").serving_curated_build_id
+        == (built["snapshot_id"])
+    )
 
 
 def test_changed_reading_rules_hold_back_a_new_manual(tmp_path, distribution, readers, monkeypatch):

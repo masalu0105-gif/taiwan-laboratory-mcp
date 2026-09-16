@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -30,10 +30,13 @@ from .importers.cdc_manual import (
     CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION,
     CDC_MANUAL_PRIMARY_ARTIFACT_ID,
     CDC_MANUAL_SERVING_GATES,
+    CDC_MANUAL_TABLE,
+    CDC_MANUAL_TABLES,
     active_cdc_manual_transform,
     build_official_cdc_manual_snapshot,
     cdc_layout_sha256,
-    curated_specimen_row,
+    curated_row,
+    parse_cdc_manual_tables,
 )
 from .importers.cdc_manual_layout import CDC_SPECIMEN_FIELDS, parse_cdc_specimen_layout
 
@@ -43,6 +46,16 @@ TARGET_GOLDEN_CASES = 12
 _TAIPEI = timezone(timedelta(hours=8))
 # Seven-column tables have no retention column, so its blank rate says nothing about drift.
 _DRIFT_FIELDS = tuple(field for field in CDC_SPECIMEN_FIELDS if field != "retention_raw")
+# Per table: the columns the manual fills on every row, and the name a row is counted by. Columns
+# a section may legitimately leave blank (retention, 檢驗期間, BSL, 備註, 傳真) are left out.
+_DRIFT_TABLES: dict[str, tuple[tuple[str, ...], str]] = {
+    CDC_MANUAL_TABLE: (_DRIFT_FIELDS, "disease_display"),
+    "cdc_testing_location": (
+        ("disease", "collecting_unit", "specimen", "method", "receiving_unit"),
+        "disease_display",
+    ),
+    "cdc_receiving_unit": (("unit_name", "phone", "address"), "unit_name_display"),
+}
 _SHARED_FIELDS = ("volume_requirement", "transport_method", "retention_raw", "notes")
 _COMMENTS = {
     "CDC-R1-SOURCE": (
@@ -51,29 +64,55 @@ _COMMENTS = {
         "頁首印的版次等於附件版本。"
     ),
     "CDC-R1-LAYOUT": (
-        "自動檢查：PDFium 版本與規格相同；資料列數與疾病數變動不超過 10%；主要欄位空白比例上升不超過 2 個百分點；"
-        "驗收題全部通過；換版前以 Word 表格標記逐格比對資料庫 0 不符（cdc-manual-tag-check）。"
+        "自動檢查：PDFium 版本與規格相同；第 2 章、第 7 章送驗地點與 7.9 收件單位三張表各自的列數與名稱數變動"
+        "不超過 10%、主要欄位空白比例上升不超過 2 個百分點；讀不出其中任何一張表就不換版；驗收題全部通過；"
+        "換版前以 Word 表格標記逐格比對資料庫 0 不符（cdc-manual-tag-check）。"
     ),
     "CDC-R1-CONTENT": (
-        "自動檢查：讀手冊的規則（拆表、欄位、正規化、顯示文字）與服務中版本相同，沿用 cdc-manual-r1-ai-review/1 "
-        "審過的呈現方式；應保存種類（應保存時間）照官方欄名並帶 not_pre_submission_storage。"
+        "自動檢查：讀手冊的規則（拆表、欄位、正規化、顯示文字）與服務中版本相同，沿用 cdc-manual-r1-ai-review "
+        "審過的呈現方式；應保存種類（應保存時間）照官方欄名並帶 not_pre_submission_storage；第 7 章的檢驗期限與"
+        "檢驗期間分屬不同欄位，沒有互相代用。"
     ),
     "PUB-R1-OWNER": (
-        "自動發布：只限本機 MCP 服務，由正式安裝版執行；任何檢查沒過就不換版、繼續服務原版並寄信通知。"
-        "GitHub 下載包不含疾管署資料。"
+        "自動發布：本機 MCP 服務與 GitHub Release 下載包（專案負責人 2026-09-16 決定納入疾管署資料），"
+        "由正式安裝版執行；任何檢查沒過就不換版、繼續服務原版並寄信通知。"
     ),
 }
 
 
-def summarize_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+def summarize_rows(
+    rows: Sequence[Mapping[str, Any]],
+    fields: Sequence[str] = _DRIFT_FIELDS,
+    key: str = "disease_display",
+) -> dict[str, Any]:
     blanks: Counter[str] = Counter()
     for row in rows:
-        blanks.update(field for field in _DRIFT_FIELDS if not (row[field] or "").strip())
+        blanks.update(field for field in fields if not (row[field] or "").strip())
     return {
         "rows": len(rows),
-        "distinct_diseases": len({row["disease_display"] for row in rows}),
-        "empty_value_counts": {field: blanks[field] for field in _DRIFT_FIELDS},
+        "distinct_diseases": len({row[key] for row in rows}),
+        "empty_value_counts": {field: blanks[field] for field in fields},
     }
+
+
+def summarize_manual(read: Callable[[str], Sequence[Mapping[str, Any]]]) -> dict[str, Any]:
+    """Summarize every stored table of one manual for the drift check (OD-18)."""
+
+    return {
+        table: summarize_rows(read(table), fields, key)
+        for table, (fields, key) in _DRIFT_TABLES.items()
+    }
+
+
+def manual_drift_block_reasons(serving: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
+    """Drift reasons across every table; chapter 2 keeps its own reason codes unprefixed."""
+
+    reasons = []
+    for table in _DRIFT_TABLES:
+        found = drift_block_reasons(serving[table], candidate[table])
+        prefix = "" if table == CDC_MANUAL_TABLE else f"{table}:"
+        reasons.extend(f"{prefix}{reason}" for reason in found)
+    return reasons
 
 
 def drift_block_reasons(serving: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
@@ -87,7 +126,7 @@ def drift_block_reasons(serving: dict[str, Any], candidate: dict[str, Any]) -> l
         reasons.append("row_count_change_exceeds_10_percent")
     if exceeds_ten_percent(serving["distinct_diseases"], candidate["distinct_diseases"]):
         reasons.append("disease_count_change_exceeds_10_percent")
-    for field in _DRIFT_FIELDS:
+    for field in serving["empty_value_counts"]:
         before_blank = serving["empty_value_counts"][field]
         after_blank = candidate["empty_value_counts"][field]
         # after/candidate_rows - before/serving_rows > 2 percentage points, in integers.
@@ -234,13 +273,17 @@ def run_cdc_manual_auto_update(
         candidate_relative = str(revision_dir / "artifacts" / "manual.pdf")
         candidate_payload = (data_root / PurePosixPath(candidate_relative)).read_bytes()
         layout = manual_importer.extract_cdc_manual_layout(candidate_payload)
-        parsed = parse_cdc_specimen_layout(layout)
-        candidate_rows = [
-            curated_specimen_row(row, number, parsed.summary)
-            for number, row in enumerate(parsed.rows, start=1)
-        ]
-        reasons = drift_block_reasons(
-            summarize_rows(_served_rows(serving["db_path"])), summarize_rows(candidate_rows)
+        tables = parse_cdc_manual_tables(layout)
+        candidate_rows = {
+            table.name: [
+                curated_row(table, row, number, tables[table.name].summary)
+                for number, row in enumerate(tables[table.name].rows, start=1)
+            ]
+            for table in CDC_MANUAL_TABLES
+        }
+        reasons = manual_drift_block_reasons(
+            summarize_manual(lambda table: _served_rows(serving["db_path"], table)),
+            summarize_manual(lambda table: candidate_rows[table]),
         )
         if _reading_rules(serving["transform"]) != _reading_rules(
             active_cdc_manual_transform(None)
