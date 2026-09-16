@@ -63,7 +63,7 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 | `nhi_fee-snapshot-xxxxxxxxxxxx.zip` | 健保支付標準 | 約 2 MB |
 | `tfda_devices-snapshot-xxxxxxxxxxxx.zip` | 食藥署醫療器材許可證 | 約 65 MB |
 | `cdc_authorized_labs-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病認可檢驗機構名冊 | 約 0.5 MB |
-| `cdc_specimen_manual-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病檢體採檢手冊（第 2 章） | 約 4 MB |
+| `cdc_specimen_manual-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病檢體採檢手冊（第 2 章與第 7 章） | 約 4 MB |
 
 只想查其中一種資料，就只下載那一組。
 
@@ -230,7 +230,9 @@ taiwan-lab-data check cdc_specimen_manual --actor my-computer --data-dir <你的
 
 ## 已知限制
 
-- 疾管署採檢手冊只收錄第 2 章「傳染病檢體採檢及運送規定總覽表」；第 7 章送驗地點、檢驗方法與修訂對照表還沒收錄。
+- 疾管署採檢手冊收錄第 2 章「傳染病檢體採檢及運送規定總覽表」與第 7 章「傳染病檢體送驗地點及檢驗期間一覽表」（含 7.9 收件單位聯絡方式）。1150826 版為第 2 章 370 列、第 7 章 218 列、收件單位 4 筆。
+- 第 7 章的資料目前只存在資料庫裡，MCP 工具還沒有對應的查詢指令；問「這個檢體要送到哪裡驗」暫時查不到。
+- 修訂對照表只讀成「哪一頁改了什麼」的異動清單（1150826 版 20 筆），放在建置的稽核紀錄裡，不作為查詢內容。
 - 採檢手冊的「應保存種類（應保存時間）」是疾管署的保存規定，不是檢體送驗前的保存方式；送驗溫度與時間只在「送驗方式」或注意事項的原文裡。
 - 認可檢驗機構名冊查到的機構，只代表名冊上有這筆認可項目，不保證當次收件。
 - 「哪些健保項目屬於檢驗」由 AI 審核，紀錄見 [審核紀錄](reviews/nhi-lab-scope-ai-review-2026-09-14.md)。判不出來的代碼一律算檢驗；官方新版出現、還沒審過的代碼也先算檢驗，之後補審。所以「算檢驗」可能多收少數項目。
