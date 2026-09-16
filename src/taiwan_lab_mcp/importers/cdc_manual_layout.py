@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -173,7 +173,10 @@ _FRAME_TOLERANCE = 2.0
 # 116 pt or more).
 _CLAUSE_NUMBER_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*")
 _FIGURE_RE = re.compile(r"^圖\s*([0-9]+(?:\.[0-9]+)*)")
-_CLAUSE_CHAPTERS = frozenset("3456")
+# Chapters 2 and 7 are tables; the rest of the manual is read as clauses.
+_CLAUSE_CHAPTERS = frozenset("134568 9".replace(" ", ""))
+_APPENDIX_RE = re.compile(r"^附件[一二三四五六七八九十]+")
+_APPENDIX_CHAPTER = "附件"
 _CLAUSE_INDENT = 120.0
 _LINE_HEIGHT = 5.0
 # Chapters 3-6 keep a table row's cells apart with this mark.
@@ -1178,12 +1181,65 @@ def _join_wrapped(lines: Sequence[str]) -> str:
     return text
 
 
-def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
-    """Return chapters 3-6 as numbered clauses and figure captions, or raise.
+def _appendix_number(text: str) -> str | None:
+    found = _APPENDIX_RE.match(text)
+    return found.group(0) if found else None
 
-    These chapters are written as numbered steps, not tables: one row per clause (3.5.2) or
-    figure caption (圖 3.6), with the text as printed. Apart from the repeated page header, every
-    character of those pages belongs to exactly one row.
+
+def _prose_lines(
+    layout: Mapping[str, Any], table_pages: Collection[int] = ()
+) -> list[dict[str, Any]]:
+    """Return the lines of the manual that the tables do not already hold.
+
+    `table_pages` are the pages whose rows chapter 2 and chapter 7 already store. On those pages
+    only the figure captions and the lines under them are read; everywhere else the whole page is
+    read, the repeated page header aside.
+    """
+
+    wanted = set(table_pages)
+    out: list[dict[str, Any]] = []
+    for page in sorted(layout["pages"], key=lambda item: int(item["page_number"])):
+        number = int(page["page_number"])
+        page_text = _squeeze("".join(char["text"] for char in page["chars"]))
+        printed = _PRINTED_PAGE_RE.search(page_text)
+        version = _VERSION_RE.search(page_text)
+        approved = _APPROVED_DATE_RE.search(page_text)
+        on_table_page = number in wanted
+        under_caption = False
+        for text, x0, y0, x1, y1, from_table in _page_text_lines(page):
+            if any(_squeeze(text).startswith(_squeeze(item)) for item in _PAGE_HEADER_LINES):
+                continue
+            if on_table_page:
+                # Chapter 2 and chapter 7 pages: the rows are stored already, the captions are not.
+                if from_table:
+                    continue
+                if _FIGURE_RE.match(text):
+                    under_caption = True
+                elif not under_caption:
+                    continue
+            out.append(
+                {
+                    "text": text,
+                    "page": number,
+                    "printed_page": int(printed.group(1)) if printed else None,
+                    "manual_version": version.group(1) if version else None,
+                    "approved_date_raw": approved.group(1) if approved else None,
+                    "box": [x0, y0, x1, y1],
+                    "from_table": from_table,
+                }
+            )
+    return out
+
+
+def parse_cdc_manual_clauses(
+    layout: dict[str, Any], table_pages: Collection[int] = ()
+) -> CdcSpecimenLayoutResult:
+    """Return every part of the manual that is not a table row, or raise CdcManualLayoutError.
+
+    Chapters 1, 3, 4, 5, 6, 8 and 9 are written as numbered clauses, the appendices as forms, and
+    figures carry captions on every chapter's pages. Each clause, caption or appendix becomes one
+    row with the text as printed, so that apart from the page header and the table rows already
+    stored, every character of the manual belongs to exactly one row.
     """
 
     if not isinstance(layout, dict) or layout.get("layout_schema_version") != 1:
@@ -1191,85 +1247,65 @@ def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
     blocks: list[dict[str, Any]] = []
     version: str | None = None
     approved: str | None = None
-    started = False
-    finished = False
+    in_appendix = False
     try:
-        for page in sorted(layout["pages"], key=lambda item: int(item["page_number"])):
-            if finished:
-                break
-            number = int(page["page_number"])
-            page_text = _squeeze("".join(char["text"] for char in page["chars"]))
-            found_version = _VERSION_RE.search(page_text)
-            found_approved = _APPROVED_DATE_RE.search(page_text)
-            printed = _PRINTED_PAGE_RE.search(page_text)
-            for text, x0, y0, x1, y1, from_table in _page_text_lines(page):
-                if any(_squeeze(text).startswith(_squeeze(item)) for item in _PAGE_HEADER_LINES):
-                    continue
-                if from_table:
-                    # A numbered line inside a table cell is table content, never a clause.
-                    if started and blocks:
-                        blocks[-1]["lines"].append(_CELL_BREAK + text)
-                        pages_after = blocks[-1]["continues_on_pages"]
-                        if number != blocks[-1]["page"] and number not in pages_after:
-                            pages_after.append(number)
-                    continue
-                numbered = _clause_number(text) if started and x0 < _CLAUSE_INDENT else None
-                if numbered is not None and int(numbered[0].split(".")[0]) > 6:
-                    # Chapter 7 is a table again, and the appendices after it are numbered too.
-                    finished = True
-                    break
-                clause = _starts_clause(text, x0)
-                if clause is None and not started:
-                    # Everything before chapter 3 is read as tables, not as clauses.
-                    continue
-                if version is None or approved is None:
-                    if not (found_version and found_approved):
-                        raise CdcManualLayoutError("LAYOUT_VERSION_MISSING", f"page {number}")
-                    version, approved = found_version.group(1), found_approved.group(1)
-                figure = _FIGURE_RE.match(text)
-                if clause is not None:
-                    started = True
-                    previous = next(
-                        (item["number"] for item in reversed(blocks) if item["kind"] == "clause"),
-                        None,
-                    )
-                    if previous is not None and _clause_order(clause[0]) <= _clause_order(previous):
-                        raise CdcManualLayoutError("LAYOUT_CLAUSE_ORDER", clause[0])
-                    # The text keeps the number as printed, so a coverage check can compare
-                    # the stored rows with the page character by character.
-                    kind, block_number, first = "clause", clause[0], text
-                elif figure is not None:
-                    kind, block_number, first = "figure", figure.group(1), text
-                else:
-                    blocks[-1]["lines"].append(text)
-                    pages_after = blocks[-1]["continues_on_pages"]
-                    if number != blocks[-1]["page"] and number not in pages_after:
-                        pages_after.append(number)
-                    else:
-                        # The box covers the whole block on the page it starts.
-                        box = blocks[-1]["box"]
-                        box[0], box[1] = min(box[0], x0), min(box[1], y0)
-                        box[2], box[3] = max(box[2], x1), max(box[3], y1)
-                    continue
-                blocks.append(
-                    {
-                        "kind": kind,
-                        "number": block_number,
-                        "lines": [first],
-                        "page": number,
-                        "printed": int(printed.group(1)) if printed else None,
-                        "box": [x0, y0, x1, y1],
-                        "continues_on_pages": [],
-                    }
+        for line in _prose_lines(layout, table_pages):
+            text = line["text"]
+            appendix = _appendix_number(text)
+            figure = _FIGURE_RE.match(text)
+            clause = None if in_appendix else _starts_clause(text, line["box"][0])
+            if clause is None and figure is None and appendix is None and not blocks:
+                # The cover and the table of contents come before the first block.
+                continue
+            if version is None or approved is None:
+                if not (line["manual_version"] and line["approved_date_raw"]):
+                    raise CdcManualLayoutError("LAYOUT_VERSION_MISSING", f"page {line['page']}")
+                version, approved = line["manual_version"], line["approved_date_raw"]
+            if appendix is not None:
+                in_appendix = True
+                kind, number, first = "appendix", appendix, text
+            elif clause is not None:
+                previous = next(
+                    (item["number"] for item in reversed(blocks) if item["kind"] == "clause"),
+                    None,
                 )
+                if previous is not None and _clause_order(clause[0]) <= _clause_order(previous):
+                    raise CdcManualLayoutError("LAYOUT_CLAUSE_ORDER", clause[0])
+                # The text keeps the number as printed, so a coverage check can compare the
+                # stored rows with the page character by character.
+                kind, number, first = "clause", clause[0], text
+            elif figure is not None:
+                kind, number, first = "figure", figure.group(1), text
+            else:
+                blocks[-1]["lines"].append(_CELL_BREAK + text if line["from_table"] else text)
+                pages_after = blocks[-1]["continues_on_pages"]
+                if line["page"] != blocks[-1]["page"]:
+                    if line["page"] not in pages_after:
+                        pages_after.append(line["page"])
+                else:
+                    box, other = blocks[-1]["box"], line["box"]
+                    box[0], box[1] = min(box[0], other[0]), min(box[1], other[1])
+                    box[2], box[3] = max(box[2], other[2]), max(box[3], other[3])
+                continue
+            blocks.append(
+                {
+                    "kind": kind,
+                    "number": number,
+                    "lines": [first],
+                    "page": line["page"],
+                    "printed": line["printed_page"],
+                    "box": list(line["box"]),
+                    "continues_on_pages": [],
+                }
+            )
     except (KeyError, TypeError, ValueError) as exc:
         if isinstance(exc, CdcManualLayoutError):
             raise
         raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID") from exc
     if not blocks:
         raise CdcManualLayoutError("LAYOUT_NO_CLAUSES")
-    # 「3. 傳染病檢體採檢步驟」 names chapter 3 in every row's locator. Only the heading line
-    # is the name: chapter 4 prints its opening paragraph right under the title.
+    # 「3. 傳染病檢體採檢步驟」 names chapter 3 in every row's locator. Only the heading line is
+    # the name: chapter 4 prints its opening paragraph right under the title.
     headings = {
         block["number"]: (_clause_number(block["lines"][0]) or ("", ""))[1]
         for block in blocks
@@ -1277,8 +1313,15 @@ def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
     }
     rows = []
     for block in blocks:
-        chapter = block["number"].split(".")[0]
+        chapter = (
+            _APPENDIX_CHAPTER if block["kind"] == "appendix" else block["number"].split(".")[0]
+        )
         values = (block["kind"], block["number"], chapter, _join_wrapped(block["lines"]))
+        section = (
+            block["number"]
+            if block["kind"] == "appendix"
+            else f"{chapter} {headings.get(chapter, '')}".strip()
+        )
         rows.append(
             CdcSpecimenRow(
                 values=values,
@@ -1286,7 +1329,7 @@ def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
                     "locator_type": "cdc_pdf_row",
                     "pdf_page": block["page"],
                     "printed_page": block["printed"],
-                    "table_section": f"{chapter} {headings.get(chapter, '')}".strip(),
+                    "table_section": section,
                     "row_bbox": [round(value) for value in block["box"]],
                 },
                 source_row_sha256=sha256_bytes(canonical_json_bytes(list(values))),

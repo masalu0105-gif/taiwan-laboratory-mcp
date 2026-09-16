@@ -279,12 +279,12 @@ class CDCTestingLocationRecord(BaseModel):
 
 
 class CDCManualClauseRecord(BaseModel):
-    """One numbered clause or figure caption of manual chapters 3 to 6, as printed."""
+    """One numbered clause, figure caption or appendix form of the manual, as printed."""
 
     model_config = ConfigDict(extra="forbid")
 
     record_type: Literal["cdc_manual_clause"] = "cdc_manual_clause"
-    block_kind: Literal["clause", "figure"]
+    block_kind: Literal["clause", "figure", "appendix"]
     clause_number: str
     chapter: str
     text: str

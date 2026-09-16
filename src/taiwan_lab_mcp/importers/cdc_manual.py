@@ -41,7 +41,6 @@ from ..util import norm
 from .cdc_manual_layout import (
     _CELL_SEPARATOR,
     _HEADERS,
-    _PAGE_HEADER_LINES,
     CDC_CLAUSE_FIELDS,
     CDC_CLAUSE_TABLE,
     CDC_MANUAL_LAYOUT_RULES_VERSION,
@@ -54,7 +53,7 @@ from .cdc_manual_layout import (
     CdcSpecimenLayoutResult,
     CdcSpecimenRow,
     CdcTableSpec,
-    _page_text_lines,
+    _prose_lines,
     _read_page,
     _squeeze,
     parse_cdc_manual_clauses,
@@ -73,19 +72,20 @@ from .cdc_manual_pdf import (
 CDC_MANUAL_REVIEW_PROTOCOL_ID = "cdc-manual-r1-ai-review"
 # Version 2 adds the GitHub Release download bundle and the alias table (owner 2026-09-16);
 # version 3 adds chapter 7 and the revision table's change list (owner 2026-09-16, OD-18);
-# version 4 adds chapters 3 to 6 (owner 2026-09-16: 「第 3 到 6 章也做」).
-CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "4"
+# version 4 adds chapters 3 to 6 (owner 2026-09-16: 「第 3 到 6 章也做」);
+# version 5 adds the rest of the manual (owner 2026-09-16: 「全部把他做完」).
+CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "5"
 # Owner 2026-09-15: 「A 開始做疾管署」 (new manual versions switch automatically).
 CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID = "cdc-manual-r1-auto-review"
-CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION = "4"
+CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION = "5"
 _DELEGATED_REVIEW_PROTOCOLS = frozenset(
     {
         (CDC_MANUAL_REVIEW_PROTOCOL_ID, version)
-        for version in ("1", "2", "3", CDC_MANUAL_REVIEW_PROTOCOL_VERSION)
+        for version in ("1", "2", "3", "4", CDC_MANUAL_REVIEW_PROTOCOL_VERSION)
     }
     | {
         (CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID, version)
-        for version in ("1", "2", "3", CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION)
+        for version in ("1", "2", "3", "4", CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION)
     }
 )
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
@@ -323,9 +323,20 @@ def curated_specimen_row(
 
 
 def parse_cdc_manual_tables(layout: Mapping[str, Any]) -> dict[str, CdcSpecimenLayoutResult]:
-    """Read every table a build stores; a manual missing one of them is not built."""
+    """Read everything a build stores; a manual missing any of it is not built.
 
-    return {table.name: table.parse(dict(layout)) for table in CDC_MANUAL_TABLES}
+    The tables come first: chapters 3 to 6, 1, 8, 9 and the appendices are read from the pages
+    the tables did not already take, so nothing is stored twice.
+    """
+
+    parsed = {
+        table.name: table.parse(dict(layout))
+        for table in CDC_MANUAL_TABLES
+        if table.name != CDC_CLAUSE_TABLE
+    }
+    table_pages = {page for result in parsed.values() for page in result.summary["table_pages"]}
+    parsed[CDC_CLAUSE_TABLE] = parse_cdc_manual_clauses(dict(layout), table_pages)
+    return parsed
 
 
 def _write_curated_db(db_path: Path, parsed: Mapping[str, CdcSpecimenLayoutResult]) -> None:
@@ -1450,18 +1461,26 @@ def cdc_manual_revision_change_list(
 CDC_MANUAL_CLAUSE_CHECK = "cdc-manual-clause-coverage-v1"
 
 
+def _manual_table_pages(layout: Mapping[str, Any]) -> set[int]:
+    """The pages whose rows the chapter 2 and chapter 7 tables already store."""
+
+    return {
+        page
+        for table in CDC_MANUAL_TABLES
+        if table.spec is not None
+        for page in table.parse(dict(layout)).summary["table_pages"]
+    }
+
+
 def _printed_clause_text(layout: Mapping[str, Any], pages: Sequence[int]) -> str:
-    """Return the text printed on those pages, without the repeated page header."""
+    """Return what those pages print outside the stored table rows and the page header."""
 
     wanted = set(pages)
-    printed = []
-    for page in sorted(layout["pages"], key=lambda item: int(item["page_number"])):
-        if int(page["page_number"]) not in wanted:
-            continue
-        for text, *_ in _page_text_lines(page):
-            if any(_squeeze(text).startswith(_squeeze(item)) for item in _PAGE_HEADER_LINES):
-                continue
-            printed.append(text.replace(_CELL_SEPARATOR, ""))
+    printed = [
+        line["text"].replace(_CELL_SEPARATOR, "")
+        for line in _prose_lines(layout, _manual_table_pages(layout))
+        if line["page"] in wanted
+    ]
     return _squeeze("".join(printed))
 
 
@@ -1484,7 +1503,9 @@ def verify_cdc_manual_clause_coverage(
         ]
     finally:
         connection.close()
-    pages = parse_cdc_manual_clauses(dict(layout)).summary["table_pages"]
+    pages = parse_cdc_manual_clauses(dict(layout), _manual_table_pages(layout)).summary[
+        "table_pages"
+    ]
     stored = _squeeze("".join(row["text"] for row in rows).replace(_CELL_SEPARATOR, ""))
     printed = _printed_clause_text(layout, pages)
     if stored != printed:

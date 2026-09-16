@@ -43,10 +43,31 @@ class _ProsePage:
         }
 
 
-def clause_pages():
-    """The chapter 3-6 pages other test modules add to a synthetic manual layout."""
+def _chapter1_page():
+    page = _ProsePage(11, 1)
+    page.line("1. 通則", left=73.9)
+    page.line("1.1.名詞解釋", left=85.1)
+    page.line("傳染病檢體：依據傳染病防治法第四條規定。", left=100.6)
+    return page
 
-    return (_first_page(), _second_page())
+
+def _map_page():
+    page = _ProsePage(122, 112)
+    page.line("8.疾病管制署南港臨時辦公室地理位置圖", left=59.2)
+    return page
+
+
+def _appendix_page():
+    page = _ProsePage(124, 114)
+    page.line("附件一", left=50.1)
+    page.line("送達時間： 年 月 日 時 分", left=60.0)
+    return page
+
+
+def clause_pages():
+    """The prose pages other test modules add to a synthetic manual layout."""
+
+    return (_chapter1_page(), _first_page(), _second_page(), _map_page(), _appendix_page())
 
 
 def _layout(*pages):
@@ -139,8 +160,9 @@ def test_clause_numbers_that_go_backwards_are_rejected():
     assert error.value.code == "LAYOUT_CLAUSE_ORDER"
 
 
-def test_chapter_2_captions_on_the_same_page_are_not_read_as_chapter_3():
+def test_a_chapter_2_caption_is_kept_as_its_own_row():
     # Chapter 3 starts halfway down page 69; above it the page still carries chapter 2 figures.
+    # Their captions are printed text that no table row holds, so they are stored as captions.
     from taiwan_lab_mcp.importers.cdc_manual_layout import parse_cdc_manual_clauses
 
     page = _ProsePage(69, 59)
@@ -151,5 +173,27 @@ def test_chapter_2_captions_on_the_same_page_are_not_read_as_chapter_3():
 
     rows = parse_cdc_manual_clauses(_layout(page)).rows
 
-    assert [row.fields()["clause_number"] for row in rows] == ["3", "3.1"]
-    assert all("圖 2.5" not in (row.fields()["text"] or "") for row in rows)
+    assert [(row.fields()["clause_number"], row.fields()["block_kind"]) for row in rows] == [
+        ("2.5", "figure"),
+        ("3", "clause"),
+        ("3.1", "clause"),
+    ]
+    assert rows[0].fields()["text"] == "圖 2.5（A）細菌專用採檢拭子。（A-1）內容物為棉棒一根。"
+    assert rows[0].fields()["chapter"] == "2"
+
+
+def test_chapters_1_8_9_and_the_appendices_are_read_too():
+    # Owner 2026-09-16: 「全部把他做完」 — chapter 1, the map, the autopsy chapter and the forms.
+    from taiwan_lab_mcp.importers.cdc_manual_layout import parse_cdc_manual_clauses
+
+    rows = parse_cdc_manual_clauses(_layout(_chapter1_page(), _map_page(), _appendix_page())).rows
+
+    assert [(row.fields()["clause_number"], row.fields()["chapter"]) for row in rows] == [
+        ("1", "1"),
+        ("1.1", "1"),
+        ("8", "8"),
+        ("附件一", "附件"),
+    ]
+    assert rows[1].fields()["text"] == "1.1.名詞解釋傳染病檢體：依據傳染病防治法第四條規定。"
+    assert rows[3].fields()["block_kind"] == "appendix"
+    assert rows[3].locator["table_section"] == "附件一"

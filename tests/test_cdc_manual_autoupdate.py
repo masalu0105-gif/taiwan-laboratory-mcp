@@ -144,7 +144,7 @@ def test_changed_manual_is_published_when_every_check_passes(tmp_path, distribut
     assert (review["reviewer_id"], review["protocol_id"], review["protocol_version"]) == (
         AUTO_REVIEWER,
         "cdc-manual-r1-auto-review",
-        "4",
+        "5",
     )
     assert "cdc-manual-tag-check" in {ref["artifact_id"] for ref in review["evidence_refs"]}
 

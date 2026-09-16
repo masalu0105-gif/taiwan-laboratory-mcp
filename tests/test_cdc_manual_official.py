@@ -313,8 +313,9 @@ def test_a_testing_location_without_a_matching_contact_still_answers(tmp_path):
     assert second.receiving_unit_contacts[0].phone == "04-24737980"
 
 
-def test_database_keeps_chapters_3_to_6_as_numbered_clauses(tmp_path):
-    # Owner 2026-09-16: chapters 3-6 are the numbered steps, stored beside the tables.
+def test_database_keeps_every_part_of_the_manual_that_is_not_a_table_row(tmp_path):
+    # Owner 2026-09-16 (「全部把他做完」): chapter 1, the numbered steps, the map, the autopsy
+    # chapter and the appendix forms are stored beside the chapter 2 and chapter 7 tables.
     built = _offline(tmp_path)
     db_path = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"] / "data.sqlite3"
 
@@ -323,13 +324,20 @@ def test_database_keeps_chapters_3_to_6_as_numbered_clauses(tmp_path):
     rows = connection.execute("SELECT * FROM cdc_manual_clause ORDER BY row_number").fetchall()
     connection.close()
 
-    assert [(row["clause_number"], row["block_kind"]) for row in rows][:4] == [
+    assert [(row["clause_number"], row["block_kind"]) for row in rows] == [
+        ("1", "clause"),
+        ("1.1", "clause"),
         ("3", "clause"),
         ("3.1", "clause"),
         ("3.1.1", "clause"),
         ("3.1.1.1", "clause"),
+        ("3.1", "figure"),
+        ("3.2", "clause"),
+        ("3.2.1", "clause"),
+        ("8", "clause"),
+        ("附件一", "appendix"),
     ]
-    first = rows[2]
+    first = rows[4]
     assert first["text"].startswith("3.1.1.適用傳染病項目：傷寒")
     assert (first["chapter"], first["table_section"]) == ("3", "3 傳染病檢體採檢步驟")
     assert (first["pdf_page"], first["printed_page"]) == (69, 59)
@@ -348,7 +356,7 @@ def test_the_clause_coverage_check_compares_every_character(tmp_path):
 
     assert name == "clause-coverage.json"
     assert (report["check"], report["mismatches"]) == ("cdc-manual-clause-coverage-v1", [])
-    assert report["pages_compared"] == [69, 70]
+    assert report["pages_compared"] == [11, 69, 70, 122, 124]
     assert report["characters_compared"] > 100
 
 
@@ -384,6 +392,11 @@ def test_search_manual_procedure_answers_from_chapters_3_to_6(tmp_path):
         ("3.1", "figure"),
     ]
     assert adapter.search_manual_procedure("狂犬病").result_status == "not_found"
+    # Chapter 1, the map, the autopsy chapter and the appendix forms answer through the same tool.
+    definitions = adapter.search_manual_procedure("名詞解釋").items[0].record
+    assert (definitions.chapter, definitions.clause_number) == ("1", "1.1")
+    form = adapter.search_manual_procedure("附件一").items[0].record
+    assert (form.block_kind, form.chapter) == ("appendix", "附件")
 
 
 def test_a_manual_without_chapter_7_is_not_built(tmp_path):
@@ -738,7 +751,7 @@ def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution, pdf
     review = json.loads((build_dir / "audit" / "reviews" / "CDC-R1-CONTENT.json").read_bytes())
     assert (review["reviewer_id"], review["reviewer_role"]) == (REVIEWER, ROLE)
     # Version 3 adds chapter 7 and the revision table to the reviewed scope (OD-18).
-    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "4")
+    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "5")
     # The revision table stays in the same raw revision and is listed as review evidence.
     references = {reference["artifact_id"]: reference for reference in review["evidence_refs"]}
     assert {"cdc-manual-pdf", "cdc-manual-revision-pdf", "cdc-manual-fetch-record"} <= set(

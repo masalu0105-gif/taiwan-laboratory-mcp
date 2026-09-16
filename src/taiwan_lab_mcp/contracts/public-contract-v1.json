@@ -2875,7 +2875,7 @@
       "model": "taiwan_lab_mcp.models.CDCManualClauseRecord",
       "schema": {
         "additionalProperties": false,
-        "description": "One numbered clause or figure caption of manual chapters 3 to 6, as printed.",
+        "description": "One numbered clause, figure caption or appendix form of the manual, as printed.",
         "properties": {
           "record_type": {
             "const": "cdc_manual_clause",
@@ -2886,7 +2886,8 @@
           "block_kind": {
             "enum": [
               "clause",
-              "figure"
+              "figure",
+              "appendix"
             ],
             "title": "Block Kind",
             "type": "string"
@@ -3315,7 +3316,7 @@
           },
           "CDCManualClauseRecord": {
             "additionalProperties": false,
-            "description": "One numbered clause or figure caption of manual chapters 3 to 6, as printed.",
+            "description": "One numbered clause, figure caption or appendix form of the manual, as printed.",
             "properties": {
               "record_type": {
                 "const": "cdc_manual_clause",
@@ -3326,7 +3327,8 @@
               "block_kind": {
                 "enum": [
                   "clause",
-                  "figure"
+                  "figure",
+                  "appendix"
                 ],
                 "title": "Block Kind",
                 "type": "string"
