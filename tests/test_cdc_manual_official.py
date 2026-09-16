@@ -36,12 +36,20 @@ def _pages():
     return module
 
 
-def _chapter7():
-    path = Path(__file__).with_name("test_cdc_manual_chapter7.py")
-    spec = importlib.util.spec_from_file_location("cdc_manual_chapter7_pages", path)
+def _sibling(name, module_name):
+    path = Path(__file__).with_name(name)
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _chapter7():
+    return _sibling("test_cdc_manual_chapter7.py", "cdc_manual_chapter7_pages")
+
+
+def _clauses():
+    return _sibling("test_cdc_manual_clauses.py", "cdc_manual_clause_pages")
 
 
 def _layout():
@@ -49,7 +57,10 @@ def _layout():
     # Page 14: one row whose cells wrap; pages 16-17: typhoid rows and a dengue row; pages
     # 93-121: the chapter 7 testing locations and receiving units (OD-18).
     return pages._layout(
-        pages._display_page(), *pages._typhoid_pages(), *_chapter7().chapter7_pages()
+        pages._display_page(),
+        *pages._typhoid_pages(),
+        *_clauses().clause_pages(),
+        *_chapter7().chapter7_pages(),
     )
 
 
@@ -300,6 +311,45 @@ def test_a_testing_location_without_a_matching_contact_still_answers(tmp_path):
         "疾病管制署中區實驗室"
     ]
     assert second.receiving_unit_contacts[0].phone == "04-24737980"
+
+
+def test_database_keeps_chapters_3_to_6_as_numbered_clauses(tmp_path):
+    # Owner 2026-09-16: chapters 3-6 are the numbered steps, stored beside the tables.
+    built = _offline(tmp_path)
+    db_path = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"] / "data.sqlite3"
+
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    rows = connection.execute("SELECT * FROM cdc_manual_clause ORDER BY row_number").fetchall()
+    connection.close()
+
+    assert [(row["clause_number"], row["block_kind"]) for row in rows][:4] == [
+        ("3", "clause"),
+        ("3.1", "clause"),
+        ("3.1.1", "clause"),
+        ("3.1.1.1", "clause"),
+    ]
+    first = rows[2]
+    assert first["text"].startswith("3.1.1.適用傳染病項目：傷寒")
+    assert (first["chapter"], first["table_section"]) == ("3", "3 傳染病檢體採檢步驟")
+    assert (first["pdf_page"], first["printed_page"]) == (69, 59)
+    assert first["text_search"] == norm(first["text_display"])
+
+
+def test_the_clause_coverage_check_compares_every_character(tmp_path):
+    from taiwan_lab_mcp.importers.cdc_manual import verify_cdc_manual_clause_coverage
+
+    layout = _layout()
+    built = _offline(tmp_path, layout)
+    db_path = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"] / "data.sqlite3"
+
+    _, name, payload = verify_cdc_manual_clause_coverage(layout, db_path)
+    report = json.loads(payload)
+
+    assert name == "clause-coverage.json"
+    assert (report["check"], report["mismatches"]) == ("cdc-manual-clause-coverage-v1", [])
+    assert report["pages_compared"] == [69, 70]
+    assert report["characters_compared"] > 100
 
 
 def test_a_manual_without_chapter_7_is_not_built(tmp_path):
@@ -654,7 +704,7 @@ def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution, pdf
     review = json.loads((build_dir / "audit" / "reviews" / "CDC-R1-CONTENT.json").read_bytes())
     assert (review["reviewer_id"], review["reviewer_role"]) == (REVIEWER, ROLE)
     # Version 3 adds chapter 7 and the revision table to the reviewed scope (OD-18).
-    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "3")
+    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "4")
     # The revision table stays in the same raw revision and is listed as review evidence.
     references = {reference["artifact_id"]: reference for reference in review["evidence_refs"]}
     assert {"cdc-manual-pdf", "cdc-manual-revision-pdf", "cdc-manual-fetch-record"} <= set(

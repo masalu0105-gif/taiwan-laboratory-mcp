@@ -43,6 +43,12 @@ class _ProsePage:
         }
 
 
+def clause_pages():
+    """The chapter 3-6 pages other test modules add to a synthetic manual layout."""
+
+    return (_first_page(), _second_page())
+
+
 def _layout(*pages):
     return {"layout_schema_version": 1, "pages": [page.build() for page in pages]}
 

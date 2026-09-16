@@ -153,7 +153,7 @@ CDC_RECEIVING_UNIT_SPEC = CdcTableSpec(
     anchor="單位名稱",
 )
 _SPECS = (CDC_SPECIMEN_SPEC, CDC_TESTING_LOCATION_SPEC, CDC_RECEIVING_UNIT_SPEC)
-CDC_MANUAL_TABLE_NAMES = tuple(spec.name for spec in _SPECS)
+CDC_MANUAL_TABLE_NAMES = (*(spec.name for spec in _SPECS), CDC_CLAUSE_TABLE)
 _HEADERS = {text: field for spec in _SPECS for text, field in spec.headers.items()}
 _ANCHORS = frozenset(spec.anchor for spec in _SPECS)
 _RULE_END_TOLERANCE = 0.5

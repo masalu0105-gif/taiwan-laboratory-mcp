@@ -39,17 +39,25 @@ from ..models import GoldenCaseV1
 from ..publish import publish_current_descriptor
 from ..util import norm
 from .cdc_manual_layout import (
+    _CELL_SEPARATOR,
     _HEADERS,
+    _PAGE_HEADER_LINES,
+    CDC_CLAUSE_FIELDS,
+    CDC_CLAUSE_TABLE,
     CDC_MANUAL_LAYOUT_RULES_VERSION,
+    CDC_RECEIVING_UNIT_FIELDS,
     CDC_RECEIVING_UNIT_SPEC,
     CDC_SPECIMEN_FIELDS,
     CDC_SPECIMEN_SPEC,
+    CDC_TESTING_LOCATION_FIELDS,
     CDC_TESTING_LOCATION_SPEC,
     CdcSpecimenLayoutResult,
     CdcSpecimenRow,
     CdcTableSpec,
+    _page_text_lines,
     _read_page,
     _squeeze,
+    parse_cdc_manual_clauses,
     parse_cdc_receiving_units,
     parse_cdc_revision_entries,
     parse_cdc_specimen_layout,
@@ -64,19 +72,20 @@ from .cdc_manual_pdf import (
 # Owner 2026-09-15: 「Ai全程代審 不用特別備注未經人工審核」 covers the specimen manual (OD-04).
 CDC_MANUAL_REVIEW_PROTOCOL_ID = "cdc-manual-r1-ai-review"
 # Version 2 adds the GitHub Release download bundle and the alias table (owner 2026-09-16);
-# version 3 adds chapter 7 and the revision table's change list (owner 2026-09-16, OD-18).
-CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "3"
+# version 3 adds chapter 7 and the revision table's change list (owner 2026-09-16, OD-18);
+# version 4 adds chapters 3 to 6 (owner 2026-09-16: 「第 3 到 6 章也做」).
+CDC_MANUAL_REVIEW_PROTOCOL_VERSION = "4"
 # Owner 2026-09-15: 「A 開始做疾管署」 (new manual versions switch automatically).
 CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID = "cdc-manual-r1-auto-review"
-CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION = "3"
+CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION = "4"
 _DELEGATED_REVIEW_PROTOCOLS = frozenset(
     {
         (CDC_MANUAL_REVIEW_PROTOCOL_ID, version)
-        for version in ("1", "2", CDC_MANUAL_REVIEW_PROTOCOL_VERSION)
+        for version in ("1", "2", "3", CDC_MANUAL_REVIEW_PROTOCOL_VERSION)
     }
     | {
         (CDC_MANUAL_AUTO_REVIEW_PROTOCOL_ID, version)
-        for version in ("1", "2", CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION)
+        for version in ("1", "2", "3", CDC_MANUAL_AUTO_REVIEW_PROTOCOL_VERSION)
     }
 )
 _MINIMUM_OFFICIAL_GOLDEN_CASES = 10
@@ -114,25 +123,25 @@ _REQUIRED_LOCATOR_TEXT = frozenset(
 
 @dataclass(frozen=True)
 class CdcCuratedTable:
-    """One stored table: the layout spec it reads and the column queries search on."""
+    """One stored table: how it is read and the column queries search on."""
 
-    spec: CdcTableSpec
+    name: str
+    fields: tuple[str, ...]
     parse: Callable[[dict[str, Any]], CdcSpecimenLayoutResult]
     search_column: str
     search_field: str
     # The key a golden case gives this table's rows in its `input`.
     input_key: str
-
-    @property
-    def name(self) -> str:
-        return self.spec.name
+    # A table read from Word table tags is cross-checked against them; chapters 3-6 are prose and
+    # are checked character by character against the page instead.
+    spec: CdcTableSpec | None = None
 
     @property
     def columns(self) -> tuple[str, ...]:
         return (
             *_LOCATOR_COLUMNS,
-            *self.spec.fields,
-            *(f"{field}_display" for field in self.spec.fields),
+            *self.fields,
+            *(f"{field}_display" for field in self.fields),
             self.search_column,
         )
 
@@ -147,17 +156,40 @@ class CdcCuratedTable:
 
 CDC_MANUAL_TABLES = (
     CdcCuratedTable(
-        CDC_SPECIMEN_SPEC, parse_cdc_specimen_layout, "disease_search", "disease", "disease"
+        CDC_SPECIMEN_SPEC.name,
+        CDC_SPECIMEN_FIELDS,
+        parse_cdc_specimen_layout,
+        "disease_search",
+        "disease",
+        "disease",
+        CDC_SPECIMEN_SPEC,
     ),
     CdcCuratedTable(
-        CDC_TESTING_LOCATION_SPEC,
+        CDC_TESTING_LOCATION_SPEC.name,
+        CDC_TESTING_LOCATION_FIELDS,
         parse_cdc_testing_locations,
         "disease_search",
         "disease",
         "disease",
+        CDC_TESTING_LOCATION_SPEC,
     ),
     CdcCuratedTable(
-        CDC_RECEIVING_UNIT_SPEC, parse_cdc_receiving_units, "unit_search", "unit_name", "unit"
+        CDC_RECEIVING_UNIT_SPEC.name,
+        CDC_RECEIVING_UNIT_FIELDS,
+        parse_cdc_receiving_units,
+        "unit_search",
+        "unit_name",
+        "unit",
+        CDC_RECEIVING_UNIT_SPEC,
+    ),
+    # Chapters 3-6: numbered steps, searched by their own text (owner 2026-09-16).
+    CdcCuratedTable(
+        CDC_CLAUSE_TABLE,
+        CDC_CLAUSE_FIELDS,
+        parse_cdc_manual_clauses,
+        "text_search",
+        "text",
+        "text",
     ),
 )
 CDC_MANUAL_ROW_COLUMNS = CDC_MANUAL_TABLES[0].columns
@@ -344,7 +376,7 @@ def active_cdc_manual_transform(layout_sha256: str | None) -> dict[str, Any]:
                 {
                     "fields": list(CDC_SPECIMEN_FIELDS),
                     "rules": CDC_MANUAL_LAYOUT_RULES_VERSION,
-                    "tables": {table.name: list(table.spec.fields) for table in CDC_MANUAL_TABLES},
+                    "tables": {table.name: list(table.fields) for table in CDC_MANUAL_TABLES},
                 }
             ),
         },
@@ -1067,7 +1099,7 @@ def _load_official_raw_revision(data_root: Path, raw_revision_id: str) -> dict[s
 _EXPECTED_FIELDS = frozenset(
     name
     for table in CDC_MANUAL_TABLES
-    for field in table.spec.fields
+    for field in table.fields
     for name in (field, f"{field}_display")
 )
 
@@ -1307,7 +1339,7 @@ def _word_tag_rows(
     return [
         {
             field: None if record.get(field) is None else "".join(record[field] or ())
-            for field in curated.spec.fields
+            for field in curated.fields
         }
         for record in records
     ]
@@ -1333,11 +1365,13 @@ def verify_cdc_manual_rows_against_tags(
     mismatches: list[dict[str, Any]] = []
     compared: dict[str, dict[str, int]] = {}
     for table in CDC_MANUAL_TABLES:
+        if table.spec is None:
+            continue
         rows = stored[table.name]
         tagged = _word_tag_rows(layout, sorted({row["pdf_page"] for row in rows}), table)
         compared[table.name] = {
             "rows_compared": len(rows),
-            "cells_compared": len(rows) * len(table.spec.fields),
+            "cells_compared": len(rows) * len(table.fields),
         }
         if len(tagged) != len(rows):
             mismatches.append(
@@ -1350,7 +1384,7 @@ def verify_cdc_manual_rows_against_tags(
                 }
             )
         for row, record in zip(rows, tagged):
-            for field in table.spec.fields:
+            for field in table.fields:
                 value = None if row[field] is None else _squeeze(row[field])
                 if value != record[field]:
                     mismatches.append(
@@ -1411,6 +1445,72 @@ def cdc_manual_revision_change_list(
         ],
     }
     return "cdc-manual-revision-changes", "revision-changes.json", canonical_json_bytes(report)
+
+
+CDC_MANUAL_CLAUSE_CHECK = "cdc-manual-clause-coverage-v1"
+
+
+def _printed_clause_text(layout: Mapping[str, Any], pages: Sequence[int]) -> str:
+    """Return the text printed on those pages, without the repeated page header."""
+
+    wanted = set(pages)
+    printed = []
+    for page in sorted(layout["pages"], key=lambda item: int(item["page_number"])):
+        if int(page["page_number"]) not in wanted:
+            continue
+        for text, *_ in _page_text_lines(page):
+            if any(_squeeze(text).startswith(_squeeze(item)) for item in _PAGE_HEADER_LINES):
+                continue
+            printed.append(text.replace(_CELL_SEPARATOR, ""))
+    return _squeeze("".join(printed))
+
+
+def verify_cdc_manual_clause_coverage(
+    layout: Mapping[str, Any], db_path: Path
+) -> tuple[str, str, bytes]:
+    """Check the stored chapters 3-6 against the pages character by character; raise on any gap.
+
+    Chapters 3-6 are prose, so there are no Word table tags to compare cell by cell. Instead the
+    stored rows are put back together in order and must equal what those pages print: nothing
+    dropped, nothing duplicated, nothing moved.
+    """
+
+    connection = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    try:
+        rows = [
+            dict(row)
+            for row in connection.execute(f"SELECT * FROM {CDC_CLAUSE_TABLE} ORDER BY row_number")
+        ]
+    finally:
+        connection.close()
+    pages = parse_cdc_manual_clauses(dict(layout)).summary["table_pages"]
+    stored = _squeeze("".join(row["text"] for row in rows).replace(_CELL_SEPARATOR, ""))
+    printed = _printed_clause_text(layout, pages)
+    if stored != printed:
+        position = next(
+            (index for index, (a, b) in enumerate(zip(stored, printed)) if a != b),
+            min(len(stored), len(printed)),
+        )
+        raise CdcManualImportError(
+            "CLAUSE_TEXT_COVERAGE_MISMATCH",
+            json.dumps(
+                {
+                    "position": position,
+                    "stored": stored[max(0, position - 40) : position + 40],
+                    "printed": printed[max(0, position - 40) : position + 40],
+                },
+                ensure_ascii=False,
+            ),
+        )
+    report = {
+        "check": CDC_MANUAL_CLAUSE_CHECK,
+        "rows_compared": len(rows),
+        "pages_compared": pages,
+        "characters_compared": len(stored),
+        "mismatches": [],
+    }
+    return "cdc-manual-clause-check", "clause-coverage.json", canonical_json_bytes(report)
 
 
 def build_official_cdc_manual_snapshot(
@@ -1507,6 +1607,7 @@ def build_official_cdc_manual_snapshot(
         official=True,
         pre_publish_checks=[
             lambda db_path: verify_cdc_manual_rows_against_tags(layout, db_path),
+            lambda db_path: verify_cdc_manual_clause_coverage(layout, db_path),
             *([pre_publish_check] if pre_publish_check is not None else []),
         ],
     )

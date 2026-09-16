@@ -31,6 +31,7 @@ def _module(name):
 
 PAGES = _module("layout")
 CHAPTER7 = _module("chapter7")
+CLAUSES = _module("clauses")
 REVISION = _module("revision")
 SOURCE = _module("source")
 SERVING_PDF = SOURCE._pdf("manual")
@@ -45,7 +46,12 @@ def _now():
 
 def _serving_layout():
     # Chapter 7 is stored in the same build, so every fixture manual carries its pages (OD-18).
-    return PAGES._layout(PAGES._display_page(), *PAGES._typhoid_pages(), *CHAPTER7.chapter7_pages())
+    return PAGES._layout(
+        PAGES._display_page(),
+        *PAGES._typhoid_pages(),
+        *CLAUSES.clause_pages(),
+        *CHAPTER7.chapter7_pages(),
+    )
 
 
 def _changed_layout():
@@ -138,7 +144,7 @@ def test_changed_manual_is_published_when_every_check_passes(tmp_path, distribut
     assert (review["reviewer_id"], review["protocol_id"], review["protocol_version"]) == (
         AUTO_REVIEWER,
         "cdc-manual-r1-auto-review",
-        "3",
+        "4",
     )
     assert "cdc-manual-tag-check" in {ref["artifact_id"] for ref in review["evidence_refs"]}
 
@@ -148,7 +154,9 @@ def test_large_change_is_held_back_and_reported_once(tmp_path, distribution, rea
 
     built = _serve(tmp_path, readers)
     # Chapter 2 drops from four rows to one; chapter 7 is unchanged.
-    readers[NEW_PDF] = PAGES._layout(PAGES._display_page(), *CHAPTER7.chapter7_pages())
+    readers[NEW_PDF] = PAGES._layout(
+        PAGES._display_page(), *CLAUSES.clause_pages(), *CHAPTER7.chapter7_pages()
+    )
 
     first = _auto(tmp_path, NEW_PDF)
     assert (first["result"], first["already_reported"]) == ("blocked", False)
@@ -170,7 +178,11 @@ def test_a_new_manual_that_loses_chapter_7_rows_is_held_back(tmp_path, distribut
     pages = CHAPTER7.chapter7_pages()
     # The same manual minus the chapter 7 testing-location page: 3 rows become 1.
     readers[NEW_PDF] = PAGES._layout(
-        PAGES._display_page(), *PAGES._typhoid_pages(), pages[1], pages[2]
+        PAGES._display_page(),
+        *PAGES._typhoid_pages(),
+        *CLAUSES.clause_pages(),
+        pages[1],
+        pages[2],
     )
 
     summary = _auto(tmp_path, NEW_PDF)
@@ -190,7 +202,9 @@ def test_a_new_manual_that_loses_chapter_7_rows_is_held_back(tmp_path, distribut
 
 def test_a_new_manual_without_chapter_7_is_not_published(tmp_path, distribution, readers):
     built = _serve(tmp_path, readers)
-    readers[NEW_PDF] = PAGES._layout(PAGES._display_page(), *PAGES._typhoid_pages())
+    readers[NEW_PDF] = PAGES._layout(
+        PAGES._display_page(), *PAGES._typhoid_pages(), *CLAUSES.clause_pages()
+    )
 
     summary = _auto(tmp_path, NEW_PDF)
 
