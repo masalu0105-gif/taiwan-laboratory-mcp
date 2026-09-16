@@ -266,6 +266,50 @@ taiwan-lab-data check cdc_specimen_manual --actor my-computer --data-dir <你的
 - 不支援查歷史點數；查過去日期會明確回「不支援」。
 - macOS 目前由 GitHub 自動測試驗證，還沒有在實體 Mac 上完整走過這份安裝流程。
 
+## 進階：一台主機服務多個人
+
+上面所有做法都是「每個人各自裝在自己電腦上」。另外有一種接法是把它架在一台主機上，
+其他人只要在 Claude 裡貼一個網址就能用，不必安裝、不必下載資料，手機和網頁版的 Claude 也能用。
+
+這一節是給架主機的人看的。要用的人只要拿到網址。
+
+### 跑起來
+
+```bash
+TAIWAN_LAB_DATA_MODE=official_snapshot TAIWAN_LAB_DATA_DIR=/srv/taiwan-lab-data TAIWAN_LAB_HTTP_HOST=127.0.0.1 TAIWAN_LAB_HTTP_PORT=8080 taiwan-lab-mcp-http
+```
+
+| 環境變數 | 預設 | 說明 |
+| --- | --- | --- |
+| `TAIWAN_LAB_HTTP_HOST` | `127.0.0.1` | 只聽這台電腦。要讓外面連得到才改成 `0.0.0.0` |
+| `TAIWAN_LAB_HTTP_PORT` | `8080` | 監聽的 port |
+| `TAIWAN_LAB_HTTP_PATH` | `/mcp` | 網址路徑 |
+| `TAIWAN_LAB_HTTP_ALLOWED_HOSTS` | 空 | 逗號分隔，別人會用的網域名稱（例如 `lab.example.com`）|
+
+**兩個安全規則，缺一就不會啟動**（會印出原因並以離開代碼 2 結束）：
+
+1. `TAIWAN_LAB_HTTP_HOST` 不是本機位址時，一定要給 `TAIWAN_LAB_HTTP_ALLOWED_HOSTS`。
+   沒有這份清單的話，任何解析到這台機器的名稱都能驅動這個服務。
+2. 同樣情況下，`TAIWAN_LAB_DATA_MODE` 一定要是 `official_snapshot`。
+   範例資料是合成的，只適合自己在本機試工具，不該拿去回答別人。
+
+推薦的做法是**只聽 `127.0.0.1`，再用 tunnel（例如 Cloudflare Tunnel）把它接到一個網域**。
+這樣主機完全不用對外開 port，也不必處理憑證。
+
+### 讓別人連進來
+
+在 Claude 裡：設定 → Connectors → `+` → 填名稱和網址（`https://你的網域/mcp`）→ Add。
+
+注意 Claude 是**從 Anthropic 的雲端**連到你的主機，不是從使用者的電腦連。所以這台主機必須從
+公開網路連得到；放在公司內網或 VPN 後面會連不上。
+
+### 目前的狀態與尚未決定的事
+
+- 程式已經完成，本機（含真實正式資料）測過：24 個工具、實際查詢、兩個安全規則都驗過。
+- **還沒有實際架在公開主機上跑過**，所以還沒有可以直接用的公開網址。
+- 架主機的人看得到別人查了什麼。要不要留紀錄、隱私聲明怎麼寫，本專案還沒有決定，
+  也還沒有提供身分驗證或用量限制。自己架的人要自行斟酌。
+
 ## 遇到問題或有建議
 
 歡迎直接回報，這是改進這個工具的主要方式：

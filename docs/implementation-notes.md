@@ -1352,6 +1352,23 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 審核規則第 5 版：把第 1、8、9 章與附件、圖說、以及「表格頁只補讀圖說」寫進版面關；內容關加「附件表單照原樣呈現、不能當成已填好的紀錄」「第 1 章定義照原文、不改寫成建議」；驗收題再加一題（第 1／8／9 章或附件）。
 - 本機重建：build `cdc_specimen_manual-build-a5b9ff095f07…`、generation 7，18 題驗收題全過，第 18 題（1.1 名詞解釋）我算圖對過頁面，含紅字修訂的「疾管署」照原文存成一般文字。
 
+### 用網址連的接法（2026-09-17，OD-21，owner：「對，開始寫那一層」）
+
+- 起因：owner 問「有沒有辦法我自己養一個後端，他們用 MCP 對那個後端發請求」，這樣使用者不必下載 72 MB 資料。MCP 官方規格本來就有兩種傳輸：stdio（本機子行程）與 Streamable HTTP；Claude 的自訂 connector 走後者，而且是從 Anthropic 雲端連到伺服器，所以 claude.ai 與手機 App 也能用。
+- 新檔 `src/taiwan_lab_mcp/http_server.py`＋console script `taiwan-lab-mcp-http`。`build_http_app()` 掛的是同一個 `server.mcp`，所以兩種接法不可能提供不同的工具集。
+- 沒有新增任何套件依賴：`uvicorn`、`starlette`、`httpx2` 都隨 `mcp>=2.2.0` 進來（實測 uvicorn 0.53.0、starlette 1.6.0、httpx2 2.13.0）。
+- `stateless_http=True`：每個 operation 都是對 snapshot 的唯讀查詢，沒有跨請求狀態；重開伺服器不會斷掉任何人的 session。
+- fail-closed 兩條（`HttpSettings.check()`，host 不是 loopback 時才適用）：
+  1. 沒有 `TAIWAN_LAB_HTTP_ALLOWED_HOSTS` 就拒絕啟動。空清單配上 SDK 預設的 DNS rebinding 保護會變成「全部拒絕」，而關掉保護則是任何解析到本機的名稱都能驅動它，兩種都不該當預設。
+  2. `TAIWAN_LAB_DATA_MODE` 不是 `official_snapshot` 就拒絕啟動。合成 fixture 雖然每筆都標 `sample_only`，但公開端點誤送合成資料是無聲的錯。
+  兩條都印中文原因並以 exit code 2 結束（實測過兩種情況）。
+- 有允許清單時開 DNS rebinding 保護，`allowed_origins` 取同一批名稱的 `https://`。
+- TDD：先寫 `tests/test_http_transport.py`（8 題）跑出 7 fail 的紅燈，再實作。其中兩題是真的 HTTP 來回——用 `httpx2.ASGITransport` 把 MCP client 接到 app，比對 24 個 operation 名稱，並實際呼叫 `get_data_status`。
+  - 坑：in-process 呼叫 ASGI app 不會跑 lifespan，而 StreamableHTTP session manager 只在 lifespan 啟動，會得到 `RuntimeError: Task group is not initialized`。測試改成 `async with app.router.lifespan_context(app):` 包起來。
+  - 坑：`Client(...)` 要收 transport 的 context manager 本身，不是已經 unpack 的 streams tuple。
+- 實機驗證（不是只有測試）：以 `TAIWAN_LAB_DATA_MODE=official_snapshot` 指向正式 data root、聽 127.0.0.1:8099，用真的 MCP client 連上去：24 個工具；`get_testing_location(登革熱)` 4 筆、`search_manual_procedure(不良檢體)` 2 筆、`get_points(09006C)` 1 筆，全部 `data_mode=official_snapshot`、`is_error=False`。
+- 尚未做／尚未決定：還沒有實際架在公開主機上（owner 考慮 Grok Bot 雲端 VM，那台機器能不能跑常駐程式、能不能對外服務、條款允不允許，都還沒查證）；沒有身分驗證與用量限制；架主機的人會看得到查詢內容，要不要留紀錄與隱私聲明怎麼寫還沒決定。
+
 ### 自動發下載包修好並補發（2026-09-17，owner：「修一修 然後把下載包發出去」）
 
 - 症狀：2026-09-16 09:30 排程的發布步驟 `exit=6`、`{"result":"failed","reasons":["KeyError:'rows'"]}`；GitHub 上的下載包停在手冊 build `cdc_specimen_manual-snapshot-2c40d87bd71c.zip`，沒有第 7 章與第 3–9 章。
