@@ -242,6 +242,42 @@ class CDCSpecimenRecord(BaseModel):
     notes: str | None
 
 
+class CDCReceivingUnitContact(BaseModel):
+    """One 7.9 receiving unit as the manual prints it (OD-18)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    unit_name: str
+    phone: str | None
+    fax: str | None
+    address: str | None
+
+
+class CDCTestingLocationRecord(BaseModel):
+    """One chapter 7 row: where a test is sent and how long it takes (OD-18).
+
+    The manual prints 檢驗期限 in most sections and 檢驗期間 in 7.7 (autopsy specimens), so the
+    two official column names stay separate fields and are never merged into one duration.
+    `receiving_unit_contacts` are the 7.9 rows whose unit name appears in this row's 收件單位
+    text; the join happens when the question is answered and every contact keeps its own page,
+    section and row hash in the item's evidence.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: Literal["cdc_testing_location"] = "cdc_testing_location"
+    disease: str
+    collecting_unit: str | None
+    specimen: str | None
+    method: str | None
+    turnaround_raw: str | None
+    testing_period_raw: str | None
+    receiving_unit: str | None
+    bsl_raw: str | None
+    notes: str | None
+    receiving_unit_contacts: list[CDCReceivingUnitContact]
+
+
 class CDCLabRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -347,7 +383,13 @@ class TFDASearchRecord(BaseModel):
 
 
 Record = Union[
-    NHIRecord, NHISearchRecord, CDCSpecimenRecord, CDCLabRecord, TFDARecord, TFDASearchRecord
+    NHIRecord,
+    NHISearchRecord,
+    CDCSpecimenRecord,
+    CDCTestingLocationRecord,
+    CDCLabRecord,
+    TFDARecord,
+    TFDASearchRecord,
 ]
 
 # Audit records use internal source ids; tfda_devices projects to public tfda_device (SDD 11).
@@ -577,6 +619,7 @@ OperationName = Literal[
     "get_container",
     "get_transport_requirement",
     "get_submission_rule",
+    "get_testing_location",
     "find_authorized_lab",
     "get_lab_scope",
     "search_payment_items",

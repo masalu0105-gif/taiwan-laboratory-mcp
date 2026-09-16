@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import json
 from contextlib import closing
 from typing import Any
 
 from ..config import DataContext
-from ..importers.cdc_manual_layout import CDC_SPECIMEN_FIELDS
+from ..importers.cdc_manual_layout import (
+    CDC_RECEIVING_UNIT_FIELDS,
+    CDC_SPECIMEN_FIELDS,
+    CDC_TESTING_LOCATION_FIELDS,
+)
 from ..importers.cdc_ods import CDC_LABS_FIELD_NAMES
-from ..models import CDCLabRecord, CDCSpecimenRecord, ToolResult
+from ..models import (
+    CDCLabRecord,
+    CDCReceivingUnitContact,
+    CDCSpecimenRecord,
+    CDCTestingLocationRecord,
+    Evidence,
+    ToolResult,
+)
 from ..sources import CDC_LABS, CDC_SPECIMEN
 from ..util import contains_any, norm
 from .base import invalid_result, load_sample, result_from_rows, unavailable_result
@@ -57,6 +69,55 @@ def _official_specimen_record(row: dict[str, Any]) -> CDCSpecimenRecord:
     return CDCSpecimenRecord(**{name: row[f"{name}_display"] for name in CDC_SPECIMEN_FIELDS})
 
 
+def _sample_testing_location_record(row: dict[str, Any]) -> CDCTestingLocationRecord:
+    contacts = row.get("receiving_unit_contacts") or []
+    return CDCTestingLocationRecord(
+        disease=row.get("disease", ""),
+        collecting_unit=row.get("collecting_unit"),
+        specimen=row.get("specimen"),
+        method=row.get("method"),
+        turnaround_raw=row.get("turnaround_raw"),
+        testing_period_raw=row.get("testing_period_raw"),
+        receiving_unit=row.get("receiving_unit"),
+        bsl_raw=row.get("bsl_raw"),
+        notes=row.get("notes"),
+        receiving_unit_contacts=[CDCReceivingUnitContact(**contact) for contact in contacts],
+    )
+
+
+def _testing_location_record(row: dict[str, Any]) -> CDCTestingLocationRecord:
+    return CDCTestingLocationRecord(
+        **{name: row[f"{name}_display"] for name in CDC_TESTING_LOCATION_FIELDS},
+        receiving_unit_contacts=[
+            CDCReceivingUnitContact(
+                **{name: unit[f"{name}_display"] for name in CDC_RECEIVING_UNIT_FIELDS}
+            )
+            for unit in row["receiving_unit_contacts"]
+        ],
+    )
+
+
+def _contact_evidence(row: dict[str, Any]) -> list[Evidence]:
+    """Where each quoted 7.9 contact was read from, so it can be checked in the manual."""
+
+    from ..models import CdcLocator
+
+    return [
+        Evidence(
+            artifact_id="cdc-manual-pdf",
+            source_row_sha256=unit["source_row_sha256"],
+            locator=CdcLocator(
+                pdf_page=int(unit["pdf_page"]),
+                printed_page=unit["printed_page"],
+                table_section=unit["table_section"],
+                row_bbox=json.loads(unit["row_bbox"]),
+            ),
+            raw_value_available=True,
+        )
+        for unit in row["receiving_unit_contacts"]
+    ]
+
+
 def _official_lab_record(row: dict[str, Any]) -> CDCLabRecord:
     # Raw roster values unchanged, including a blank proficiency testing review.
     return CDCLabRecord(**{name: row[name] for name in CDC_LABS_FIELD_NAMES})
@@ -81,9 +142,11 @@ class CDCAdapter:
         if self.context.mode == "sample":
             self.specimens = load_sample("cdc_specimen.sample.json")
             self.labs = load_sample("cdc_labs.sample.json")
+            self.testing_locations = load_sample("cdc_testing_location.sample.json")
         else:
             self.specimens = []
             self.labs = []
+            self.testing_locations = []
 
     def _official_specimens(self, query: str, request: dict[str, Any]) -> ToolResult:
         from ..cdc_manual_store import read_cdc_manual_state, search_specimen_rows
@@ -143,6 +206,54 @@ class CDCAdapter:
         payload["operation"] = "get_specimen_requirement"
         payload["query"] = {"disease": disease}
         return ToolResult.model_validate(payload)
+
+    def get_testing_location(self, disease: Any) -> ToolResult:
+        """Chapter 7: which unit receives the specimen, by which method, and how long it takes."""
+
+        from ..cdc_manual_store import read_cdc_manual_state, search_testing_location_rows
+        from ..tfda_store import connect_readonly
+
+        request = {"disease": disease}
+        if not _valid_text(disease):
+            return invalid_result(
+                operation="get_testing_location",
+                query=request,
+                data_mode=self.context.mode,
+                note="disease 必須是非空字串。",
+            )
+        if self.context.mode == "sample":
+            nq = norm(disease)
+            rows = [row for row in self.testing_locations if nq in norm(row["disease"])]
+            return result_from_rows(
+                operation="get_testing_location",
+                query=request,
+                rows=rows,
+                provenance=CDC_SPECIMEN,
+                record_factory=_sample_testing_location_record,
+                source_id="cdc_manual",
+            )
+        assert self.context.data_root is not None
+        state = read_cdc_manual_state(self.context.data_root, clock=self.context.clock)
+        if state.availability != "available" or state.db_path is None or state.provenance is None:
+            return unavailable_result(
+                operation="get_testing_location",
+                query=request,
+                reason=state.reason or "no_serving_snapshot",
+                note="疾管署採檢手冊正式資料尚未建立，或沒有通過完整性檢查。",
+                source_status=state.status,
+            )
+        with closing(connect_readonly(state.db_path)) as connection:
+            rows = search_testing_location_rows(connection, query=disease)
+        return result_from_rows(
+            operation="get_testing_location",
+            query=request,
+            rows=rows,
+            provenance=state.provenance,
+            record_factory=_testing_location_record,
+            source_id="cdc_manual",
+            source_status=state.status,
+            extra_evidence=_contact_evidence,
+        )
 
     def find_authorized_lab(
         self, query: Any, city: Any = None, limit: Any = CDC_LABS_PAGE_MAX, offset: Any = 0

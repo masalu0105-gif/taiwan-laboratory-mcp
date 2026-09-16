@@ -238,6 +238,70 @@ def test_database_keeps_chapter_7_testing_locations_and_receiving_units(tmp_path
     assert units[0]["unit_search"] == norm("疾病管制署南港臨時辦公室")
 
 
+def test_get_testing_location_answers_with_the_receiving_unit_contacts(tmp_path):
+    # Owner 2026-09-16 chose B: one tool, and it already carries the 7.9 contact details so
+    # nobody has to ask a second question.
+    _offline(tmp_path)
+
+    result = _adapter(tmp_path).get_testing_location("天花")
+
+    assert (result.operation, result.query, result.total_matches) == (
+        "get_testing_location",
+        {"disease": "天花"},
+        2,
+    )
+    first = result.items[0]
+    assert first.record.model_dump() == {
+        "record_type": "cdc_testing_location",
+        "disease": "天花",
+        "collecting_unit": "全國各醫療院所",
+        "specimen": "水疱液、膿疱內容物",
+        "method": "病原體分離、鑑定",
+        "turnaround_raw": "4-5 工作日",
+        "testing_period_raw": None,
+        "receiving_unit": "疾病管制署南港臨時辦公室",
+        "bsl_raw": "3",
+        "notes": "1.新增送驗單及條碼。",
+        "receiving_unit_contacts": [
+            {
+                "unit_name": "疾病管制署南港臨時辦公室",
+                "phone": "02-81735678",
+                "fax": "02-27850288",
+                "address": "11529 台北市南港區研究院路二段 128 號",
+            }
+        ],
+    }
+    # The row and each contact carry their own page, section and row hash.
+    assert [(e.locator.pdf_page, e.locator.table_section) for e in first.evidence] == [
+        (93, "7.1 第一類法定傳染病"),
+        (121, "7.9 收件單位聯絡方式"),
+    ]
+    assert first.safety["not_pre_submission_storage"] is True
+    assert "非疾管署官方服務，內容以疾管署公告為準。" in result.notes
+    # 7.7 prints 檢驗期間 instead of 檢驗期限 and has no BSL column.
+    autopsy = _adapter(tmp_path).get_testing_location("疑似傳染病").items[0].record
+    assert (autopsy.testing_period_raw, autopsy.turnaround_raw, autopsy.bsl_raw) == (
+        "14 個工作日",
+        None,
+        None,
+    )
+    assert _adapter(tmp_path).get_testing_location("狂犬病").result_status == "not_found"
+
+
+def test_a_testing_location_without_a_matching_contact_still_answers(tmp_path):
+    # The second 天花 row is received by 中區實驗室, which 7.9 lists with its own contact.
+    _offline(tmp_path)
+
+    second = _adapter(tmp_path).get_testing_location("天花").items[1].record
+
+    # The fixture's cell breaks the unit name over two lines; matching ignores the break.
+    assert second.receiving_unit == "疾病管制署" + chr(10) + "中區實驗室"
+    assert [contact.unit_name for contact in second.receiving_unit_contacts] == [
+        "疾病管制署中區實驗室"
+    ]
+    assert second.receiving_unit_contacts[0].phone == "04-24737980"
+
+
 def test_a_manual_without_chapter_7_is_not_built(tmp_path):
     from taiwan_lab_mcp.importers.cdc_manual_layout import CdcManualLayoutError
 

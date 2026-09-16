@@ -72,6 +72,12 @@ def get_submission_rule(disease: str) -> ToolResult:
 
 
 @mcp.tool()
+def get_testing_location(disease: str) -> ToolResult:
+    """Where a CDC specimen is sent and how long the test takes, with the receiving unit's phone, fax and address. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; not_pre_submission_storage=true. 不得輸入病人資料。手冊第 7 章：一種疾病常有好幾列（不同檢驗方法各一列），檢驗期限與 7.7 的檢驗期間是不同欄位，不可互相代用。"""
+    return cdc.get_testing_location(disease)
+
+
+@mcp.tool()
 def find_authorized_lab(
     query: str, city: str | None = None, limit: int = 20, offset: int = 0
 ) -> ToolResult:

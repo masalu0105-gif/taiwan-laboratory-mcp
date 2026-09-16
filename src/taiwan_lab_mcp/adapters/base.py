@@ -134,6 +134,7 @@ def result_from_rows(
     total_matches: int | None = None,
     item_warnings: Callable[[dict[str, Any]], list[str]] | None = None,
     coverage_detail: dict[str, Any] | None = None,
+    extra_evidence: Callable[[dict[str, Any]], list[Evidence]] | None = None,
 ) -> ToolResult:
     # total_matches means the caller already paged the rows (TFDA pages inside SQLite).
     if total_matches is None:
@@ -151,7 +152,10 @@ def result_from_rows(
                     source_row_sha256=row.get("source_row_sha256", row_digest(row)),
                     locator=_row_locator(source_id, row, index),
                     raw_value_available=True,
-                )
+                ),
+                # A row that quotes another table's row (chapter 7 quoting a 7.9 contact) shows
+                # where that came from too.
+                *(extra_evidence(row) if extra_evidence else ()),
             ],
             item_warnings=item_warnings(row) if item_warnings else [],
             safety=make_safety(operation),

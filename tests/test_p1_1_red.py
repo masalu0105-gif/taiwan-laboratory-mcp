@@ -7,15 +7,16 @@ import pytest
 from pydantic import ValidationError
 
 
-def test_public_contract_resource_declares_closed_22_tool_registry():
+def test_public_contract_resource_declares_closed_23_tool_registry():
     contract = json.loads(
         files("taiwan_lab_mcp")
         .joinpath("contracts", "public-contract-v1.json")
         .read_text(encoding="utf-8")
     )
     assert contract["contract_version"] == "public-contract-v1"
-    assert len(contract["operations"]) == 22
-    assert len({operation["name"] for operation in contract["operations"]}) == 22
+    # 23 since the owner chose one chapter 7 tool on 2026-09-16 (PRD OD-18).
+    assert len(contract["operations"]) == 23
+    assert len({operation["name"] for operation in contract["operations"]}) == 23
     assert {operation["name"] for operation in contract["operations"]} == {
         "get_data_status",
         "search_disease",
@@ -24,6 +25,7 @@ def test_public_contract_resource_declares_closed_22_tool_registry():
         "get_container",
         "get_transport_requirement",
         "get_submission_rule",
+        "get_testing_location",
         "find_authorized_lab",
         "get_lab_scope",
         "search_payment_items",

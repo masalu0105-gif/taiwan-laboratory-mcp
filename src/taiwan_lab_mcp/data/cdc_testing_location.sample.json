@@ -1,0 +1,74 @@
+[
+  {
+    "disease": "示範傳染病甲",
+    "collecting_unit": "示範醫療院所",
+    "specimen": "示範檢體",
+    "method": "示範檢驗方法",
+    "turnaround_raw": "3 工作日",
+    "testing_period_raw": null,
+    "receiving_unit": "示範收件實驗室",
+    "bsl_raw": "2",
+    "notes": "合成示範資料，不可用於實際送驗。",
+    "receiving_unit_contacts": [
+      {
+        "unit_name": "示範收件實驗室",
+        "phone": "00-00000000",
+        "fax": "00-00000001",
+        "address": "示範地址"
+      }
+    ],
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_testing_location.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：cdc_testing_location",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_testing_location.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "cdc_testing_location.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    },
+    "note": "合成示範資料：只供第 7 章送驗地點查詢的形狀示範；尚未匯入官方資料。"
+  },
+  {
+    "disease": "示範傳染病乙",
+    "collecting_unit": "示範解剖機構",
+    "specimen": "示範解剖檢體",
+    "method": "示範病原體檢測",
+    "turnaround_raw": null,
+    "testing_period_raw": "詳見示範章節",
+    "receiving_unit": "示範收件實驗室",
+    "bsl_raw": null,
+    "notes": "合成示範資料，示範 7.7 只印檢驗期間、沒有 BSL 欄的情形。",
+    "receiving_unit_contacts": [
+      {
+        "unit_name": "示範收件實驗室",
+        "phone": "00-00000000",
+        "fax": "00-00000001",
+        "address": "示範地址"
+      }
+    ],
+    "sample_only": true,
+    "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_testing_location.sample.json",
+    "version": "sample-v0.1",
+    "updated_at": null,
+    "provenance": {
+      "source_name": "Taiwan Laboratory MCP 合成示範資料：cdc_testing_location",
+      "source_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/src/taiwan_lab_mcp/data/cdc_testing_location.sample.json",
+      "version": "sample-v0.1",
+      "updated_at": null,
+      "updated_at_note": "合成 fixture，沒有官方資料更新日期；尚未匯入正式資料。",
+      "method": "synthetic",
+      "locator": "cdc_testing_location.sample.json",
+      "retrieved_at": null,
+      "license": "MIT",
+      "license_url": "https://github.com/masalu0105-gif/taiwan-laboratory-mcp/blob/main/LICENSE"
+    },
+    "note": "合成示範資料：只供第 7 章送驗地點查詢的形狀示範；尚未匯入官方資料。"
+  }
+]

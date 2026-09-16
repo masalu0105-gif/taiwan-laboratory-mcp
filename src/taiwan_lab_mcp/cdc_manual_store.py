@@ -28,15 +28,22 @@ CDC_MANUAL_INTERNAL_SOURCE_ID = "cdc_specimen_manual"
 # The manual page declares no update schedule; the project checks it daily, so two missed daily
 # checks mark the snapshot overdue (same as the roster).
 CDC_MANUAL_CHECK_OVERDUE_AFTER = timedelta(days=2)
+
+
 # The exact disease name first, then names starting with the query, then names containing it.
-_SEARCH_SQL = """SELECT * FROM (
+def _search_sql(table: str) -> str:
+    return f"""SELECT * FROM (
     SELECT *, CASE
         WHEN disease_search = :query THEN 0
         WHEN instr(disease_search, :query) = 1 THEN 1
         WHEN instr(disease_search, :query) > 0 THEN 2
     END AS tier
-    FROM cdc_specimen_requirement
+    FROM {table}
 ) WHERE tier IS NOT NULL ORDER BY tier, row_number"""
+
+
+_SEARCH_SQL = _search_sql("cdc_specimen_requirement")
+_TESTING_LOCATION_SQL = _search_sql("cdc_testing_location")
 
 
 @dataclass(frozen=True)
@@ -176,3 +183,32 @@ def search_specimen_rows(connection: sqlite3.Connection, *, query: str) -> list[
     term = norm(query)
     term = load_cdc_disease_aliases().get(term, term)
     return [dict(row) for row in connection.execute(_SEARCH_SQL, {"query": term})]
+
+
+def search_testing_location_rows(
+    connection: sqlite3.Connection, *, query: str
+) -> list[dict[str, Any]]:
+    """Chapter 7 rows whose disease name matches, with the 7.9 contacts they are received by.
+
+    Owner 2026-09-16 chose one tool (OD-18), so each row carries the contact details of every
+    receiving unit 7.9 lists whose name appears in that row's 收件單位 text. Nothing is merged
+    in the database: the join happens here and each contact keeps its own stored row.
+    """
+
+    from .importers.cdc_manual import load_cdc_disease_aliases
+
+    term = norm(query)
+    term = load_cdc_disease_aliases().get(term, term)
+    rows = [dict(row) for row in connection.execute(_TESTING_LOCATION_SQL, {"query": term})]
+    if not rows:
+        return rows
+    units = [
+        dict(unit)
+        for unit in connection.execute("SELECT * FROM cdc_receiving_unit ORDER BY row_number")
+    ]
+    for row in rows:
+        received_by = norm(row["receiving_unit_display"])
+        row["receiving_unit_contacts"] = [
+            unit for unit in units if unit["unit_search"] and unit["unit_search"] in received_by
+        ]
+    return rows

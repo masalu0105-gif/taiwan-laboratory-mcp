@@ -208,6 +208,38 @@
       }
     },
     {
+      "name": "get_testing_location",
+      "classification": "active",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "disease",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_testing_location",
+      "request_schema": {
+        "properties": {
+          "disease": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "disease"
+        ]
+      }
+    },
+    {
       "name": "find_authorized_lab",
       "classification": "active",
       "source": "cdc_recognized_labs",
@@ -2607,6 +2639,199 @@
         "title": "TFDASearchRecord",
         "type": "object"
       }
+    },
+    "cdc_testing_location": {
+      "required": [
+        "disease",
+        "collecting_unit",
+        "specimen",
+        "method",
+        "turnaround_raw",
+        "testing_period_raw",
+        "receiving_unit",
+        "bsl_raw",
+        "notes",
+        "receiving_unit_contacts"
+      ],
+      "model": "taiwan_lab_mcp.models.CDCTestingLocationRecord",
+      "schema": {
+        "$defs": {
+          "CDCReceivingUnitContact": {
+            "additionalProperties": false,
+            "description": "One 7.9 receiving unit as the manual prints it (OD-18).",
+            "properties": {
+              "unit_name": {
+                "title": "Unit Name",
+                "type": "string"
+              },
+              "phone": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Phone"
+              },
+              "fax": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Fax"
+              },
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              }
+            },
+            "required": [
+              "unit_name",
+              "phone",
+              "fax",
+              "address"
+            ],
+            "title": "CDCReceivingUnitContact",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "description": "One chapter 7 row: where a test is sent and how long it takes (OD-18).\n\nThe manual prints 檢驗期限 in most sections and 檢驗期間 in 7.7 (autopsy specimens), so the\ntwo official column names stay separate fields and are never merged into one duration.\n`receiving_unit_contacts` are the 7.9 rows whose unit name appears in this row's 收件單位\ntext; the join happens when the question is answered and every contact keeps its own page,\nsection and row hash in the item's evidence.",
+        "properties": {
+          "record_type": {
+            "const": "cdc_testing_location",
+            "default": "cdc_testing_location",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "disease": {
+            "title": "Disease",
+            "type": "string"
+          },
+          "collecting_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collecting Unit"
+          },
+          "specimen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Specimen"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "turnaround_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turnaround Raw"
+          },
+          "testing_period_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Testing Period Raw"
+          },
+          "receiving_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receiving Unit"
+          },
+          "bsl_raw": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bsl Raw"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "receiving_unit_contacts": {
+            "items": {
+              "$ref": "#/$defs/CDCReceivingUnitContact"
+            },
+            "title": "Receiving Unit Contacts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "disease",
+          "collecting_unit",
+          "specimen",
+          "method",
+          "turnaround_raw",
+          "testing_period_raw",
+          "receiving_unit",
+          "bsl_raw",
+          "notes",
+          "receiving_unit_contacts"
+        ],
+        "title": "CDCTestingLocationRecord",
+        "type": "object"
+      }
     }
   },
   "locator_schemas": {
@@ -3007,6 +3232,57 @@
             "title": "CDCLabRecord",
             "type": "object"
           },
+          "CDCReceivingUnitContact": {
+            "additionalProperties": false,
+            "description": "One 7.9 receiving unit as the manual prints it (OD-18).",
+            "properties": {
+              "unit_name": {
+                "title": "Unit Name",
+                "type": "string"
+              },
+              "phone": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Phone"
+              },
+              "fax": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Fax"
+              },
+              "address": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              }
+            },
+            "required": [
+              "unit_name",
+              "phone",
+              "fax",
+              "address"
+            ],
+            "title": "CDCReceivingUnitContact",
+            "type": "object"
+          },
           "CDCSpecimenRecord": {
             "additionalProperties": false,
             "properties": {
@@ -3109,6 +3385,131 @@
               "notes"
             ],
             "title": "CDCSpecimenRecord",
+            "type": "object"
+          },
+          "CDCTestingLocationRecord": {
+            "additionalProperties": false,
+            "description": "One chapter 7 row: where a test is sent and how long it takes (OD-18).\n\nThe manual prints 檢驗期限 in most sections and 檢驗期間 in 7.7 (autopsy specimens), so the\ntwo official column names stay separate fields and are never merged into one duration.\n`receiving_unit_contacts` are the 7.9 rows whose unit name appears in this row's 收件單位\ntext; the join happens when the question is answered and every contact keeps its own page,\nsection and row hash in the item's evidence.",
+            "properties": {
+              "record_type": {
+                "const": "cdc_testing_location",
+                "default": "cdc_testing_location",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "disease": {
+                "title": "Disease",
+                "type": "string"
+              },
+              "collecting_unit": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Collecting Unit"
+              },
+              "specimen": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Specimen"
+              },
+              "method": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Method"
+              },
+              "turnaround_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Turnaround Raw"
+              },
+              "testing_period_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Testing Period Raw"
+              },
+              "receiving_unit": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Receiving Unit"
+              },
+              "bsl_raw": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Bsl Raw"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "receiving_unit_contacts": {
+                "items": {
+                  "$ref": "#/$defs/CDCReceivingUnitContact"
+                },
+                "title": "Receiving Unit Contacts",
+                "type": "array"
+              }
+            },
+            "required": [
+              "disease",
+              "collecting_unit",
+              "specimen",
+              "method",
+              "turnaround_raw",
+              "testing_period_raw",
+              "receiving_unit",
+              "bsl_raw",
+              "notes",
+              "receiving_unit_contacts"
+            ],
+            "title": "CDCTestingLocationRecord",
             "type": "object"
           },
           "CdcLocator": {
@@ -3221,6 +3622,7 @@
                   "mapping": {
                     "cdc_recognized_lab": "#/$defs/CDCLabRecord",
                     "cdc_specimen": "#/$defs/CDCSpecimenRecord",
+                    "cdc_testing_location": "#/$defs/CDCTestingLocationRecord",
                     "nhi_fee": "#/$defs/NHIRecord",
                     "nhi_fee_summary": "#/$defs/NHISearchRecord",
                     "tfda_device": "#/$defs/TFDARecord",
@@ -3237,6 +3639,9 @@
                   },
                   {
                     "$ref": "#/$defs/CDCSpecimenRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/CDCTestingLocationRecord"
                   },
                   {
                     "$ref": "#/$defs/CDCLabRecord"
@@ -4723,6 +5128,7 @@
               "get_container",
               "get_transport_requirement",
               "get_submission_rule",
+              "get_testing_location",
               "find_authorized_lab",
               "get_lab_scope",
               "search_payment_items",
@@ -4897,6 +5303,7 @@
                   "get_container",
                   "get_transport_requirement",
                   "get_submission_rule",
+                  "get_testing_location",
                   "find_authorized_lab",
                   "get_lab_scope",
                   "search_payment_items",
