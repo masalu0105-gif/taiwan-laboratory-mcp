@@ -11,6 +11,29 @@ Windows 與 macOS 各有對應指令，照你的電腦選一種做就好。全�
 
 > 這是個人維護的開源工具，**不是健保署、食藥署或疾管署的官方服務**，內容以三個機關的公告為準。查到的點數不能直接當成金額，也不能用來判斷個案可不可以申報；查到的許可證不能直接當作醫療器材廣告或效能宣傳素材；認可檢驗機構名冊查到的機構不保證當次收件。
 
+## 最快的做法：一鍵安裝腳本
+
+不想自己打指令的話，用這支腳本，它會把下面第 1 到第 5 步全部做完：下載、核對 SHA-256、安裝、
+改 Claude 的設定檔（會先備份原本的）。重跑一次是安全的，已經裝好的資料會回「已安裝」不動它。
+
+**Windows**（開 PowerShell 貼上）：
+
+```powershell
+irm https://raw.githubusercontent.com/masalu0105-gif/taiwan-laboratory-mcp/main/scripts/Install-TaiwanLabMcp.ps1 -OutFile "$env:TEMP\Install-TaiwanLabMcp.ps1"; powershell -ExecutionPolicy Bypass -File "$env:TEMP\Install-TaiwanLabMcp.ps1"
+```
+
+**macOS**（開終端機貼上）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/masalu0105-gif/taiwan-laboratory-mcp/main/scripts/install-taiwan-lab-mcp.sh -o /tmp/install-taiwan-lab-mcp.sh && bash /tmp/install-taiwan-lab-mcp.sh
+```
+
+只想裝其中幾種資料，在後面加上 `-Datasets nhi_fee,cdc_specimen_manual`（Windows）或
+`--datasets nhi_fee,cdc_specimen_manual`（macOS）。其他可以填的參數用 `-?`／`--help` 看。
+
+腳本做的事跟底下的手動步驟一模一樣，想知道每一步在做什麼、或腳本中途停下來要怎麼查，就往下讀。
+macOS 版目前還沒有在實體 Mac 上完整跑過（見〈已知限制〉）。
+
 ## 事前準備
 
 - 一台可以上網的 Windows 10／11 或 macOS 電腦。

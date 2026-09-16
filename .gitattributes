@@ -1,0 +1,6 @@
+# Shell scripts must keep LF: a CRLF line ending makes bash fail with "\r: command not found".
+*.sh text eol=lf
+
+# Windows PowerShell 5.1 reads a .ps1 as the system code page unless the file starts with a
+# UTF-8 BOM, so this one is kept byte for byte (see tests/test_installer_script.py).
+*.ps1 -text
