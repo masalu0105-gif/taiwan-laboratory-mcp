@@ -116,7 +116,8 @@ def _provenance(descriptor: dict[str, Any], manifest: dict[str, Any], now: datet
         license_name=source["license_name"],
         license_url=source["license_url"],
         attribution=cdc_labs_attribution_text(source, official, retrieved_at),
-        # Every chapter 2 row of the manual is served.
+        # Every chapter 2 row is served. Chapter 7 is stored in the same build but no tool
+        # answers from it yet (PRD OD-18 still open), so it does not change this coverage.
         coverage_status="complete",
         stale=bool(stale_reason_codes),
         stale_reason_codes=stale_reason_codes,
