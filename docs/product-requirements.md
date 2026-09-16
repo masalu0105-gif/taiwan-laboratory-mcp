@@ -68,7 +68,7 @@ P1.1 的核心價值是「縮短找到官方資料並核對原文的時間」。
 
 ### 5.3 Canonical operation matrix
 
-本表是 P1.1 public MCP contract 的封閉 operation registry；公開集合必須與表中 23 個 exact names 完全相等（~~22 個~~ 2026-09-16 owner 為手冊第 7 章選一個工具，加入 `get_testing_location`，OD-18）。Machine-readable 真源目前已建立於 package resource `src/taiwan_lab_mcp/contracts/public-contract-v1.json`，內容同時包含 operation、request／response schemas、source payload／locator schemas、public enum、freshness、TFDA warning 與 safety registries；source／installed-wheel equality verification 已完成。SDD 可使用不同內部物件，但必須一對一 mapping，TDD 以 package resource 對 MCP `list_tools` 做集合、signature 與 response-schema equality，禁止 repo-relative fallback。
+本表是 P1.1 public MCP contract 的封閉 operation registry；公開集合必須與表中 24 個 exact names 完全相等（~~22 個~~ 2026-09-16 owner 為手冊第 7 章選一個工具，加入 `get_testing_location`，OD-18；同日再加手冊第 3–6 章的 `search_manual_procedure`，OD-20）。Machine-readable 真源目前已建立於 package resource `src/taiwan_lab_mcp/contracts/public-contract-v1.json`，內容同時包含 operation、request／response schemas、source payload／locator schemas、public enum、freshness、TFDA warning 與 safety registries；source／installed-wheel equality verification 已完成。SDD 可使用不同內部物件，但必須一對一 mapping，TDD 以 package resource 對 MCP `list_tools` 做集合、signature 與 response-schema equality，禁止 repo-relative fallback。
 
 共同型別規則：`string` 必須是 trim 後非空字串；nullable string 只接受 `null` 或非空字串；`limit` 是 1–100 的 integer（搜尋類 operation `search_payment_items`、`search_reviewed_ivd`、`search_ivd_candidates`、`list_matching_license_records`、`find_manufacturer` 為 1–5、預設 5（owner 2026-09-15 先說「給20筆就很夠了」，同日改為「20筆好像還是有點太多，還是給5筆 有需要的話可以再進一步找」）；~~`find_authorized_lab` 同為 1–5、預設 5（owner 2026-09-15「A 加翻頁」，OD-13）~~ `find_authorized_lab` 為 1–20、預設 20（owner 2026-09-15「一次 20 筆」，OD-13）；`compare_products` 維持 1–100）；`offset` 是大於等於 0 的 integer。所有 data query operations 同時存在於 `sample` 與 `official_snapshot` mode；sample 只讀 synthetic fixtures 且固定警示，official 只讀該 source 的 serving build，source unavailable 不影響其他 source。所有可回多筆的 operation 都受 bounded-result contract 約束：有 `limit`／`offset` 參數者依 request；未公開分頁參數者固定 `limit=20, offset=0`。回應一律含 `total_matches`、`returned_count`、`limit`、`offset`、`truncated`，不得無界回傳或靜默截斷；compatibility alias 使用其 canonical operation 的 default page。
 
@@ -81,6 +81,7 @@ P1.1 的核心價值是「縮短找到官方資料並核對原文的時間」。
 | `get_container` | compatibility alias | `disease: string` | `cdc_manual` | sample + official | alias 到 `get_specimen_requirement`；不從複合欄推導獨立容器值 |
 | `get_transport_requirement` | compatibility alias | `disease: string` | `cdc_manual` | sample + official | alias 到 `get_specimen_requirement`；只保留送驗方式／注意事項原文，不推導 storage instruction |
 | `get_submission_rule` | compatibility alias | `disease: string` | `cdc_manual` | sample + official | alias 到 `get_specimen_requirement`；回原始送驗相關欄位與定位 |
+| `search_manual_procedure` | active | `query: string` | `cdc_manual` | sample + official | 回手冊第 3–6 章符合的條文或圖說（採檢步驟、包裝運送、外溢清消、運送箱清消）；文字查詞，也可直接給條號（`3.5` 一併回其下層步驟）；條文文字照手冊原樣含編號，不與第 2 章合併 |
 | `get_testing_location` | active | `disease: string` | `cdc_manual` | sample + official | 回手冊第 7 章該疾病的送驗地點列：採檢單位、採檢項目、檢驗方法、檢驗期限（7.7 為檢驗期間，兩者不互相代用）、收件單位、BSL 與備註，並附 7.9 該收件單位的電話、傳真、地址；第 7 章列與每一筆聯絡方式各自帶頁碼、章節與 row hash |
 | `find_authorized_lab` | active | `query: string, city: string|null=null, limit: integer=20, offset: integer=0` | `cdc_recognized_labs` | sample + official | 依疾病／目的／方法／證號／機構與 optional city 回名冊候選，不保證收件；~~沒有翻頁參數，固定前 20 筆~~ ~~`limit` 1–5~~ `limit` 1–20，可用 `offset` 翻頁（owner 2026-09-15「A 加翻頁」「一次 20 筆」，OD-13）；`query` 以空格分成多個詞時每個詞都要命中，縣市詞改為縣市篩選（OD-14） |
 | `get_lab_scope` | compatibility alias | `query: string` | `cdc_recognized_labs` | sample + official | 使用 `find_authorized_lab(query, city=null, limit=20, offset=0)` 的相同 matching 與 default page |
@@ -280,7 +281,7 @@ PRD 第 7.1～7.3 節與 `public-contract-v1.json` 是唯一 public status／fre
 | `not_validated_for_hospital_deployment` | 全部 19 個 data query operations | P1.1 未驗證院內部署、host log、傳輸、權限或 retention |
 | `not_for_claim_determination` | `search_payment_items`、`search_lab_code`、`get_points`、`get_payment_rule` | 不判定個案可申報，不把點數當金額 |
 | `not_for_procurement_or_equivalence` | `search_reviewed_ivd`、`search_ivd_candidates`、`search_ivd`、`get_license`、`find_manufacturer`、`list_matching_license_records`、`compare_products` | 不作採購、產品等效、可替代、上市或販售判定 |
-| `not_pre_submission_storage` | `search_disease`、`get_specimen_requirement`、`get_collection_method`、`get_container`、`get_transport_requirement`、`get_submission_rule`、`get_testing_location` | 官方「應保存種類（應保存時間）」不是檢體送驗前 storage instruction |
+| `not_pre_submission_storage` | `search_disease`、`get_specimen_requirement`、`get_collection_method`、`get_container`、`get_transport_requirement`、`get_submission_rule`、`get_testing_location`、`search_manual_procedure` | 官方「應保存種類（應保存時間）」不是檢體送驗前 storage instruction |
 | `does_not_confirm_current_acceptance` | `find_authorized_lab`、`get_lab_scope` | 名冊命中不保證當次收件、送驗資格或服務可用性 |
 
 19 個 data query operations 是第 5.3 節除 `get_data_status`、`standards_status`、`eqa_status` 外的全部 operations。禁止 legacy／synonym keys：`not_a_specimen_storage_instruction`、`not_pre_submission_specimen_storage`、`not_a_receiving_guarantee`。Tool description 另須明示不得輸入病人資料；misuse contract tests 不得只檢查 top-level notes。
@@ -382,6 +383,7 @@ Pilot result schema 只保存 participant pseudonymous ID、角色類型、scena
 | OD-16 | 採檢手冊查詢加常見病名對照表：查「COVID-19」「HIV」「猴痘」等講法要找得到手冊寫的疾病（owner 2026-09-16「全部照你的建議執行」，transcript timestamp `2026-09-15T23:31:29.972Z`） | 起因：1150826 手冊寫「新冠併發重症」「人類免疫缺乏病毒( 愛滋病毒)感染」「M 痘」，直接查常見講法回 `not_found`；對照表放在程式包內、版本化，只做常見病名（先 20–30 個），每個別名要指到手冊真的存在的疾病名稱；對照表版本寫進 transform，改版要重新審核；查詢結果仍以手冊原文與顯示文字回答，不改寫疾病名稱 |
 | OD-17 | 採檢手冊查詢維持一次最多 20 筆、不加翻頁（owner 2026-09-16 同上一則） | 查「病毒」共 57 列只看得到前 20 列，`truncated=true`；精準病名通常在 20 列內（「傷寒」18、「肝炎」8）；之後真的需要再改公開契約 |
 | OD-18 | 採檢手冊第 7 章（送驗地點、檢驗方法、期限、收件單位）與修訂對照表都要做（owner 2026-09-16「手冊第七章也都必須要做」） | 第 2 章與第 7 章分成不同 entity，不在讀表階段合併；~~第 7.7、7.9 另走各自 schema~~ 7.7 併在第 7 章同一張表、多兩個欄位，7.9 自己一張表（SDD `D-024`）；修訂對照表只作版本差異導覽。**2026-09-16 現況**：第 7 章 218 列、7.9 收件單位 4 列已讀入並存進 curated build，Word 標記逐格比對 0 不符；修訂對照表 20 筆異動存為建置稽核證據；自動換版的變動幅度檢查涵蓋三張表；審核規則出第 3 版。**查詢工具**：owner 2026-09-16 選 B「一個工具就好，不想維護那麼多工具」，所以只加 `get_testing_location`（operation registry 22→23），答案直接附 7.9 收件單位的電話、傳真、地址，不另開第二個工具；修訂對照表不開查詢工具 |
+| OD-20 | 採檢手冊第 3 到 6 章也要做（owner 2026-09-16「第 3 到 6 章也做」） | 這幾章是編號條文不是表格：一條條文或一個圖說各存一列，文字保留印出來的編號，存成 `cdc_manual_clause`；沒有 Word 表格標記可比對，改以「存進去的字和那幾頁印出來的字逐字相同」當建置前關卡；查詢新增一個工具 `search_manual_procedure`（operation registry 23→24），不與第 2 章合併；審核規則出第 4 版 |
 | OD-19 | GitHub Release 下載包加入疾管署資料：認可檢驗機構名冊與採檢手冊（owner 2026-09-16「疾管署的資料也放進去」） | 名冊與手冊的審核規則第 1 版都寫「下載包不在範圍內、需 owner 另外決定」，因此要出第 2 版並以第 2 版重建本機建置後才發布；下載包內含原始檔（ODS／兩份 PDF）、curated 資料庫與審核紀錄；安裝前逐檔驗大小與 SHA-256，與 ADR 0001、0002 相同 |
 | REL-G5 | 取消 5–10 人 pilot，改為公開上線並由使用者回報收集回饋 | 見第 8.2 節修訂列與第 8.4 節註記 |
 

@@ -278,6 +278,18 @@ class CDCTestingLocationRecord(BaseModel):
     receiving_unit_contacts: list[CDCReceivingUnitContact]
 
 
+class CDCManualClauseRecord(BaseModel):
+    """One numbered clause or figure caption of manual chapters 3 to 6, as printed."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    record_type: Literal["cdc_manual_clause"] = "cdc_manual_clause"
+    block_kind: Literal["clause", "figure"]
+    clause_number: str
+    chapter: str
+    text: str
+
+
 class CDCLabRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -387,6 +399,7 @@ Record = Union[
     NHISearchRecord,
     CDCSpecimenRecord,
     CDCTestingLocationRecord,
+    CDCManualClauseRecord,
     CDCLabRecord,
     TFDARecord,
     TFDASearchRecord,
@@ -620,6 +633,7 @@ OperationName = Literal[
     "get_transport_requirement",
     "get_submission_rule",
     "get_testing_location",
+    "search_manual_procedure",
     "find_authorized_lab",
     "get_lab_scope",
     "search_payment_items",

@@ -78,6 +78,12 @@ def get_testing_location(disease: str) -> ToolResult:
 
 
 @mcp.tool()
+def search_manual_procedure(query: str) -> ToolResult:
+    """Search CDC manual chapters 3-6: how a specimen is collected, packed, transported, and how a spill or the transport box is cleaned. decision_support_only=true; verify_current_official_source=true; not_validated_for_hospital_deployment=true; not_pre_submission_storage=true. 不得輸入病人資料。可用檢體或步驟的字詞查（糞便檢體、包裝、不良檢體），也可以直接給條號（3.5 會一併回它底下的步驟）。"""
+    return cdc.search_manual_procedure(query)
+
+
+@mcp.tool()
 def find_authorized_lab(
     query: str, city: str | None = None, limit: int = 20, offset: int = 0
 ) -> ToolResult:

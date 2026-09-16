@@ -6,6 +6,7 @@ from typing import Any
 
 from ..config import DataContext
 from ..importers.cdc_manual_layout import (
+    CDC_CLAUSE_FIELDS,
     CDC_RECEIVING_UNIT_FIELDS,
     CDC_SPECIMEN_FIELDS,
     CDC_TESTING_LOCATION_FIELDS,
@@ -13,6 +14,7 @@ from ..importers.cdc_manual_layout import (
 from ..importers.cdc_ods import CDC_LABS_FIELD_NAMES
 from ..models import (
     CDCLabRecord,
+    CDCManualClauseRecord,
     CDCReceivingUnitContact,
     CDCSpecimenRecord,
     CDCTestingLocationRecord,
@@ -118,6 +120,14 @@ def _contact_evidence(row: dict[str, Any]) -> list[Evidence]:
     ]
 
 
+def _clause_record(row: dict[str, Any]) -> CDCManualClauseRecord:
+    return CDCManualClauseRecord(**{name: row[f"{name}_display"] for name in CDC_CLAUSE_FIELDS})
+
+
+def _sample_clause_record(row: dict[str, Any]) -> CDCManualClauseRecord:
+    return CDCManualClauseRecord(**{name: row[name] for name in CDC_CLAUSE_FIELDS})
+
+
 def _official_lab_record(row: dict[str, Any]) -> CDCLabRecord:
     # Raw roster values unchanged, including a blank proficiency testing review.
     return CDCLabRecord(**{name: row[name] for name in CDC_LABS_FIELD_NAMES})
@@ -143,10 +153,12 @@ class CDCAdapter:
             self.specimens = load_sample("cdc_specimen.sample.json")
             self.labs = load_sample("cdc_labs.sample.json")
             self.testing_locations = load_sample("cdc_testing_location.sample.json")
+            self.clauses = load_sample("cdc_manual_clause.sample.json")
         else:
             self.specimens = []
             self.labs = []
             self.testing_locations = []
+            self.clauses = []
 
     def _official_specimens(self, query: str, request: dict[str, Any]) -> ToolResult:
         from ..cdc_manual_store import read_cdc_manual_state, search_specimen_rows
@@ -253,6 +265,53 @@ class CDCAdapter:
             source_id="cdc_manual",
             source_status=state.status,
             extra_evidence=_contact_evidence,
+        )
+
+    def search_manual_procedure(self, query: Any) -> ToolResult:
+        """Chapters 3-6: how a specimen is collected, packed, transported and cleaned up."""
+
+        from ..cdc_manual_store import read_cdc_manual_state, search_clause_rows
+        from ..tfda_store import connect_readonly
+
+        request = {"query": query}
+        if not _valid_text(query):
+            return invalid_result(
+                operation="search_manual_procedure",
+                query=request,
+                data_mode=self.context.mode,
+                note="query 必須是非空字串。",
+            )
+        if self.context.mode == "sample":
+            nq = norm(query)
+            rows = [row for row in self.clauses if nq in norm(row["text"])]
+            return result_from_rows(
+                operation="search_manual_procedure",
+                query=request,
+                rows=rows,
+                provenance=CDC_SPECIMEN,
+                record_factory=_sample_clause_record,
+                source_id="cdc_manual",
+            )
+        assert self.context.data_root is not None
+        state = read_cdc_manual_state(self.context.data_root, clock=self.context.clock)
+        if state.availability != "available" or state.db_path is None or state.provenance is None:
+            return unavailable_result(
+                operation="search_manual_procedure",
+                query=request,
+                reason=state.reason or "no_serving_snapshot",
+                note="疾管署採檢手冊正式資料尚未建立，或沒有通過完整性檢查。",
+                source_status=state.status,
+            )
+        with closing(connect_readonly(state.db_path)) as connection:
+            rows = search_clause_rows(connection, query=query)
+        return result_from_rows(
+            operation="search_manual_procedure",
+            query=request,
+            rows=rows,
+            provenance=state.provenance,
+            record_factory=_clause_record,
+            source_id="cdc_manual",
+            source_status=state.status,
         )
 
     def find_authorized_lab(

@@ -352,6 +352,40 @@ def test_the_clause_coverage_check_compares_every_character(tmp_path):
     assert report["characters_compared"] > 100
 
 
+def test_search_manual_procedure_answers_from_chapters_3_to_6(tmp_path):
+    # Owner 2026-09-16: chapters 3-6 are the numbered steps; one tool searches their text.
+    _offline(tmp_path)
+    adapter = _adapter(tmp_path)
+
+    result = adapter.search_manual_procedure("全血")
+
+    assert (result.operation, result.query) == ("search_manual_procedure", {"query": "全血"})
+    assert [item.record.clause_number for item in result.items] == ["3.1", "3.2"]
+    first = result.items[0].record.model_dump()
+    assert first == {
+        "record_type": "cdc_manual_clause",
+        "block_kind": "clause",
+        "clause_number": "3.1",
+        "chapter": "3",
+        "text": "3.1.全血（whole blood）",
+    }
+    evidence = result.items[0].evidence[0]
+    assert (evidence.locator.pdf_page, evidence.locator.table_section) == (
+        69,
+        "3 傳染病檢體採檢步驟",
+    )
+    assert result.items[0].safety["not_pre_submission_storage"] is True
+    # A clause number finds that clause, the ones under it, and the figure it prints.
+    found = adapter.search_manual_procedure("3.1").items
+    assert [(item.record.clause_number, item.record.block_kind) for item in found] == [
+        ("3.1", "clause"),
+        ("3.1.1", "clause"),
+        ("3.1.1.1", "clause"),
+        ("3.1", "figure"),
+    ]
+    assert adapter.search_manual_procedure("狂犬病").result_status == "not_found"
+
+
 def test_a_manual_without_chapter_7_is_not_built(tmp_path):
     from taiwan_lab_mcp.importers.cdc_manual_layout import CdcManualLayoutError
 

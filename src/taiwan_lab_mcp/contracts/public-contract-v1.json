@@ -240,6 +240,38 @@
       }
     },
     {
+      "name": "search_manual_procedure",
+      "classification": "active",
+      "source": "cdc_manual",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      ],
+      "response_schema": "QueryResultV1",
+      "safety": [
+        "decision_support_only",
+        "verify_current_official_source",
+        "not_validated_for_hospital_deployment",
+        "not_pre_submission_storage"
+      ],
+      "fixture": "cdc_manual_clause",
+      "request_schema": {
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
       "name": "find_authorized_lab",
       "classification": "active",
       "source": "cdc_recognized_labs",
@@ -2832,6 +2864,55 @@
         "title": "CDCTestingLocationRecord",
         "type": "object"
       }
+    },
+    "cdc_manual_clause": {
+      "required": [
+        "block_kind",
+        "clause_number",
+        "chapter",
+        "text"
+      ],
+      "model": "taiwan_lab_mcp.models.CDCManualClauseRecord",
+      "schema": {
+        "additionalProperties": false,
+        "description": "One numbered clause or figure caption of manual chapters 3 to 6, as printed.",
+        "properties": {
+          "record_type": {
+            "const": "cdc_manual_clause",
+            "default": "cdc_manual_clause",
+            "title": "Record Type",
+            "type": "string"
+          },
+          "block_kind": {
+            "enum": [
+              "clause",
+              "figure"
+            ],
+            "title": "Block Kind",
+            "type": "string"
+          },
+          "clause_number": {
+            "title": "Clause Number",
+            "type": "string"
+          },
+          "chapter": {
+            "title": "Chapter",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "block_kind",
+          "clause_number",
+          "chapter",
+          "text"
+        ],
+        "title": "CDCManualClauseRecord",
+        "type": "object"
+      }
     }
   },
   "locator_schemas": {
@@ -3232,6 +3313,46 @@
             "title": "CDCLabRecord",
             "type": "object"
           },
+          "CDCManualClauseRecord": {
+            "additionalProperties": false,
+            "description": "One numbered clause or figure caption of manual chapters 3 to 6, as printed.",
+            "properties": {
+              "record_type": {
+                "const": "cdc_manual_clause",
+                "default": "cdc_manual_clause",
+                "title": "Record Type",
+                "type": "string"
+              },
+              "block_kind": {
+                "enum": [
+                  "clause",
+                  "figure"
+                ],
+                "title": "Block Kind",
+                "type": "string"
+              },
+              "clause_number": {
+                "title": "Clause Number",
+                "type": "string"
+              },
+              "chapter": {
+                "title": "Chapter",
+                "type": "string"
+              },
+              "text": {
+                "title": "Text",
+                "type": "string"
+              }
+            },
+            "required": [
+              "block_kind",
+              "clause_number",
+              "chapter",
+              "text"
+            ],
+            "title": "CDCManualClauseRecord",
+            "type": "object"
+          },
           "CDCReceivingUnitContact": {
             "additionalProperties": false,
             "description": "One 7.9 receiving unit as the manual prints it (OD-18).",
@@ -3620,6 +3741,7 @@
               "record": {
                 "discriminator": {
                   "mapping": {
+                    "cdc_manual_clause": "#/$defs/CDCManualClauseRecord",
                     "cdc_recognized_lab": "#/$defs/CDCLabRecord",
                     "cdc_specimen": "#/$defs/CDCSpecimenRecord",
                     "cdc_testing_location": "#/$defs/CDCTestingLocationRecord",
@@ -3642,6 +3764,9 @@
                   },
                   {
                     "$ref": "#/$defs/CDCTestingLocationRecord"
+                  },
+                  {
+                    "$ref": "#/$defs/CDCManualClauseRecord"
                   },
                   {
                     "$ref": "#/$defs/CDCLabRecord"
@@ -5129,6 +5254,7 @@
               "get_transport_requirement",
               "get_submission_rule",
               "get_testing_location",
+              "search_manual_procedure",
               "find_authorized_lab",
               "get_lab_scope",
               "search_payment_items",
@@ -5304,6 +5430,7 @@
                   "get_transport_requirement",
                   "get_submission_rule",
                   "get_testing_location",
+                  "search_manual_procedure",
                   "find_authorized_lab",
                   "get_lab_scope",
                   "search_payment_items",

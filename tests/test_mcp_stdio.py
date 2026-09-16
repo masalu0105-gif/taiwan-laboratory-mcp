@@ -77,6 +77,7 @@ def test_stdio_tool_discovery_and_calls(tmp_path, protocol_mode):
                 ("get_transport_requirement", {"disease": "麻疹"}),
                 ("get_submission_rule", {"disease": "麻疹"}),
                 ("get_testing_location", {"disease": "示範傳染病甲"}),
+                ("search_manual_procedure", {"query": "示範檢體"}),
                 ("find_authorized_lab", {"query": "麻疹", "city": "台北"}),
                 ("get_lab_scope", {"query": "麻疹"}),
                 ("search_ivd", {"query": "HbA1c"}),

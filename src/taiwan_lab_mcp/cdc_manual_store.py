@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .cdc_labs_store import cdc_labs_attribution_text
-from .importers.cdc_manual_layout import CDC_MANUAL_TABLE_NAMES
+from .importers.cdc_manual_layout import CDC_CLAUSE_TABLE, CDC_MANUAL_TABLE_NAMES
 from .models import ArtifactReference, Provenance, SourceStatus
 from .stores import (
     OfficialState,
@@ -44,6 +45,8 @@ def _search_sql(table: str) -> str:
 
 _SEARCH_SQL = _search_sql("cdc_specimen_requirement")
 _TESTING_LOCATION_SQL = _search_sql("cdc_testing_location")
+# 「3.5」 or 「4」 asks for a clause by number rather than by its words.
+_CLAUSE_NUMBER_QUERY = re.compile(r"[0-9]+(?:\.[0-9]+)*")
 
 
 @dataclass(frozen=True)
@@ -183,6 +186,32 @@ def search_specimen_rows(connection: sqlite3.Connection, *, query: str) -> list[
     term = norm(query)
     term = load_cdc_disease_aliases().get(term, term)
     return [dict(row) for row in connection.execute(_SEARCH_SQL, {"query": term})]
+
+
+def search_clause_rows(connection: sqlite3.Connection, *, query: str) -> list[dict[str, Any]]:
+    """Chapters 3-6 clauses whose text matches, or whose number starts with the query.
+
+    Someone asking 「糞便檢體怎麼採」 searches the words; someone asking 「3.5」 wants that clause
+    and the steps under it, so a number matches the clause itself and everything below it.
+    """
+
+    term = norm(query)
+    if not term:
+        return []
+    if _CLAUSE_NUMBER_QUERY.fullmatch(term):
+        rows = connection.execute(
+            f"SELECT * FROM {CDC_CLAUSE_TABLE} "
+            "WHERE clause_number = :number OR instr(clause_number, :prefix) = 1 "
+            "ORDER BY row_number",
+            {"number": term, "prefix": f"{term}."},
+        )
+        return [dict(row) for row in rows]
+    rows = connection.execute(
+        f"SELECT * FROM {CDC_CLAUSE_TABLE} WHERE instr(text_search, :query) > 0 "
+        "ORDER BY row_number",
+        {"query": term},
+    )
+    return [dict(row) for row in rows]
 
 
 def search_testing_location_rows(
