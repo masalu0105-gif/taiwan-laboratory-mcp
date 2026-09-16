@@ -1,15 +1,15 @@
-# 安裝說明：在自己的電腦用 Claude 查健保支付標準與食藥署醫材許可證
+# 安裝說明：在自己的電腦用 Claude 查健保支付標準、食藥署醫材許可證與疾管署檢驗資料
 
 這份說明帶你做完四件事：
 
 1. 安裝查詢工具。
-2. 下載健保與食藥署資料。
+2. 下載健保、食藥署與疾管署資料。
 3. 把資料裝進電腦。
 4. 讓 Claude（桌面版或 Claude Code）能查。
 
 Windows 與 macOS 各有對應指令，照你的電腦選一種做就好。全程不需要 API key，也不會把你的查詢內容傳給本專案。
 
-> 這是個人維護的開源工具，**不是健保署或食藥署的官方服務**，內容以兩個機關的公告為準。查到的點數不能直接當成金額，也不能用來判斷個案可不可以申報；查到的許可證不能直接當作醫療器材廣告或效能宣傳素材。
+> 這是個人維護的開源工具，**不是健保署、食藥署或疾管署的官方服務**，內容以三個機關的公告為準。查到的點數不能直接當成金額，也不能用來判斷個案可不可以申報；查到的許可證不能直接當作醫療器材廣告或效能宣傳素材；認可檢驗機構名冊查到的機構不保證當次收件。
 
 ## 事前準備
 
@@ -63,7 +63,7 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 | `nhi_fee-snapshot-xxxxxxxxxxxx.zip` | 健保支付標準 | 約 2 MB |
 | `tfda_devices-snapshot-xxxxxxxxxxxx.zip` | 食藥署醫療器材許可證 | 約 65 MB |
 | `cdc_authorized_labs-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病認可檢驗機構名冊 | 約 0.5 MB |
-| `cdc_specimen_manual-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病檢體採檢手冊（第 2 至 7 章） | 約 4 MB |
+| `cdc_specimen_manual-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病檢體採檢手冊（整本） | 約 4 MB |
 
 只想查其中一種資料，就只下載那一組。
 
@@ -197,7 +197,7 @@ claude mcp add taiwan-laboratory -s user -e TAIWAN_LAB_DATA_MODE=official_snapsh
 4. 「登革熱要採什麼檢體、怎麼送驗？」：應該列出採檢手冊第 2 章的列，並附上手冊版次與頁碼。
 5. 「登革熱的檢體送到哪裡驗、多久出結果？」：應該列出第 7 章的列（1150826 版是 4 列，不同檢驗方法各一列），每一列都附收件單位的電話、傳真與地址。
 6. 「糞便檢體怎麼採？」「什麼樣的檢體會被判定不良？」「傳染病檢體的定義是什麼？」：應該列出對應的條文，帶條號與頁碼（例如 3.5 糞便檢體、4.6 不良檢體判定標準、1.1 名詞解釋）。
-5. 「在台南能做傷寒的有哪幾間醫院？」：應該列出名冊上的機構（一次最多 20 筆）。
+7. 「在台南能做傷寒的有哪幾間醫院？」：應該列出名冊上的機構（一次最多 20 筆）。
 
 ## 資料會過期嗎？
 
@@ -257,4 +257,5 @@ taiwan-lab-data check cdc_specimen_manual --actor my-computer --data-dir <你的
 - 程式：MIT License。
 - 健保資料：資料提供機關：衛生福利部中央健康保險署；依[政府資料開放授權條款-第1版](https://data.gov.tw/license)使用。
 - 食藥署資料：資料提供機關：衛生福利部食品藥物管理署；依[政府資料開放授權條款-第1版](https://data.gov.tw/license)使用。
-- 本專案與健保署、食藥署無隸屬或背書關係。
+- 疾管署資料：資料提供機關：衛生福利部疾病管制署；依該署[政府網站資料開放宣告](https://www.cdc.gov.tw/Category/FPage/TxkBIR9agw_IBRRmvn9TcQ)使用。
+- 本專案與健保署、食藥署、疾管署無隸屬或背書關係。
