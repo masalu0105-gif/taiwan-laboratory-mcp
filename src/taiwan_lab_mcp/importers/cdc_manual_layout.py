@@ -128,7 +128,10 @@ CDC_TESTING_LOCATION_SPEC = CdcTableSpec(
             "notes",
         ),
     ),
-    key_fields=frozenset({"disease", "collecting_unit", "specimen", "method", "receiving_unit"}),
+    # Every column ends a row here: on 1150826 page 101 one arrangement differs only by its
+    # 檢驗期限 (Sanger 定序 2-7 工作日 against 目標次世代定序 10-15 工作日), and the Word tags
+    # count it as its own row.
+    key_fields=frozenset(CDC_TESTING_LOCATION_FIELDS),
     section_re=_section_pattern("7"),
     anchor="傳染病名稱",
 )
@@ -142,6 +145,7 @@ CDC_RECEIVING_UNIT_SPEC = CdcTableSpec(
     anchor="單位名稱",
 )
 _SPECS = (CDC_SPECIMEN_SPEC, CDC_TESTING_LOCATION_SPEC, CDC_RECEIVING_UNIT_SPEC)
+CDC_MANUAL_TABLE_NAMES = tuple(spec.name for spec in _SPECS)
 _HEADERS = {text: field for spec in _SPECS for text, field in spec.headers.items()}
 _ANCHORS = frozenset(spec.anchor for spec in _SPECS)
 _RULE_END_TOLERANCE = 0.5

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .cdc_labs_store import cdc_labs_attribution_text
+from .importers.cdc_manual_layout import CDC_MANUAL_TABLE_NAMES
 from .models import ArtifactReference, Provenance, SourceStatus
 from .stores import (
     OfficialState,
@@ -50,24 +51,33 @@ class CdcManualState:
 
 def _validate_rows(db_path: Path, manifest: dict[str, Any]) -> None:
     counts = manifest.get("counts")
+    # `counts` is the primary table (chapter 2); `table_counts` covers every stored table.
+    table_counts = manifest.get("table_counts")
     if (
         not isinstance(counts, dict)
         or set(counts) != {"input_rows", "curated_rows", "quarantined_rows"}
         or any(type(value) is not int or value < 0 for value in counts.values())
         or counts["input_rows"] != counts["curated_rows"]
         or counts["quarantined_rows"] != 0
+        or not isinstance(table_counts, dict)
+        or set(table_counts) != set(CDC_MANUAL_TABLE_NAMES)
+        or any(type(value) is not int or value <= 0 for value in table_counts.values())
+        or table_counts[CDC_MANUAL_TABLE_NAMES[0]] != counts["curated_rows"]
     ):
         raise ValueError("curated row coverage mismatch")
     connection = connect_readonly(db_path)
     try:
-        total, numbers, lowest, highest = connection.execute(
-            "SELECT COUNT(*), COUNT(DISTINCT row_number), MIN(row_number), MAX(row_number) "
-            "FROM cdc_specimen_requirement"
-        ).fetchone()
+        for name in CDC_MANUAL_TABLE_NAMES:
+            total, numbers, lowest, highest = connection.execute(
+                "SELECT COUNT(*), COUNT(DISTINCT row_number), MIN(row_number), MAX(row_number) "
+                f"FROM {name}"
+            ).fetchone()
+            if not (
+                total == table_counts[name] == numbers == highest and total > 0 and lowest == 1
+            ):
+                raise ValueError("curated row coverage mismatch")
     finally:
         connection.close()
-    if not (total == counts["curated_rows"] == numbers == highest and total > 0 and lowest == 1):
-        raise ValueError("curated row coverage mismatch")
 
 
 def _provenance(descriptor: dict[str, Any], manifest: dict[str, Any], now: datetime) -> Provenance:

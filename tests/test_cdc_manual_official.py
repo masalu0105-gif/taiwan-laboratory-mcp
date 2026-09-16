@@ -17,6 +17,7 @@ import pytest
 import taiwan_lab_mcp.importers.nhi as nhi_importer
 from taiwan_lab_mcp.adapters.cdc import CDCAdapter
 from taiwan_lab_mcp.config import DataContext
+from taiwan_lab_mcp.util import norm
 
 REVIEWER = "ai-reviewer:claude-opus-5"
 ROLE = "ai_reviewer_delegated_by_owner"
@@ -35,10 +36,21 @@ def _pages():
     return module
 
 
+def _chapter7():
+    path = Path(__file__).with_name("test_cdc_manual_chapter7.py")
+    spec = importlib.util.spec_from_file_location("cdc_manual_chapter7_pages", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _layout():
     pages = _pages()
-    # Page 14: one row whose cells wrap; pages 16-17: typhoid rows and a dengue row.
-    return pages._layout(pages._display_page(), *pages._typhoid_pages())
+    # Page 14: one row whose cells wrap; pages 16-17: typhoid rows and a dengue row; pages
+    # 93-121: the chapter 7 testing locations and receiving units (OD-18).
+    return pages._layout(
+        pages._display_page(), *pages._typhoid_pages(), *_chapter7().chapter7_pages()
+    )
 
 
 def _offline(data_root, layout=None):
@@ -183,6 +195,77 @@ def test_database_keeps_raw_text_display_text_edition_and_row_hash(tmp_path):
     assert first["source_row_sha256"] == parsed.rows[0].source_row_sha256
     assert json.loads(first["row_bbox"]) == [23, 150, 559, 250]
     assert [row["specimen"] for row in rows] == ["肛門拭子", "肛門拭子", "尿液", "血清"]
+
+
+def test_database_keeps_chapter_7_testing_locations_and_receiving_units(tmp_path):
+    # Owner 2026-09-16 (OD-18): chapter 7 is stored beside chapter 2, each in its own table.
+    built = _offline(tmp_path)
+    db_path = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"] / "data.sqlite3"
+
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    locations = connection.execute(
+        "SELECT * FROM cdc_testing_location ORDER BY row_number"
+    ).fetchall()
+    units = connection.execute("SELECT * FROM cdc_receiving_unit ORDER BY row_number").fetchall()
+    connection.close()
+
+    assert [(row["disease"], row["method"]) for row in locations] == [
+        ("天花", "病原體分離、鑑定"),
+        ("天花", "全基因體定序"),
+        ("疑似傳染病", "病原體檢測"),
+    ]
+    first = locations[0]
+    assert (first["turnaround_raw"], first["testing_period_raw"], first["bsl_raw"]) == (
+        "4-5 工作日",
+        None,
+        "3",
+    )
+    assert first["receiving_unit_display"] == "疾病管制署南港臨時辦公室"
+    assert (first["pdf_page"], first["table_section"]) == (93, "7.1 第一類法定傳染病")
+    assert (first["manual_version"], first["disease_search"]) == ("1150826", "天花")
+    # 7.7 prints 檢驗期間 and has no BSL column.
+    autopsy = locations[2]
+    assert (autopsy["turnaround_raw"], autopsy["testing_period_raw"], autopsy["bsl_raw"]) == (
+        None,
+        "14 個工作日",
+        None,
+    )
+    assert [(row["unit_name"], row["phone"]) for row in units] == [
+        ("疾病管制署南港臨時辦公室", "02-81735678"),
+        ("疾病管制署中區實驗室", "04-24737980"),
+    ]
+    assert units[0]["unit_search"] == norm("疾病管制署南港臨時辦公室")
+
+
+def test_a_manual_without_chapter_7_is_not_built(tmp_path):
+    from taiwan_lab_mcp.importers.cdc_manual_layout import CdcManualLayoutError
+
+    pages = _pages()
+    chapter2_only = pages._layout(pages._display_page(), *pages._typhoid_pages())
+
+    with pytest.raises(CdcManualLayoutError) as error:
+        _offline(tmp_path, chapter2_only)
+    assert error.value.code == "LAYOUT_NO_TABLE"
+
+
+def test_the_word_tag_check_covers_every_stored_table(tmp_path):
+    from taiwan_lab_mcp.importers.cdc_manual import verify_cdc_manual_rows_against_tags
+
+    layout = _layout()
+    built = _offline(tmp_path, layout)
+    db_path = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"] / "data.sqlite3"
+
+    _, name, payload = verify_cdc_manual_rows_against_tags(layout, db_path)
+    report = json.loads(payload)
+
+    assert name == "word-tag-check.json"
+    assert report["mismatches"] == []
+    assert report["tables"] == {
+        "cdc_specimen_requirement": {"rows_compared": 4, "cells_compared": 32},
+        "cdc_testing_location": {"rows_compared": 3, "cells_compared": 27},
+        "cdc_receiving_unit": {"rows_compared": 2, "cells_compared": 8},
+    }
 
 
 def test_build_fingerprint_binds_the_page_layout_in_thousandths_of_a_point(tmp_path):
@@ -438,8 +521,13 @@ def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution, pdf
     tag_check = json.loads((tmp_path / references["cdc-manual-tag-check"]["path"]).read_bytes())
     assert tag_check == {
         "check": "cdc-manual-word-tag-text-v1",
-        "rows_compared": 4,
-        "cells_compared": 32,
+        "rows_compared": 9,
+        "cells_compared": 67,
+        "tables": {
+            "cdc_specimen_requirement": {"rows_compared": 4, "cells_compared": 32},
+            "cdc_testing_location": {"rows_compared": 3, "cells_compared": 27},
+            "cdc_receiving_unit": {"rows_compared": 2, "cells_compared": 8},
+        },
         "mismatches": [],
     }
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())

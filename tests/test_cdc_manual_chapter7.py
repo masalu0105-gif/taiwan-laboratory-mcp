@@ -113,6 +113,12 @@ def _unit_page():
     return page
 
 
+def chapter7_pages():
+    """The chapter 7 pages other test modules add to a synthetic manual layout."""
+
+    return (_location_page(), _autopsy_page(), _unit_page())
+
+
 def _layout(*pages):
     return _pages()._layout(*pages)
 

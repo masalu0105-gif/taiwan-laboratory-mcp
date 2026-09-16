@@ -30,6 +30,7 @@ def _module(name):
 
 
 PAGES = _module("layout")
+CHAPTER7 = _module("chapter7")
 SOURCE = _module("source")
 SERVING_PDF = SOURCE._pdf("manual")
 REVISION_PDF = SOURCE._pdf("revision")
@@ -42,7 +43,8 @@ def _now():
 
 
 def _serving_layout():
-    return PAGES._layout(PAGES._display_page(), *PAGES._typhoid_pages())
+    # Chapter 7 is stored in the same build, so every fixture manual carries its pages (OD-18).
+    return PAGES._layout(PAGES._display_page(), *PAGES._typhoid_pages(), *CHAPTER7.chapter7_pages())
 
 
 def _changed_layout():

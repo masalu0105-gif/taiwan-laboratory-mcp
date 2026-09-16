@@ -1,9 +1,11 @@
-"""CDC specimen collection manual chapter 2: curated SQLite build (SDD 10.3, ADR 0003).
+"""CDC specimen collection manual: curated SQLite build (SDD 10.3, ADR 0003).
 
 Owner 2026-09-15 delegated every CDC review to AI (「Ai全程代審 不用特別備注未經人工審核」, OD-04)
-and chose B for line breaks inside cells (「我選 B」, OD-15). A build keeps every chapter 2 row
-with its raw cell text, the display text, the PDF row locator, the manual edition and the row
-hash. The build fingerprint binds the normalized page layout the rows were read from.
+and chose B for line breaks inside cells (「我選 B」, OD-15); owner 2026-09-16 added chapter 7
+(「手冊第七章也都必須要做」, OD-18). A build stores one table per kind of table the manual prints
+(chapter 2 specimen requirements, chapter 7 testing locations, the 7.9 receiving-unit contacts),
+each row with its raw cell text, the display text, the PDF row locator, the manual edition and
+the row hash. The build fingerprint binds the normalized page layout the rows were read from.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import re
 import sqlite3
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 from importlib.resources import files
@@ -38,12 +41,18 @@ from ..util import norm
 from .cdc_manual_layout import (
     _HEADERS,
     CDC_MANUAL_LAYOUT_RULES_VERSION,
+    CDC_RECEIVING_UNIT_SPEC,
     CDC_SPECIMEN_FIELDS,
+    CDC_SPECIMEN_SPEC,
+    CDC_TESTING_LOCATION_SPEC,
     CdcSpecimenLayoutResult,
     CdcSpecimenRow,
+    CdcTableSpec,
     _read_page,
     _squeeze,
+    parse_cdc_receiving_units,
     parse_cdc_specimen_layout,
+    parse_cdc_testing_locations,
 )
 from .cdc_manual_pdf import (
     extract_cdc_manual_layout,
@@ -85,7 +94,8 @@ CDC_MANUAL_FRESHNESS_POLICY_VERSION = "cdc-manual-v1"
 CDC_MANUAL_TABLE = "cdc_specimen_requirement"
 CDC_MANUAL_SERVING_GATES = ("CDC-R1-SOURCE", "CDC-R1-LAYOUT", "CDC-R1-CONTENT", "PUB-R1-OWNER")
 DISPLAY_COLUMNS = tuple(f"{field}_display" for field in CDC_SPECIMEN_FIELDS)
-CDC_MANUAL_ROW_COLUMNS = (
+# Every table stores the same locator, edition and row hash beside its own columns.
+_LOCATOR_COLUMNS = (
     "row_number",
     "source_row_sha256",
     "pdf_page",
@@ -94,42 +104,83 @@ CDC_MANUAL_ROW_COLUMNS = (
     "row_bbox",
     "manual_version",
     "approved_date_raw",
-    *CDC_SPECIMEN_FIELDS,
-    *DISPLAY_COLUMNS,
-    "disease_search",
 )
-_REQUIRED_TEXT = frozenset(
-    {
-        "source_row_sha256",
-        "table_section",
-        "row_bbox",
-        "manual_version",
-        "approved_date_raw",
-        "disease",
-        "disease_display",
-        "disease_search",
-    }
+_REQUIRED_LOCATOR_TEXT = frozenset(
+    {"source_row_sha256", "table_section", "row_bbox", "manual_version", "approved_date_raw"}
 )
-# Seven-column tables have no retention column, so the raw and display values may be NULL.
-_TABLE_SQL = "CREATE TABLE {} ({})".format(
-    CDC_MANUAL_TABLE,
-    ", ".join(
-        f"{column} INTEGER NOT NULL"
-        if column in {"row_number", "pdf_page"}
-        else f"{column} INTEGER"
-        if column == "printed_page"
-        else f"{column} TEXT NOT NULL"
-        if column in _REQUIRED_TEXT
-        else f"{column} TEXT"
-        for column in CDC_MANUAL_ROW_COLUMNS
+
+
+@dataclass(frozen=True)
+class CdcCuratedTable:
+    """One stored table: the layout spec it reads and the column queries search on."""
+
+    spec: CdcTableSpec
+    parse: Callable[[dict[str, Any]], CdcSpecimenLayoutResult]
+    search_column: str
+    search_field: str
+
+    @property
+    def name(self) -> str:
+        return self.spec.name
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        return (
+            *_LOCATOR_COLUMNS,
+            *self.spec.fields,
+            *(f"{field}_display" for field in self.spec.fields),
+            self.search_column,
+        )
+
+    @property
+    def required_text(self) -> frozenset[str]:
+        return _REQUIRED_LOCATOR_TEXT | {
+            self.search_field,
+            f"{self.search_field}_display",
+            self.search_column,
+        }
+
+
+CDC_MANUAL_TABLES = (
+    CdcCuratedTable(CDC_SPECIMEN_SPEC, parse_cdc_specimen_layout, "disease_search", "disease"),
+    CdcCuratedTable(
+        CDC_TESTING_LOCATION_SPEC, parse_cdc_testing_locations, "disease_search", "disease"
     ),
+    CdcCuratedTable(CDC_RECEIVING_UNIT_SPEC, parse_cdc_receiving_units, "unit_search", "unit_name"),
 )
-_INDEX_SQL = (f"CREATE UNIQUE INDEX cdc_specimen_row_number ON {CDC_MANUAL_TABLE} (row_number)",)
-_INSERT_SQL = "INSERT INTO {} ({}) VALUES ({})".format(
-    CDC_MANUAL_TABLE,
-    ", ".join(CDC_MANUAL_ROW_COLUMNS),
-    ", ".join("?" for _ in CDC_MANUAL_ROW_COLUMNS),
-)
+CDC_MANUAL_ROW_COLUMNS = CDC_MANUAL_TABLES[0].columns
+
+
+def _table_sql(table: CdcCuratedTable) -> str:
+    # A column order the manual does not print in every section (chapter 2 retention, chapter 7
+    # 檢驗期間 and BSL) leaves its raw and display values NULL.
+    return "CREATE TABLE {} ({})".format(
+        table.name,
+        ", ".join(
+            f"{column} INTEGER NOT NULL"
+            if column in {"row_number", "pdf_page"}
+            else f"{column} INTEGER"
+            if column == "printed_page"
+            else f"{column} TEXT NOT NULL"
+            if column in table.required_text
+            else f"{column} TEXT"
+            for column in table.columns
+        ),
+    )
+
+
+def _index_sql(table: CdcCuratedTable) -> str:
+    return f"CREATE UNIQUE INDEX {table.name}_row_number ON {table.name} (row_number)"
+
+
+def _insert_sql(table: CdcCuratedTable) -> str:
+    return "INSERT INTO {} ({}) VALUES ({})".format(
+        table.name,
+        ", ".join(table.columns),
+        ", ".join("?" for _ in table.columns),
+    )
+
+
 _SYNTHETIC_MANUAL = b"%PDF-1.7\n% offline synthetic CDC manual fixture\n%%EOF\n"
 _SYNTHETIC_REVISION = b"%PDF-1.7\n% offline synthetic CDC manual revision table fixture\n%%EOF\n"
 
@@ -198,8 +249,8 @@ def cdc_layout_sha256(layout: Mapping[str, Any]) -> str:
     return sha256_bytes(canonical_json_bytes(_thousandths(dict(layout))))
 
 
-def curated_specimen_row(
-    row: CdcSpecimenRow, row_number: int, summary: Mapping[str, Any]
+def curated_row(
+    table: CdcCuratedTable, row: CdcSpecimenRow, row_number: int, summary: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Return the stored columns: raw text, display text, locator, edition and search key."""
 
@@ -215,11 +266,25 @@ def curated_specimen_row(
         "approved_date_raw": summary["approved_date_raw"],
         **row.fields(),
         **{f"{name}_display": value for name, value in display.items()},
-        "disease_search": norm(display["disease"]),
+        table.search_column: norm(display[table.search_field]),
     }
 
 
-def _write_curated_db(db_path: Path, parsed: CdcSpecimenLayoutResult) -> None:
+def curated_specimen_row(
+    row: CdcSpecimenRow, row_number: int, summary: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Return one chapter 2 row's stored columns."""
+
+    return curated_row(CDC_MANUAL_TABLES[0], row, row_number, summary)
+
+
+def parse_cdc_manual_tables(layout: Mapping[str, Any]) -> dict[str, CdcSpecimenLayoutResult]:
+    """Read every table a build stores; a manual missing one of them is not built."""
+
+    return {table.name: table.parse(dict(layout)) for table in CDC_MANUAL_TABLES}
+
+
+def _write_curated_db(db_path: Path, parsed: Mapping[str, CdcSpecimenLayoutResult]) -> None:
     if db_path.exists():
         raise CdcManualImportError("IMMUTABLE_BUILD_EXISTS")
     partial = db_path.with_name(f".{db_path.name}.partial")
@@ -229,19 +294,20 @@ def _write_curated_db(db_path: Path, parsed: CdcSpecimenLayoutResult) -> None:
     succeeded = False
     try:
         connection.execute("PRAGMA journal_mode=DELETE")
-        connection.execute(_TABLE_SQL)
-        connection.executemany(
-            _INSERT_SQL,
-            [
-                tuple(curated[column] for column in CDC_MANUAL_ROW_COLUMNS)
-                for curated in (
-                    curated_specimen_row(row, number, parsed.summary)
-                    for number, row in enumerate(parsed.rows, start=1)
-                )
-            ],
-        )
-        for statement in _INDEX_SQL:
-            connection.execute(statement)
+        for table in CDC_MANUAL_TABLES:
+            result = parsed[table.name]
+            connection.execute(_table_sql(table))
+            connection.executemany(
+                _insert_sql(table),
+                [
+                    tuple(curated[column] for column in table.columns)
+                    for curated in (
+                        curated_row(table, row, number, result.summary)
+                        for number, row in enumerate(result.rows, start=1)
+                    )
+                ],
+            )
+            connection.execute(_index_sql(table))
         connection.commit()
         if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise CdcManualImportError("SQLITE_INTEGRITY_FAILURE")
@@ -263,12 +329,23 @@ def active_cdc_manual_transform(layout_sha256: str | None) -> dict[str, Any]:
         "parser": {
             "version": CDC_MANUAL_LAYOUT_RULES_VERSION,
             "bundle_sha256": sha256_json(
-                {"fields": list(CDC_SPECIMEN_FIELDS), "rules": CDC_MANUAL_LAYOUT_RULES_VERSION}
+                {
+                    "fields": list(CDC_SPECIMEN_FIELDS),
+                    "rules": CDC_MANUAL_LAYOUT_RULES_VERSION,
+                    "tables": {table.name: list(table.spec.fields) for table in CDC_MANUAL_TABLES},
+                }
             ),
         },
         "schema": {
             "version": CDC_MANUAL_SCHEMA_VERSION,
-            "bundle_sha256": sha256_json({"curated_columns": list(CDC_MANUAL_ROW_COLUMNS)}),
+            "bundle_sha256": sha256_json(
+                {
+                    "curated_columns": list(CDC_MANUAL_ROW_COLUMNS),
+                    "curated_tables": {
+                        table.name: list(table.columns) for table in CDC_MANUAL_TABLES
+                    },
+                }
+            ),
         },
         "normalization": {
             "version": CDC_MANUAL_NORMALIZATION_VERSION,
@@ -334,7 +411,7 @@ def _publish_build(
     *,
     manual_payload: bytes,
     revision_payload: bytes,
-    parsed: CdcSpecimenLayoutResult,
+    parsed: Mapping[str, CdcSpecimenLayoutResult],
     layout_sha256: str,
     raw_revision_id: str,
     artifact_relative: str,
@@ -379,7 +456,10 @@ def _publish_build(
     # Checks run on the finished database before any audit record or pointer refers to it.
     evidence_inputs = [*evidence_inputs, *(check(db_path) for check in pre_publish_checks)]
     audit_prefix = f"{build_prefix}/audit"
-    rows = len(parsed.rows)
+    # `counts` describes the source's primary curated table, the same as every other source;
+    # `table_counts` covers every table this build stores (chapter 2 and chapter 7).
+    table_counts = {name: len(result.rows) for name, result in parsed.items()}
+    rows = table_counts[CDC_MANUAL_TABLE]
     row_counts = {"input_rows": rows, "curated_rows": rows, "quarantined_rows": 0}
     artifact_hashes = [
         {"artifact_id": CDC_MANUAL_PRIMARY_ARTIFACT_ID, "role": "primary", "sha256": raw_digest}
@@ -394,6 +474,7 @@ def _publish_build(
         "curated_db_sha256": db_digest,
         "artifact_hashes": artifact_hashes,
         "row_counts": row_counts,
+        "table_row_counts": table_counts,
         "automated_status": "passed",
         "synthetic_ci_status": synthetic_ci_status,
         "blocking_errors": [],
@@ -455,8 +536,8 @@ def _publish_build(
             "timezone_known": False,
         },
         "manual_edition": {
-            "manual_version": parsed.summary["manual_version"],
-            "approved_date_raw": parsed.summary["approved_date_raw"],
+            "manual_version": parsed[CDC_MANUAL_TABLE].summary["manual_version"],
+            "approved_date_raw": parsed[CDC_MANUAL_TABLE].summary["approved_date_raw"],
         },
         "fetched_at": fetched_at,
         "artifacts": [
@@ -474,6 +555,7 @@ def _publish_build(
         ],
         "transform": {"application_build_sha256": application_build_hash, **transform},
         "counts": row_counts,
+        "table_counts": table_counts,
         "validation": {
             "automated_validation_status": "passed",
             "blocking_errors": [],
@@ -485,7 +567,7 @@ def _publish_build(
             "completed_gates": list(CDC_MANUAL_SERVING_GATES),
             "capability_reviews": [],
         },
-        "layout_summary": parsed.summary,
+        "layout_summary": {name: result.summary for name, result in parsed.items()},
         "audit_evidence": {
             "validation": {
                 "data_root_relative_path": validation_relative,
@@ -720,8 +802,8 @@ def build_cdc_manual_snapshot(
     from .nhi import _application_build_identity
 
     data_root = Path(data_root)
-    parsed = parse_cdc_specimen_layout(dict(layout))
-    version = parsed.summary["manual_version"]
+    parsed = parse_cdc_manual_tables(layout)
+    version = parsed[CDC_MANUAL_TABLE].summary["manual_version"]
     fetched_at = _utc_now_text()
     documents = [
         (
@@ -1071,8 +1153,10 @@ def _column_at(xs: Sequence[float], x: float) -> int | None:
     return next((index for index in range(len(xs) - 1) if xs[index] <= x < xs[index + 1]), None)
 
 
-def _word_tag_rows(layout: Mapping[str, Any], pages: Sequence[int]) -> list[dict[str, str | None]]:
-    """Rebuild chapter 2 rows from the Word TR/TD tags (ADR 0003 decision 5).
+def _word_tag_rows(
+    layout: Mapping[str, Any], pages: Sequence[int], curated: CdcCuratedTable
+) -> list[dict[str, str | None]]:
+    """Rebuild one table's rows from the Word TR/TD tags (ADR 0003 decision 5).
 
     Each TR is one row and each TD's marked-content text is one cell. A TD's column is the space
     between the vertical rules where its characters sit (its marked-content box when it has no
@@ -1130,7 +1214,7 @@ def _word_tag_rows(layout: Mapping[str, Any], pages: Sequence[int]) -> list[dict
         header_rows = [
             index
             for index, row in enumerate(rows)
-            if any(child is not None and text_of(child) == "傳染病名稱" for child in row)
+            if any(child is not None and text_of(child) == curated.spec.anchor for child in row)
         ]
         if header_rows:
             header = rows[header_rows[-1]]
@@ -1197,7 +1281,7 @@ def _word_tag_rows(layout: Mapping[str, Any], pages: Sequence[int]) -> list[dict
     return [
         {
             field: None if record.get(field) is None else "".join(record[field] or ())
-            for field in CDC_SPECIMEN_FIELDS
+            for field in curated.spec.fields
         }
         for record in records
     ]
@@ -1211,31 +1295,48 @@ def verify_cdc_manual_rows_against_tags(
     connection = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True)
     connection.row_factory = sqlite3.Row
     try:
-        stored = [
-            dict(row)
-            for row in connection.execute(f"SELECT * FROM {CDC_MANUAL_TABLE} ORDER BY row_number")
-        ]
+        stored = {
+            table.name: [
+                dict(row)
+                for row in connection.execute(f"SELECT * FROM {table.name} ORDER BY row_number")
+            ]
+            for table in CDC_MANUAL_TABLES
+        }
     finally:
         connection.close()
-    tagged = _word_tag_rows(layout, sorted({row["pdf_page"] for row in stored}))
     mismatches: list[dict[str, Any]] = []
-    if len(tagged) != len(stored):
-        mismatches.append(
-            {"row_number": None, "field": "rows", "stored": len(stored), "tags": len(tagged)}
-        )
-    for row, record in zip(stored, tagged):
-        for field in CDC_SPECIMEN_FIELDS:
-            value = None if row[field] is None else _squeeze(row[field])
-            if value != record[field]:
-                mismatches.append(
-                    {
-                        "row_number": row["row_number"],
-                        "pdf_page": row["pdf_page"],
-                        "field": field,
-                        "stored": value,
-                        "tags": record[field],
-                    }
-                )
+    compared: dict[str, dict[str, int]] = {}
+    for table in CDC_MANUAL_TABLES:
+        rows = stored[table.name]
+        tagged = _word_tag_rows(layout, sorted({row["pdf_page"] for row in rows}), table)
+        compared[table.name] = {
+            "rows_compared": len(rows),
+            "cells_compared": len(rows) * len(table.spec.fields),
+        }
+        if len(tagged) != len(rows):
+            mismatches.append(
+                {
+                    "table": table.name,
+                    "row_number": None,
+                    "field": "rows",
+                    "stored": len(rows),
+                    "tags": len(tagged),
+                }
+            )
+        for row, record in zip(rows, tagged):
+            for field in table.spec.fields:
+                value = None if row[field] is None else _squeeze(row[field])
+                if value != record[field]:
+                    mismatches.append(
+                        {
+                            "table": table.name,
+                            "row_number": row["row_number"],
+                            "pdf_page": row["pdf_page"],
+                            "field": field,
+                            "stored": value,
+                            "tags": record[field],
+                        }
+                    )
     if mismatches:
         raise CdcManualImportError(
             "LAYOUT_TAG_TEXT_MISMATCH",
@@ -1243,8 +1344,9 @@ def verify_cdc_manual_rows_against_tags(
         )
     report = {
         "check": CDC_MANUAL_TAG_CHECK,
-        "rows_compared": len(stored),
-        "cells_compared": len(stored) * len(CDC_SPECIMEN_FIELDS),
+        "rows_compared": sum(item["rows_compared"] for item in compared.values()),
+        "cells_compared": sum(item["cells_compared"] for item in compared.values()),
+        "tables": compared,
         "mismatches": [],
     }
     return "cdc-manual-tag-check", "word-tag-check.json", canonical_json_bytes(report)
@@ -1294,10 +1396,11 @@ def build_official_cdc_manual_snapshot(
             raise CdcManualImportError("OWNER_REVIEW_REVIEWER_MISMATCH", review["gate_id"])
 
     layout = extract_cdc_manual_layout(raw["manual_payload"])
-    parsed = parse_cdc_specimen_layout(layout)
+    parsed = parse_cdc_manual_tables(layout)
+    summary = parsed[CDC_MANUAL_TABLE].summary
     discovery = raw["discovery"]
-    if parsed.summary["manual_version"] != discovery["manual_version_raw"]:
-        raise CdcManualImportError("MANUAL_VERSION_MISMATCH", parsed.summary["manual_version"])
+    if summary["manual_version"] != discovery["manual_version_raw"]:
+        raise CdcManualImportError("MANUAL_VERSION_MISMATCH", summary["manual_version"])
     raw_digest = sha256_bytes(raw["manual_payload"])
     golden_results = evaluate_cdc_manual_golden_cases(
         layout, approved_golden_cases, raw_artifact_sha256=raw_digest
