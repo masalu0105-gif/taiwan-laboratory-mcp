@@ -681,9 +681,9 @@ P1.1 official publish禁止OCR。無可靠文字層的頁可另產candidate/stag
 
 - `cdc_specimen_requirement`：第2章疾病、檢體、目的、時間、量與規定、送驗方式、官方欄名`應保存種類（應保存時間）`、注意事項。該保存欄是疾管署保存材料／期間，欄位與tool description依PRD safety registry固定標`not_pre_submission_storage=true`；真正運送溫度／時間只保留在`送驗方式`或注意事項原文，不另推導storage欄。
 - `cdc_testing_location`：第 7 章疾病、採檢單位、採檢項目、檢驗方法、期限、收件單位、BSL、備註。
-- `cdc_testing_period`：第 7.7 節獨立 schema。
+- ~~`cdc_testing_period`：第 7.7 節獨立 schema。~~ 更正（2026-09-16，`D-024`）：7.7 併在 `cdc_testing_location`，多一個 `testing_period_raw` 欄位，BSL 留白。
 - `cdc_receiving_unit`：第 7.9 節電話、傳真、地址獨立 schema。
-- `cdc_revision_entry`：修正規定、現行規定、說明及頁面 locator，只作 diff 導航。
+- ~~`cdc_revision_entry`：修正規定、現行規定、說明及頁面 locator，只作 diff 導航。~~ 更正（2026-09-16，`D-024`）：改存成建置稽核證據 `revision-changes.json`（印刷頁碼、主旨、說明、延續頁），不進服務資料庫。
 
 每列保存 `manual_version`、`approved_date_raw`、`pdf_page`、`printed_page`、`table_section`、`row_bbox`、各 cell raw text、header lineage、artifact SHA-256。`retention_raw` 不可改名成運送前保存；不同方法、檢體、目的或時間不能合併為疾病級通則。第 2 與第 7 章只在 query 層以可追溯 key 提供分開結果，不在 extraction 階段直接 join。
 
@@ -912,6 +912,7 @@ Migration不刪除sample fixtures，也不自動搬移使用者資料。Manifest
 | `D-021` 未審核代碼預設 | Accepted（owner 2026-09-15選「先當成「算」」） | NHI只用於正式建置：沒有核准scope規則的代碼`scope_status=in_scope`、`scope_basis_locator`寫明依owner決定，NHI-R1-SCOPE capability視為approved，查詢不因此回`review_incomplete`；離線合成建置維持`review_pending`。TFDA所有建置：附表A/B/C類沒有registry決定的代碼算`included`（`derive_ivd_scope`與獨立逐列比對同規則，不再計入`unknown_code_rows`），其他類與無代碼列維持`unknown`；自動更新摘要仍列出這些代碼 |
 | `D-022` CDC手冊版面讀法 | Accepted（工程決定2026-09-15，依§10.3 extraction gate第3步） | 以1150826版實測：LiteParse把同一行相鄰兩欄併成一段、沒有表格線；PDFium（`pypdfium2`，optional extra `cdc-manual`，exact version）有逐字元框、格線與Word表格標記。欄以表頭文字對應（沒有表頭的頁面只在各欄寬度與上一頁相同時當延續頁）；列界線只算黑色且兩端貼齊格線的橫線；跨頁溢出依TR內TD順序接回上一頁同欄最後一格；TD數不符、頁中溢出、找不到可接格子、表格內有字不屬於任何格、沒有文字層都整批擋下。見`docs/adr/0003-cdc-manual-pdf-layout.md` |
 | `D-023` 疾管署下載包與別名對照表 | Accepted（owner 2026-09-16：「全部照你的建議執行 疾管署的資料也放進去」） | `export-snapshot`／`install-snapshot`與每日自動發布加入`cdc_authorized_labs`、`cdc_specimen_manual`，內容與檢查同ADR 0001、0002；手冊raw revision內兩份PDF與`fetch.json`都進包，資料庫的列只從`manual.pdf`讀；四份CDC審核規則出第2版把下載包納入`PUB-R1-OWNER`範圍，本機建置以第2版重建後才發布；手冊查詢另加版本化別名對照表`rules/cdc_disease_alias/v1.json`（95個常見名稱→手冊寫法），版本與檔案hash進build fingerprint，答案仍用手冊原文。見`docs/adr/0004-cdc-snapshot-release-bundle.md`、PRD OD-16、OD-19 |
+| `D-024` 手冊第7章與修訂對照表 | Accepted（owner 2026-09-16：「手冊第七章也都必須要做」，OD-18） | 手冊裡每一種表寫成一份欄位規格，curated build 一種表一張 SQLite table：`cdc_specimen_requirement`（第2章）、`cdc_testing_location`（第7章送驗地點）、`cdc_receiving_unit`（7.9 收件單位）。~~`cdc_testing_period` 第7.7節獨立schema~~ 更正：7.7 與第7章其他節只差在印「檢驗期間」而非「檢驗期限」、且沒有BSL欄，同一張表多兩個欄位即可，不另開table；兩個官方欄名各自獨立，不互相代用。第7章每一欄都算列界線（1150826第101頁有一組只差在檢驗期限的安排，Word標記也算兩列）。Word標記逐格比對擴大到三張表。`counts` 仍只描述主表（第2章）以維持發布層共用檢查，另加 `table_counts` 描述每張表。~~`cdc_revision_entry` 進 entity table~~ 更正：修訂對照表只讀成異動清單（印刷頁碼、主旨、說明、延續頁），存成每次正式建置的稽核證據 `audit/evidence/revision-changes.json`，不進服務用資料庫，也不複製「修正規定」「現行規定」兩欄的內文；讀者是內容審核（比對自算差異與官方列出的異動）。兩份CDC手冊審核規則出第3版把第7章與修訂對照表納入範圍。見 `docs/adr/0003-cdc-manual-pdf-layout.md`、PRD OD-18 |
 
 PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列出的工程decision不得冒充owner決議：
 
@@ -930,6 +931,7 @@ PRD owner decision 一對一追蹤如下；每個OD恰好出現一列，未列�
 | `OD-11` | `D-020` | 本機換版後自動發布GitHub Release（2026-09-15） |
 | `OD-12` | `D-021` | 未審核代碼先算「是」（2026-09-15） |
 | `OD-16`、`OD-19` | `D-023` | 手冊別名對照表、疾管署資料納入下載包（2026-09-16） |
+| `OD-18` | `D-024` | 手冊第7章已讀入並存進資料庫、修訂對照表已讀成異動清單存為稽核證據（2026-09-16）；查詢工具與公開契約改動待裁決 |
 
 `REL-G5` pilot 已由 owner 於 2026-09-14 取消，改為公開上線並以 GitHub Issues 收集使用者回饋（PRD §8.2、§8.4）；本文件中以 pilot 為前提的 `PilotResultV1` 等設計保留為歷史，不再是發布條件。
 

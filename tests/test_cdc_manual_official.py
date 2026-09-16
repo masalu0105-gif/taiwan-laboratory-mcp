@@ -513,8 +513,8 @@ def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution, pdf
     build_dir = tmp_path / "curated" / "cdc_specimen_manual" / built["snapshot_id"]
     review = json.loads((build_dir / "audit" / "reviews" / "CDC-R1-CONTENT.json").read_bytes())
     assert (review["reviewer_id"], review["reviewer_role"]) == (REVIEWER, ROLE)
-    # Version 2 adds the download bundle to the reviewed scope (OD-19).
-    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "2")
+    # Version 3 adds chapter 7 and the revision table to the reviewed scope (OD-18).
+    assert (review["protocol_id"], review["protocol_version"]) == ("cdc-manual-r1-ai-review", "3")
     # The revision table stays in the same raw revision and is listed as review evidence.
     references = {reference["artifact_id"]: reference for reference in review["evidence_refs"]}
     assert {"cdc-manual-pdf", "cdc-manual-revision-pdf", "cdc-manual-fetch-record"} <= set(
