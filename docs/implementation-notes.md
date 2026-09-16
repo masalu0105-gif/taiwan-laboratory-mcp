@@ -1367,7 +1367,11 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
   - 坑：in-process 呼叫 ASGI app 不會跑 lifespan，而 StreamableHTTP session manager 只在 lifespan 啟動，會得到 `RuntimeError: Task group is not initialized`。測試改成 `async with app.router.lifespan_context(app):` 包起來。
   - 坑：`Client(...)` 要收 transport 的 context manager 本身，不是已經 unpack 的 streams tuple。
 - 實機驗證（不是只有測試）：以 `TAIWAN_LAB_DATA_MODE=official_snapshot` 指向正式 data root、聽 127.0.0.1:8099，用真的 MCP client 連上去：24 個工具；`get_testing_location(登革熱)` 4 筆、`search_manual_procedure(不良檢體)` 2 筆、`get_points(09006C)` 1 筆，全部 `data_mode=official_snapshot`、`is_error=False`。
-- 尚未做／尚未決定：還沒有實際架在公開主機上（owner 考慮 Grok Bot 雲端 VM，那台機器能不能跑常駐程式、能不能對外服務、條款允不允許，都還沒查證）；沒有身分驗證與用量限制；架主機的人會看得到查詢內容，要不要留紀錄與隱私聲明怎麼寫還沒決定。
+- 尚未做／尚未決定：
+  - **還沒有實際架在公開主機上**，所以沒有可以給人的網址。
+  - Grok Bot 雲端 VM 這條路 **owner 2026-09-17 決定暫緩**：「目前還沒有用 GrokBot，所以列為之後要讓他去上傳、去做、去測試的事情。」待辦三項（要在那台機器上實測，不是推論）：能不能跑常駐程式並聽 port、能不能裝 cloudflared 拉 tunnel 對外、拿它當對外服務主機合不合 xAI／Cursor 條款。
+  - 沒有身分驗證與用量限制：拿到網址的人都查得到（查的是公開政府資料）。
+  - 架主機的人會看得到查詢內容，要不要留紀錄與隱私聲明怎麼寫還沒決定。
 
 ### 自動發下載包修好並補發（2026-09-17，owner：「修一修 然後把下載包發出去」）
 
