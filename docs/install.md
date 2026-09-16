@@ -56,14 +56,14 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 
 ## 第 3 步：下載資料
 
-在同一個 Release 頁面下載四個檔案：
+在同一個 Release 頁面下載這些檔案（每個資料包都附一個同名的 `.sha256`，用來確認檔案沒有壞掉）：
 
 | 檔案 | 內容 | 大小 |
 | --- | --- | --- |
 | `nhi_fee-snapshot-xxxxxxxxxxxx.zip` | 健保支付標準 | 約 2 MB |
-| 同名的 `.sha256` 檔 | 用來確認上面那個檔案沒有壞掉 | 1 KB 以下 |
 | `tfda_devices-snapshot-xxxxxxxxxxxx.zip` | 食藥署醫療器材許可證 | 約 65 MB |
-| 同名的 `.sha256` 檔 | 用來確認上面那個檔案沒有壞掉 | 1 KB 以下 |
+| `cdc_authorized_labs-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病認可檢驗機構名冊 | 約 0.5 MB |
+| `cdc_specimen_manual-snapshot-xxxxxxxxxxxx.zip` | 疾管署傳染病檢體採檢手冊（第 2 章） | 約 4 MB |
 
 只想查其中一種資料，就只下載那一組。
 
@@ -74,7 +74,7 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 - Windows：`Get-FileHash .\nhi_fee-snapshot-xxxxxxxxxxxx.zip -Algorithm SHA256`
 - macOS：`shasum -a 256 nhi_fee-snapshot-xxxxxxxxxxxx.zip`
 
-食藥署那個檔案用同樣方式確認。
+其他檔案用同樣方式確認。
 
 ## 第 4 步：把資料裝進電腦
 
@@ -83,7 +83,7 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 - Windows：`C:\Users\<你的使用者名稱>\taiwan-lab-data`
 - macOS：`/Users/<你的使用者名稱>/taiwan-lab-data`
 
-健保和食藥署裝進**同一個資料夾**，各執行一次指令。
+四種資料裝進**同一個資料夾**，各執行一次指令（下面以健保、食藥署為例，疾管署把 `nhi_fee` 換成 `cdc_authorized_labs` 或 `cdc_specimen_manual`、檔名換成對應的資料包即可）。
 
 **Windows**（PowerShell）：
 
@@ -115,7 +115,7 @@ uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/
 | --- | --- | --- |
 | `BUNDLE_SHA256_MISMATCH` | 下載的檔案和發布時不一樣 | 重新下載，確認 `--sha256` 沒有貼錯 |
 | `BUNDLE_MAGIC_MISMATCH` | 下載到的不是 ZIP（常見是下載到網頁） | 回 Release 頁面重新下載 |
-| `BUNDLE_SOURCE_MISMATCH` | 指令裡的 `nhi_fee`／`tfda_devices` 和檔案對不上 | 健保檔用 `nhi_fee`，食藥署檔用 `tfda_devices` |
+| `BUNDLE_SOURCE_MISMATCH` | 指令裡的來源名稱和檔案對不上 | 健保用 `nhi_fee`、食藥署用 `tfda_devices`、名冊用 `cdc_authorized_labs`、採檢手冊用 `cdc_specimen_manual` |
 | `BUNDLE_FILE_CONFLICT` | 資料夾裡已經有同名但內容不同的檔案 | 換一個新的空資料夾再裝 |
 | `BUNDLE_PATH_TOO_LONG` | 資料夾路徑太長，超過 Windows 的 260 字元限制（還沒寫入任何檔案） | 改用短一點的資料夾，例如 `C:\Users\<你的使用者名稱>\taiwan-lab-data` |
 | `BUNDLE_WRITE_FAILED` | 寫檔失敗，常見是磁碟滿了或沒有權限 | 確認磁碟空間與資料夾權限後重裝一次；已寫入的相同檔案會自動略過 |
@@ -191,9 +191,11 @@ claude mcp add taiwan-laboratory -s user -e TAIWAN_LAB_DATA_MODE=official_snapsh
 
 對 Claude 說：
 
-1. 「請先呼叫 get_data_status，告訴我資料狀態」：`nhi_fee` 與 `tfda_device` 應該都是 `available`。
+1. 「請先呼叫 get_data_status，告訴我資料狀態」：`nhi_fee`、`tfda_device`、`cdc_recognized_labs` 與 `cdc_manual` 應該都是 `available`。
 2. 「HbA1c 的健保碼是多少、支付幾點？」：應該查到 `09006C`，並附上資料來源與版本。
 3. 「HbA1c 有哪些體外診斷的許可證？」：應該列出許可證摘要（一次最多 5 筆），並附上資料來源與版本。
+4. 「登革熱要採什麼檢體、怎麼送驗？」：應該列出採檢手冊第 2 章的列，並附上手冊版次與頁碼。
+5. 「在台南能做傷寒的有哪幾間醫院？」：應該列出名冊上的機構（一次最多 20 筆）。
 
 ## 資料會過期嗎？
 
@@ -201,6 +203,7 @@ claude mcp add taiwan-laboratory -s user -e TAIWAN_LAB_DATA_MODE=official_snapsh
 
 - 健保署宣告每天更新：距離發布者最後一次核對原始檔超過 **2 天**就會標示。
 - 食藥署宣告每 7 天更新：超過 **14 天**就會標示。
+- 疾管署沒有宣告更新頻率，本專案每天檢查：超過 **2 天**就會標示。
 
 官方有新版時，本專案的電腦會自動檢查。檢查通過後，會自動發布新的 Release。重做第 3、4 步就能換成新版；舊版會留在資料夾裡。
 
@@ -214,12 +217,22 @@ taiwan-lab-data check nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --a
 taiwan-lab-data check tfda_devices --publisher-oid 2.16.886.101.20003.20065.20065 --actor my-computer --data-dir <你的資料夾> --json
 ```
 
+```bash
+taiwan-lab-data check cdc_authorized_labs --actor my-computer --data-dir <你的資料夾> --json
+```
+
+```bash
+taiwan-lab-data check cdc_specimen_manual --actor my-computer --data-dir <你的資料夾> --json
+```
+
 - `"result":"unchanged"`：跟你裝的資料一樣，過期標示會消失。
 - `"result":"changed"`：官方有新版。你的查詢會繼續用已裝好的版本，並標示「有新版等待審核」；等本專案發布新的 Release 後重裝即可。
 
 ## 已知限制
 
-- CDC 採檢手冊還沒有正式資料，查詢會回 `data_unavailable`。
+- 疾管署採檢手冊只收錄第 2 章「傳染病檢體採檢及運送規定總覽表」；第 7 章送驗地點、檢驗方法與修訂對照表還沒收錄。
+- 採檢手冊的「應保存種類（應保存時間）」是疾管署的保存規定，不是檢體送驗前的保存方式；送驗溫度與時間只在「送驗方式」或注意事項的原文裡。
+- 認可檢驗機構名冊查到的機構，只代表名冊上有這筆認可項目，不保證當次收件。
 - 「哪些健保項目屬於檢驗」由 AI 審核，紀錄見 [審核紀錄](reviews/nhi-lab-scope-ai-review-2026-09-14.md)。判不出來的代碼一律算檢驗；官方新版出現、還沒審過的代碼也先算檢驗，之後補審。所以「算檢驗」可能多收少數項目。
 - 「哪些醫材算體外診斷」由 AI 依食藥署分類分級附表逐碼判斷，紀錄見 [審核紀錄](reviews/tfda-ivd-ai-review-2026-09-14.md)。附表 A／B／C 類判不出來、或還沒審過的代碼先算體外診斷；沒有分類代碼或只有其他類別的許可證標「不確定」（`unknown`），仍查得到。
 - 食藥署許可證的比對結果不能推論產品可以互相替代。

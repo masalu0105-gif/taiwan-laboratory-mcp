@@ -1251,7 +1251,12 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 驗證：全部測試 564 passed；ruff check、ruff format --check、git diff --check 通過；wheel／sdist 建到 scratchpad，wheel 內含四份第 2 版規則檔，安裝包內容檢查通過；repo 外 venv、repo 外 cwd 以 `--import-mode=importlib` 跑 564 passed，contract 與 repo 位元組相同（144,136 bytes）。
 - 提交：commit `2aa3cef`，CI 通過（run 35037651962）。
 - 本機重建（以第 2 版規則）：名冊 build `cdc_authorized_labs-build-9de0bd3b…`（3,584 列、generation 3，換版前獨立解析逐列比對 0 不符）；手冊 build `cdc_specimen_manual-build-2c40d87b…`（370 列、generation 3）。重建後查「COVID-19」6 列、「猴痘」2 列、「登革熱」4 列，名冊查「台南 傷寒」40 筆，四個來源都 available。
-- 順手修掉的包裝問題：本機某個工具在程式資料夾內留下快取檔 `.impeccable/hook.cache.json`（git 已忽略，但打包時被收進 wheel 與 sdist）。發布腳本比對「安裝版檔案」與 `origin/main` 時，因為這兩個多出來的檔案回 `blocked`，下載包發不出去。修法：`pyproject.toml` 加 `[tool.hatch.build] exclude = ["**/.impeccable"]`，並在安裝包內容檢查加一條「路徑不得含 .impeccable」。先加檢查跑出 2 failed，改完重建後全過，wheel 檔案數 82。
+- 順手修掉的包裝問題：本機某個工具在程式資料夾內留下快取檔 `.impeccable/hook.cache.json`（git 已忽略，但打包時被收進 wheel 與 sdist）。發布腳本比對「安裝版檔案」與 `origin/main` 時，因為這兩個多出來的檔案回 `blocked`，下載包發不出去。修法：`pyproject.toml` 加 `[tool.hatch.build] exclude = ["**/.impeccable"]`，並在安裝包內容檢查加一條「路徑不得含 .impeccable」。先加檢查跑出 2 failed，改完重建後全過，wheel 檔案數 82。提交 commit `cc43058`，CI 通過（run 35038392287）。
+- 發布：修好包裝問題、把乾淨的 wheel 裝回 uv tool 環境後，`publish_data_release.py` 先 `--dry-run` 回 `would_release`，接著實際發布 GitHub Release `data-20260916`（標籤指向 commit `cc43058`）。四個下載包：健保 1,718,254 bytes、食藥署 64,832,909 bytes、疾管署名冊 518,772 bytes（`cdc_authorized_labs-snapshot-9de0bd3b5be7.zip`）、疾管署採檢手冊 3,867,442 bytes（`cdc_specimen_manual-snapshot-2c40d87bd71c.zip`），每個包另附 `.sha256`。Release 標題原本只寫「健保＋食藥署資料」，已改成「健保＋食藥署＋疾管署資料 2026-09-16」，發布腳本也一起改。
+- 發布說明新增的內容：疾管署兩個資料集各自的頁面、版本、筆數與審核方式；名冊寫「名冊上有這筆認可項目不等於當次收件」；手冊寫第 2 章 370 列、版次 1150826、核准日期，以及「第 7 章送驗地點與修訂對照表還沒收錄」；顯名加上疾管署與該署資料開放宣告網址。
+- 從使用者角度實測一次：用 `gh release download` 抓下兩個疾管署下載包，照 `.sha256` 帶 `--sha256` 安裝到一個全新的空資料夾（`C:\Users\User\AppData\Local\Temp\claude\tlm9`）：名冊寫入 14 個檔、手冊 16 個檔，兩個都 `installed`。在那個資料夾查：手冊「COVID-19」6 列、「登革熱」4 列（送驗方式「2-8oC↵(B 類感染性物質P650 包裝)」）、名冊「台南 傷寒」40 筆；健保與食藥署在該資料夾沒有安裝，照規則回 `data_unavailable`。
+- 一併更新 `docs/install.md`：下載清單加兩個疾管署資料包、安裝指令說明四種來源、錯誤碼對照補上來源名稱、試查範例加採檢手冊與名冊、過期規則補疾管署兩天、每日自查指令補兩個 `check` 指令、已知限制改寫（手冊只有第 2 章、保存欄不是送驗前保存、名冊命中不等於收件）。
+- 第一次在 scratchpad 內安裝時回 `BUNDLE_PATH_TOO_LONG`：scratchpad 路徑本來就長，加上 build 資料夾名稱超過 Windows 260 字元。這正是安裝說明裡寫的那條限制，改用短資料夾就成功。
 
 ### Owner 問：手冊能不能先用 MarkItDown 轉 Markdown 再給 AI 讀（2026-09-15）
 
