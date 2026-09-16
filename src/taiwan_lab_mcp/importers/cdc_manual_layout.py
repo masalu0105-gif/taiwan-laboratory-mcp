@@ -1245,6 +1245,11 @@ def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
                     pages_after = blocks[-1]["continues_on_pages"]
                     if number != blocks[-1]["page"] and number not in pages_after:
                         pages_after.append(number)
+                    else:
+                        # The box covers the whole block on the page it starts.
+                        box = blocks[-1]["box"]
+                        box[0], box[1] = min(box[0], x0), min(box[1], y0)
+                        box[2], box[3] = max(box[2], x1), max(box[3], y1)
                     continue
                 blocks.append(
                     {
@@ -1263,9 +1268,10 @@ def parse_cdc_manual_clauses(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
         raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID") from exc
     if not blocks:
         raise CdcManualLayoutError("LAYOUT_NO_CLAUSES")
-    # 「3. 傳染病檢體採檢步驟」 names chapter 3 in every row's locator.
+    # 「3. 傳染病檢體採檢步驟」 names chapter 3 in every row's locator. Only the heading line
+    # is the name: chapter 4 prints its opening paragraph right under the title.
     headings = {
-        block["number"]: (_clause_number(_join_wrapped(block["lines"])) or ("", ""))[1]
+        block["number"]: (_clause_number(block["lines"][0]) or ("", ""))[1]
         for block in blocks
         if block["kind"] == "clause" and "." not in block["number"]
     }
