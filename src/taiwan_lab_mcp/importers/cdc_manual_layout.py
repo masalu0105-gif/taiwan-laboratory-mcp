@@ -44,6 +44,10 @@ CDC_TESTING_LOCATION_FIELDS = (
     "notes",
 )
 CDC_RECEIVING_UNIT_FIELDS = ("unit_name", "phone", "fax", "address")
+# The revision table (OD-18) is read for navigation only: which printed page changed and why.
+CDC_REVISION_FIELDS = ("page_reference_raw", "subject_raw", "explanation_raw")
+CDC_REVISION_TABLE = "cdc_revision_entry"
+CDC_REVISION_SECTION = "修訂對照表"
 
 
 def _section_pattern(chapter: str) -> re.Pattern[str]:
@@ -154,6 +158,12 @@ _WIDTH_TOLERANCE = 1.0
 _COLUMN_RULE_MIN_HEIGHT = 25.0
 _CLUSTER_GAP = 2.0
 _PRINTED_PAGE_RE = re.compile(r"頁碼:第([0-9]+)頁")
+# Revision table: 「(P6)傷寒、副傷寒」 and 「(P74-79)4.傳染病檢體包裝及運送標準作業程序」.
+_REVISION_LABEL_RE = re.compile(r"^\(P([0-9]+(?:-[0-9]+)?)\)\s*(\S.*)$")
+_REVISION_HEADER = "修正規定"
+_COMPILED_DATE_RE = re.compile(r"製表日期:([0-9]+年[0-9]+月[0-9]+日)")
+# A revision page's outer frame is drawn with the tallest rules on the page.
+_FRAME_TOLERANCE = 2.0
 # Page header 「版次：1150826 核准日期：115年08月26日」.
 _VERSION_RE = re.compile(r"版次:([0-9]{7})")
 _APPROVED_DATE_RE = re.compile(r"核准日期:([0-9]+年[0-9]+月[0-9]+日)")
@@ -183,6 +193,8 @@ class CdcSpecimenRow:
     source_row_sha256: str
     display_values: tuple[str | None, ...] = ()
     field_names: tuple[str, ...] = CDC_SPECIMEN_FIELDS
+    # Revision entries only: the further pages this one change runs onto.
+    continues_on_pages: tuple[int, ...] = ()
 
     def fields(self) -> dict[str, str | None]:
         return dict(zip(self.field_names, self.values))
@@ -835,3 +847,189 @@ def parse_cdc_receiving_units(layout: dict[str, Any]) -> CdcSpecimenLayoutResult
     """Return the chapter 7 receiving-unit contacts, or raise CdcManualLayoutError."""
 
     return _parse_table(layout, CDC_RECEIVING_UNIT_SPEC)
+
+
+def _revision_frame(page: dict[str, Any]) -> tuple[list[float], list[float]] | None:
+    """Return the outer column rules and row rules of a revision page, or None when it has none.
+
+    The 修正規定 and 現行規定 columns hold pictures of the manual's own tables, so the nested
+    rules inside them are ignored: only rules that run the whole height (columns) or the whole
+    width (rows) of a page's frame belong to the revision table itself.
+    """
+
+    segments = page["segments"]
+    horizontals = [s for s in segments if _is_black(s.get("color")) and s["y1"] - s["y0"] < 3]
+    if not horizontals:
+        return None
+    levels = _cluster([(s["y0"] + s["y1"]) / 2 for s in horizontals])
+    at_level: list[list[tuple[float, float]]] = [[] for _ in levels]
+    for s in horizontals:
+        middle = (s["y0"] + s["y1"]) / 2
+        at_level[min(range(len(levels)), key=lambda k: abs(levels[k] - middle))].append(
+            (s["x0"], s["x1"])
+        )
+    widest = [max(_joined_runs(pieces), key=lambda run: run[1] - run[0]) for pieces in at_level]
+    across = max(run[1] - run[0] for run in widest)
+    # The table's own row rules run the full width; a nested table's rules stay inside one cell.
+    rows = [
+        (level, run)
+        for level, run in zip(levels, widest)
+        if run[1] - run[0] >= across - _FRAME_TOLERANCE
+    ]
+    if len(rows) < 2:
+        return None
+    ys = [level for level, _ in rows]
+    left = min(run[0] for _, run in rows)
+    right = max(run[1] for _, run in rows)
+    # A column rule of the table itself runs the whole height of the band it is in. Word draws
+    # each band as its own box, so the rules are joined per column before they are measured.
+    verticals = [s for s in segments if _is_black(s.get("color")) and s["x1"] - s["x0"] < 3]
+    centres = _cluster(
+        [
+            (s["x0"] + s["x1"]) / 2
+            for s in verticals
+            if left - _CLUSTER_GAP <= (s["x0"] + s["x1"]) / 2 <= right + _CLUSTER_GAP
+        ]
+    )
+    runs = {
+        centre: _joined_runs(
+            [
+                (s["y0"], s["y1"])
+                for s in verticals
+                if abs((s["x0"] + s["x1"]) / 2 - centre) <= _CLUSTER_GAP
+            ]
+        )
+        for centre in centres
+    }
+    xs = [
+        centre
+        for centre in centres
+        if all(
+            any(
+                low <= top + _FRAME_TOLERANCE and high >= bottom - _FRAME_TOLERANCE
+                for low, high in runs[centre]
+            )
+            for top, bottom in zip(ys, ys[1:])
+        )
+    ]
+    return (xs, ys) if len(xs) >= 2 else None
+
+
+def _revision_lines(
+    page: dict[str, Any], left: float, right: float, top: float, bottom: float
+) -> list[str]:
+    """Return one cell's text lines, each line in PDF stream order (「3.18.」 reads correctly)."""
+
+    lines: list[tuple[float, list[tuple[int, str]]]] = []
+    inside = [
+        (order, char)
+        for order, char in enumerate(page["chars"])
+        if left <= (char["x0"] + char["x1"]) / 2 < right
+        and top <= (char["y0"] + char["y1"]) / 2 < bottom
+    ]
+    for order, char in sorted(inside, key=lambda pair: (pair[1]["y0"] + pair[1]["y1"]) / 2):
+        middle = (char["y0"] + char["y1"]) / 2
+        if lines and middle - lines[-1][0] <= 5:
+            lines[-1][1].append((order, char["text"]))
+        else:
+            lines.append((middle, [(order, char["text"])]))
+    return ["".join(text for _, text in sorted(parts)).strip() for _, parts in lines]
+
+
+def parse_cdc_revision_entries(layout: dict[str, Any]) -> CdcSpecimenLayoutResult:
+    """Return one row per change the revision table lists, or raise CdcManualLayoutError.
+
+    A band with 說明 text starts a change; a band without it carries the change before it onto
+    another page. The 修正規定 and 現行規定 columns are not stored: they reprint the manual's own
+    tables, which the manual's own rows already hold.
+    """
+
+    if not isinstance(layout, dict) or layout.get("layout_schema_version") != 1:
+        raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID")
+    compiled_date: str | None = None
+    pages_with_table: list[int] = []
+    entries: list[dict[str, Any]] = []
+    try:
+        pages = sorted(layout["pages"], key=lambda page: int(page["page_number"]))
+        for page in pages:
+            number = int(page["page_number"])
+            found = _COMPILED_DATE_RE.search(
+                _squeeze("".join(char["text"] for char in page["chars"]))
+            )
+            if found and compiled_date is None:
+                compiled_date = found.group(1)
+            frame = _revision_frame(page)
+            if frame is None:
+                continue
+            xs, ys = frame
+            if len(xs) != len(CDC_REVISION_FIELDS) + 1:
+                raise CdcManualLayoutError("LAYOUT_REVISION_SHAPE", f"page {number}")
+            if not page["chars"]:
+                raise CdcManualLayoutError("LAYOUT_NO_TEXT_LAYER", f"page {number}")
+            pages_with_table.append(number)
+            for top, bottom in zip(ys, ys[1:]):
+                first = _revision_lines(page, xs[0], xs[1], top, bottom)
+                if first and _squeeze(first[0]) == _REVISION_HEADER:
+                    continue
+                explanation = "".join(_revision_lines(page, xs[-2], xs[-1], top, bottom))
+                if not explanation:
+                    if not entries:
+                        raise CdcManualLayoutError("LAYOUT_REVISION_ORPHAN_ROW", f"page {number}")
+                    if number not in entries[-1]["continues_on_pages"]:
+                        entries[-1]["continues_on_pages"].append(number)
+                    continue
+                label = _REVISION_LABEL_RE.match(first[0]) if first else None
+                entries.append(
+                    {
+                        "values": (
+                            label.group(1) if label else None,
+                            label.group(2).strip() if label else None,
+                            explanation,
+                        ),
+                        "page": number,
+                        "top": top,
+                        "bottom": bottom,
+                        "xs": xs,
+                        "continues_on_pages": [],
+                    }
+                )
+    except (KeyError, TypeError, ValueError) as exc:
+        if isinstance(exc, CdcManualLayoutError):
+            raise
+        raise CdcManualLayoutError("LAYOUT_SCHEMA_INVALID") from exc
+    if not entries:
+        raise CdcManualLayoutError("LAYOUT_NO_TABLE")
+    if compiled_date is None:
+        raise CdcManualLayoutError("LAYOUT_REVISION_DATE_MISSING")
+    rows = [
+        CdcSpecimenRow(
+            values=entry["values"],
+            locator={
+                "locator_type": "cdc_pdf_row",
+                "pdf_page": entry["page"],
+                "printed_page": None,
+                "table_section": CDC_REVISION_SECTION,
+                "row_bbox": [
+                    round(entry["xs"][0]),
+                    round(entry["top"]),
+                    round(entry["xs"][-1]),
+                    round(entry["bottom"]),
+                ],
+            },
+            source_row_sha256=sha256_bytes(canonical_json_bytes(list(entry["values"]))),
+            display_values=entry["values"],
+            field_names=CDC_REVISION_FIELDS,
+            continues_on_pages=tuple(entry["continues_on_pages"]),
+        )
+        for entry in entries
+    ]
+    return CdcSpecimenLayoutResult(
+        rows=rows,
+        summary={
+            "rules_version": CDC_MANUAL_LAYOUT_RULES_VERSION,
+            "table": CDC_REVISION_TABLE,
+            "compiled_date_raw": compiled_date,
+            "table_pages": pages_with_table,
+            "rows": len(rows),
+        },
+    )
