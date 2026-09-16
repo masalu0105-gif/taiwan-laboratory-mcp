@@ -31,6 +31,7 @@ def _module(name):
 
 PAGES = _module("layout")
 CHAPTER7 = _module("chapter7")
+REVISION = _module("revision")
 SOURCE = _module("source")
 SERVING_PDF = SOURCE._pdf("manual")
 REVISION_PDF = SOURCE._pdf("revision")
@@ -72,7 +73,7 @@ def readers(monkeypatch):
     # Word table tags cannot be produced in a test PDF; each synthetic PDF maps to a layout.
     import taiwan_lab_mcp.importers.cdc_manual as manual
 
-    layouts = {}
+    layouts = {REVISION_PDF: REVISION._layout(REVISION._first_page())}
     monkeypatch.setattr(manual, "extract_cdc_manual_layout", lambda payload: layouts[payload])
     return layouts
 

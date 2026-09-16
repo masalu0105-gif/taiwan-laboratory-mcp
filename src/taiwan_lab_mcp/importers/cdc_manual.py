@@ -51,6 +51,7 @@ from .cdc_manual_layout import (
     _read_page,
     _squeeze,
     parse_cdc_receiving_units,
+    parse_cdc_revision_entries,
     parse_cdc_specimen_layout,
     parse_cdc_testing_locations,
 )
@@ -1352,6 +1353,41 @@ def verify_cdc_manual_rows_against_tags(
     return "cdc-manual-tag-check", "word-tag-check.json", canonical_json_bytes(report)
 
 
+CDC_MANUAL_REVISION_CHANGES = "cdc-manual-revision-change-list-v1"
+
+
+def cdc_manual_revision_change_list(
+    revision_payload: bytes, *, approved_date_raw: str | None
+) -> tuple[str, str, bytes]:
+    """Read the revision table's change list as build evidence (OD-18).
+
+    The list says which printed pages this edition changed and why, so the content review can
+    compare it with the rows that actually differ. The 修正規定 and 現行規定 columns reprint the
+    manual's own tables and are not copied here.
+    """
+
+    layout = extract_cdc_manual_layout(revision_payload)
+    parsed = parse_cdc_revision_entries(layout)
+    report = {
+        "check": CDC_MANUAL_REVISION_CHANGES,
+        "rules_version": CDC_MANUAL_LAYOUT_RULES_VERSION,
+        # The manual prints 核准日期 and the revision table 製表日期; both are kept as printed.
+        "approved_date_raw": approved_date_raw,
+        "compiled_date_raw": parsed.summary["compiled_date_raw"],
+        "revision_layout_sha256": cdc_layout_sha256(layout),
+        "revision_pages": parsed.summary["table_pages"],
+        "entries": [
+            {
+                **row.fields(),
+                "pdf_page": row.locator["pdf_page"],
+                "continues_on_pages": list(row.continues_on_pages),
+            }
+            for row in parsed.rows
+        ],
+    }
+    return "cdc-manual-revision-changes", "revision-changes.json", canonical_json_bytes(report)
+
+
 def build_official_cdc_manual_snapshot(
     data_root: Path,
     *,
@@ -1386,7 +1422,7 @@ def build_official_cdc_manual_snapshot(
     if not isinstance(publisher_actor_id, str) or not publisher_actor_id.strip():
         raise CdcManualImportError("PUBLISHER_ACTOR_INVALID")
     review_inputs = _validated_owner_reviews(owner_reviews)
-    evidence_inputs = _evidence_inputs(evidence_files)
+    evidence_inputs = list(_evidence_inputs(evidence_files))
     protocol_id, protocol_version, protocol_sha256, reviewer_id, reviewer_role = _review_protocol(
         *review_protocol
     )
@@ -1401,6 +1437,12 @@ def build_official_cdc_manual_snapshot(
     discovery = raw["discovery"]
     if summary["manual_version"] != discovery["manual_version_raw"]:
         raise CdcManualImportError("MANUAL_VERSION_MISMATCH", summary["manual_version"])
+    # The revision table is read too, so the review sees what this edition says it changed.
+    evidence_inputs.append(
+        cdc_manual_revision_change_list(
+            raw["revision_payload"], approved_date_raw=summary["approved_date_raw"]
+        )
+    )
     raw_digest = sha256_bytes(raw["manual_payload"])
     golden_results = evaluate_cdc_manual_golden_cases(
         layout, approved_golden_cases, raw_artifact_sha256=raw_digest

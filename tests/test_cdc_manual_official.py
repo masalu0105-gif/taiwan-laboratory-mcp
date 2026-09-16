@@ -356,19 +356,22 @@ def distribution(monkeypatch):
     )
 
 
+def _revision_layout():
+    path = Path(__file__).with_name("test_cdc_manual_revision.py")
+    spec = importlib.util.spec_from_file_location("cdc_manual_revision_pages", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module._layout(module._first_page())
+
+
 @pytest.fixture
 def pdf_reader(monkeypatch):
     # Word table tags cannot be produced in a test PDF, so the reader returns a synthetic layout.
     import taiwan_lab_mcp.importers.cdc_manual as manual
 
-    layout = _layout()
-
-    def read(payload):
-        assert payload == MANUAL_PDF, "rows come from the manual, never the revision table"
-        return layout
-
-    monkeypatch.setattr(manual, "extract_cdc_manual_layout", read)
-    return layout
+    layouts = {MANUAL_PDF: _layout(), REVISION_PDF: _revision_layout()}
+    monkeypatch.setattr(manual, "extract_cdc_manual_layout", lambda payload: layouts[payload])
+    return layouts[MANUAL_PDF]
 
 
 def _fetched(data_root, *, version="1150826", manual=MANUAL_PDF):
@@ -530,6 +533,24 @@ def test_official_build_uses_the_delegated_ai_review(tmp_path, distribution, pdf
         },
         "mismatches": [],
     }
+    # The revision table's change list travels with the build for the content review (OD-18).
+    changes = json.loads(
+        (tmp_path / references["cdc-manual-revision-changes"]["path"]).read_bytes()
+    )
+    assert changes["check"] == "cdc-manual-revision-change-list-v1"
+    assert (changes["compiled_date_raw"], changes["approved_date_raw"]) == (
+        "115年08月26日",
+        "115年08月26日",
+    )
+    assert changes["entries"] == [
+        {
+            "page_reference_raw": "6",
+            "subject_raw": "傷寒、副傷寒",
+            "explanation_raw": "修訂採檢項目、採檢目的",
+            "pdf_page": 1,
+            "continues_on_pages": [],
+        }
+    ]
     certificate = json.loads((build_dir / "audit" / "golden-qualification.json").read_bytes())
     assert certificate["official_qualification_status"] == "approved"
     assert len(certificate["approved_distinct_case_ids"]) == 10

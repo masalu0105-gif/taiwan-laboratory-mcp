@@ -41,7 +41,9 @@ def manual_reader(monkeypatch):
     import taiwan_lab_mcp.importers.cdc_manual as manual
 
     layout = MANUAL._layout()
-    monkeypatch.setattr(manual, "extract_cdc_manual_layout", lambda payload: layout)
+    revision = MANUAL._revision_layout()
+    layouts = {MANUAL.MANUAL_PDF: layout, MANUAL.REVISION_PDF: revision}
+    monkeypatch.setattr(manual, "extract_cdc_manual_layout", lambda payload: layouts[payload])
     return layout
 
 
