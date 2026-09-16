@@ -1352,6 +1352,18 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 審核規則第 5 版：把第 1、8、9 章與附件、圖說、以及「表格頁只補讀圖說」寫進版面關；內容關加「附件表單照原樣呈現、不能當成已填好的紀錄」「第 1 章定義照原文、不改寫成建議」；驗收題再加一題（第 1／8／9 章或附件）。
 - 本機重建：build `cdc_specimen_manual-build-a5b9ff095f07…`、generation 7，18 題驗收題全過，第 18 題（1.1 名詞解釋）我算圖對過頁面，含紅字修訂的「疾管署」照原文存成一般文字。
 
+### 自動發下載包修好並補發（2026-09-17，owner：「修一修 然後把下載包發出去」）
+
+- 症狀：2026-09-16 09:30 排程的發布步驟 `exit=6`、`{"result":"failed","reasons":["KeyError:'rows'"]}`；GitHub 上的下載包停在手冊 build `cdc_specimen_manual-snapshot-2c40d87bd71c.zip`，沒有第 7 章與第 3–9 章。
+- 原因：手冊改成一次建四張表之後，manifest 的 `layout_summary` 從 `{"rows": 370, "table_pages": [...]}` 變成以資料表名稱分開的 dict（`cdc_specimen_requirement`／`cdc_testing_location`／`cdc_receiving_unit`／`cdc_manual_clause`），repo 外的 `automation\publish_data_release.py` 產生發布說明時還在讀 `layout_summary["rows"]`。
+- `--dry-run` 為什麼擋不住：dry run 在 `_release_notes()` 之前就回傳 `would_release`，出事的那段程式根本沒跑到（對應 feedback「dry-run 承諾≠實部行為」）。
+- 改法（都在 repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\automation\publish_data_release.py`，該資料夾不是 git repo）：
+  - 手冊段落改成逐表列出：第 2 章 370 列（55 個表格頁）、第 7 章 218 列、7.9 收件單位 4 列、其餘章節與附件圖說 177 列。
+  - 新增 `_row_total()`：manifest 有 `table_counts` 就加總（手冊 769 = 370＋218＋4＋177），沒有才用 `counts["curated_rows"]`，其他三個來源數字不變。
+  - 「目前限制」那行從「疾管署採檢手冊只收錄第 2 章的採檢與送驗規定；第 7 章送驗地點、檢驗方法與修訂對照表還沒收錄。」改成「疾管署採檢手冊整本收錄，只有卷末的修訂對照表沒有開查詢（留作建置稽核證據）。」
+  - 防再犯：把每個來源的描述抽成 `_source_notes(data_root, source_id, build_id)`，並在 `if dry_run:` 分支對四個來源各呼叫一次。以後 manifest 改形狀，dry run 就會先失敗，不會等到真的發布才爆。
+- 結果：`publish_data_release.py --json` 實跑回 `{"result":"released","tag":"data-20260917"}`；`gh release view data-20260917` 確認已公開、非草稿，手冊下載包換成 `cdc_specimen_manual-snapshot-a5b9ff095f07.zip`（3,956,966 bytes、SHA-256 `ec1d69c62374cd5188bc4684d79545a73a66b3c0329ad68df4c7c75821a43f21`）。發布後再跑一次 `--dry-run` 回 `already_released`。
+
 ### 自動換版的守門也涵蓋第 7 章（2026-09-16，OD-18）
 
 - 問題：新版手冊自動換版前的「變動幅度」檢查只看第 2 章。第 7 章讀錯或整章消失時，照樣會自動換上去。
