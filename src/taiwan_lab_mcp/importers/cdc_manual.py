@@ -120,6 +120,8 @@ class CdcCuratedTable:
     parse: Callable[[dict[str, Any]], CdcSpecimenLayoutResult]
     search_column: str
     search_field: str
+    # The key a golden case gives this table's rows in its `input`.
+    input_key: str
 
     @property
     def name(self) -> str:
@@ -144,11 +146,19 @@ class CdcCuratedTable:
 
 
 CDC_MANUAL_TABLES = (
-    CdcCuratedTable(CDC_SPECIMEN_SPEC, parse_cdc_specimen_layout, "disease_search", "disease"),
     CdcCuratedTable(
-        CDC_TESTING_LOCATION_SPEC, parse_cdc_testing_locations, "disease_search", "disease"
+        CDC_SPECIMEN_SPEC, parse_cdc_specimen_layout, "disease_search", "disease", "disease"
     ),
-    CdcCuratedTable(CDC_RECEIVING_UNIT_SPEC, parse_cdc_receiving_units, "unit_search", "unit_name"),
+    CdcCuratedTable(
+        CDC_TESTING_LOCATION_SPEC,
+        parse_cdc_testing_locations,
+        "disease_search",
+        "disease",
+        "disease",
+    ),
+    CdcCuratedTable(
+        CDC_RECEIVING_UNIT_SPEC, parse_cdc_receiving_units, "unit_search", "unit_name", "unit"
+    ),
 )
 CDC_MANUAL_ROW_COLUMNS = CDC_MANUAL_TABLES[0].columns
 
@@ -1054,12 +1064,17 @@ def _load_official_raw_revision(data_root: Path, raw_revision_id: str) -> dict[s
     }
 
 
-_EXPECTED_FIELDS = frozenset([*CDC_SPECIMEN_FIELDS, *DISPLAY_COLUMNS])
+_EXPECTED_FIELDS = frozenset(
+    name
+    for table in CDC_MANUAL_TABLES
+    for field in table.spec.fields
+    for name in (field, f"{field}_display")
+)
 
 
 def _golden_failure_codes(
     case: GoldenCaseV1,
-    rows: Sequence[CdcSpecimenRow],
+    rows: Sequence[tuple[CdcCuratedTable, CdcSpecimenRow]],
     *,
     raw_artifact_sha256: str,
     transform: dict[str, Any],
@@ -1085,16 +1100,24 @@ def _golden_failure_codes(
         f"EXPECTED_FIELD_UNSUPPORTED:{field}"
         for field in sorted(set(case.expected_fields) - _EXPECTED_FIELDS)
     )
-    disease = case.input.get("disease") if set(case.input) == {"disease"} else None
-    if not disease or not norm(disease):
+    if len(case.input) != 1:
         codes.append("INPUT_UNSUPPORTED")
         return codes
-    located = [row for row in rows if row.locator == locator.model_dump()]
-    # The case must name a disease that the search tool matches against this row.
-    if len(located) != 1 or norm(disease) not in norm(located[0].display_fields()["disease"]):
+    (key,), (query,) = zip(*case.input.items())
+    if not isinstance(query, str) or not norm(query):
+        codes.append("INPUT_UNSUPPORTED")
+        return codes
+    located = [pair for pair in rows if pair[1].locator == locator.model_dump()]
+    # The case must give the name the search tool matches this row by: a disease for the manual's
+    # chapter 2 and chapter 7 tables, a unit name for the receiving-unit contacts.
+    if (
+        len(located) != 1
+        or key != located[0][0].input_key
+        or norm(query) not in norm(located[0][1].display_fields()[located[0][0].search_field])
+    ):
         codes.append("STATUS_MISMATCH")
         return codes
-    row = located[0]
+    table, row = located[0]
     if case.source_row_sha256 != row.source_row_sha256:
         codes.append("LOCATOR_MISMATCH")
     values = {
@@ -1119,7 +1142,8 @@ def evaluate_cdc_manual_golden_cases(
 ) -> list[dict[str, Any]]:
     """Re-run golden cases against a page layout read from the manual; no writes or approval."""
 
-    parsed = parse_cdc_specimen_layout(dict(layout))
+    parsed = parse_cdc_manual_tables(layout)
+    rows = [(table, row) for table in CDC_MANUAL_TABLES for row in parsed[table.name].rows]
     transform = active_cdc_manual_transform(cdc_layout_sha256(layout))
     validated: list[tuple[dict[str, Any], GoldenCaseV1]] = []
     try:
@@ -1134,7 +1158,7 @@ def evaluate_cdc_manual_golden_cases(
     results = []
     for raw_case, model in validated:
         failure_codes = _golden_failure_codes(
-            model, parsed.rows, raw_artifact_sha256=raw_artifact_sha256, transform=transform
+            model, rows, raw_artifact_sha256=raw_artifact_sha256, transform=transform
         )
         results.append(
             {

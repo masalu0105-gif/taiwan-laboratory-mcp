@@ -475,6 +475,82 @@ def _cases(layout, artifact_relative, count=10):
     return cases
 
 
+def _chapter7_case(layout, artifact_relative, *, case_id, parse, input_key, field):
+    from taiwan_lab_mcp.cdc_manual_source import CDC_MANUAL_LANDING_URL
+    from taiwan_lab_mcp.importers.cdc_manual import (
+        active_cdc_manual_transform,
+        cdc_layout_sha256,
+    )
+
+    row = parse(layout).rows[0]
+    return {
+        "golden_case_schema_version": 1,
+        "case_id": case_id,
+        "source_id": "cdc_specimen_manual",
+        "acceptance_id": "CDC-01",
+        "source_title": "傳染病檢體採檢手冊",
+        "official_landing_url": CDC_MANUAL_LANDING_URL,
+        "official_version_or_modified_at": "1150826",
+        "official_source": True,
+        "artifact_id": "cdc-manual-pdf",
+        "raw_artifact_sha256": hashlib.sha256(MANUAL_PDF).hexdigest(),
+        "evidence_data_root_relative_path": artifact_relative,
+        "fixture_file": None,
+        "fixture_sha256": None,
+        "transform": active_cdc_manual_transform(cdc_layout_sha256(layout)),
+        "input": {input_key: row.display_fields()[field].split(chr(10))[-1]},
+        "source_locator": row.locator,
+        "source_row_sha256": row.source_row_sha256,
+        "expected_status": "ok",
+        "expected_fields": {
+            field: row.fields()[field],
+            f"{field}_display": row.display_fields()[field],
+        },
+        "expected_warnings": [],
+        "reviewer_id": REVIEWER,
+        "reviewer_role": ROLE,
+        "identity_assurance": "local_asserted",
+        "reviewed_at": REVIEWED_AT,
+        "review_status": "approved",
+    }
+
+
+def test_golden_cases_can_check_chapter_7_rows_and_receiving_units(tmp_path):
+    # Owner 2026-09-16 (OD-18): protocol 3 asks for chapter 7 rows among the golden cases.
+    from taiwan_lab_mcp.importers.cdc_manual import evaluate_cdc_manual_golden_cases
+    from taiwan_lab_mcp.importers.cdc_manual_layout import (
+        parse_cdc_receiving_units,
+        parse_cdc_testing_locations,
+    )
+
+    layout = _layout()
+    digest = hashlib.sha256(MANUAL_PDF).hexdigest()
+    location = _chapter7_case(
+        layout,
+        "raw/manual.pdf",
+        case_id="CDC-G7-001",
+        parse=parse_cdc_testing_locations,
+        input_key="disease",
+        field="disease",
+    )
+    unit = _chapter7_case(
+        layout,
+        "raw/manual.pdf",
+        case_id="CDC-G7-002",
+        parse=parse_cdc_receiving_units,
+        input_key="unit",
+        field="unit_name",
+    )
+
+    results = evaluate_cdc_manual_golden_cases(layout, [location, unit], raw_artifact_sha256=digest)
+
+    assert [result["failure_codes"] for result in results] == [[], []]
+    # A receiving-unit row is not found by a disease name.
+    wrong = {**unit, "case_id": "CDC-G7-003", "input": {"disease": "天花"}}
+    (result,) = evaluate_cdc_manual_golden_cases(layout, [wrong], raw_artifact_sha256=digest)
+    assert result["failure_codes"] == ["STATUS_MISMATCH"]
+
+
 def _reviews(**changes):
     from taiwan_lab_mcp.importers.cdc_manual import CDC_MANUAL_SERVING_GATES
 
