@@ -1,0 +1,93 @@
+{
+  "rule_version": "cdc-lab-alias-v1",
+  "source_id": "cdc_authorized_labs",
+  "status": "complete",
+  "note": "Owner 2026-09-17: 名冊的機構名稱是逐字比對，所以只有「剛好是全名一部分」的簡稱查得到（「北榮」是「臺北榮民總醫院」的一段，查得到；「成大」不是「國立成功大學醫學院附設醫院」的任何一段，查不到）。這裡只收查不到的那些。查詢時逐字替換，所以「成大 傷寒」會變成「成功大學 傷寒」。別名兩邊都先做過搜尋正規化（NFKC、小寫、去空白與括號、臺折成台）。",
+  "reviewer_note": "AI review delegated by the owner (OD-04)；每一條都對 1150914 名冊實測過：別名本身回 0 列，替換後的字至少回 1 列。",
+  "entries": [
+    {
+      "alias": "成大",
+      "query": "成功大學",
+      "typed_as": "成大",
+      "reads_as": "成功大學"
+    },
+    {
+      "alias": "高榮",
+      "query": "高雄榮民總醫院",
+      "typed_as": "高榮",
+      "reads_as": "高雄榮民總醫院"
+    },
+    {
+      "alias": "榮總",
+      "query": "榮民總醫院",
+      "typed_as": "榮總",
+      "reads_as": "榮民總醫院"
+    },
+    {
+      "alias": "台北榮總",
+      "query": "台北榮民總醫院",
+      "typed_as": "台北榮總",
+      "reads_as": "臺北榮民總醫院"
+    },
+    {
+      "alias": "高雄榮總",
+      "query": "高雄榮民總醫院",
+      "typed_as": "高雄榮總",
+      "reads_as": "高雄榮民總醫院"
+    },
+    {
+      "alias": "台中榮總",
+      "query": "台中榮民總醫院",
+      "typed_as": "台中榮總",
+      "reads_as": "臺中榮民總醫院"
+    },
+    {
+      "alias": "中國附醫",
+      "query": "中國醫藥大學",
+      "typed_as": "中國附醫",
+      "reads_as": "中國醫藥大學"
+    },
+    {
+      "alias": "中醫大",
+      "query": "中國醫藥大學",
+      "typed_as": "中醫大",
+      "reads_as": "中國醫藥大學"
+    },
+    {
+      "alias": "彰基",
+      "query": "彰化基督教醫院",
+      "typed_as": "彰基",
+      "reads_as": "彰化基督教醫院"
+    },
+    {
+      "alias": "嘉基",
+      "query": "嘉義基督教醫院",
+      "typed_as": "嘉基",
+      "reads_as": "嘉義基督教醫院"
+    },
+    {
+      "alias": "三總",
+      "query": "三軍總醫院",
+      "typed_as": "三總",
+      "reads_as": "三軍總醫院"
+    },
+    {
+      "alias": "中山附醫",
+      "query": "中山醫學大學附設醫院",
+      "typed_as": "中山附醫",
+      "reads_as": "中山醫學大學附設醫院"
+    },
+    {
+      "alias": "部立",
+      "query": "衛生福利部",
+      "typed_as": "部立",
+      "reads_as": "衛生福利部"
+    },
+    {
+      "alias": "衛福部",
+      "query": "衛生福利部",
+      "typed_as": "衛福部",
+      "reads_as": "衛生福利部"
+    }
+  ]
+}

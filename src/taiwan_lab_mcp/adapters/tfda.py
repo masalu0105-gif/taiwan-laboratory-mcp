@@ -309,7 +309,9 @@ class TFDAAdapter:
                 )
 
         def summary(row: dict[str, Any], evaluation: TemporalEvaluation) -> TFDASearchRecord:
-            return _summary_record(row, matched_fields(row, query, _IVD_FIELDS), evaluation)
+            # search.query, not query: a common word may have been replaced by the wording the
+            # licences use, and the rows were found by that wording.
+            return _summary_record(row, matched_fields(row, search.query, _IVD_FIELDS), evaluation)
 
         if candidates:
             return self._respond(

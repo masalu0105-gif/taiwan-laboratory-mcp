@@ -289,6 +289,13 @@ def evaluate_row(row: dict[str, Any], as_of: date) -> TemporalEvaluation:
 
 @dataclass(frozen=True)
 class SearchRequest:
+    """A search, with the asked-for term already replaced by the wording the licences use.
+
+    The replacement happens here rather than at the SQL, because the caller also asks which field
+    matched: resolving it in one place stops a search finding rows by 「Abbott」 and then reporting
+    that nothing matched 「亞培」 (owner 2026-09-17).
+    """
+
     query: str
     fields: tuple[str, ...]
     ivd_scopes: tuple[str, ...] | None = None
@@ -299,6 +306,12 @@ class SearchRequest:
     rank_by_manufacturer: bool = False
     limit: int = 20
     offset: int = 0
+
+    def __post_init__(self) -> None:
+        from .rules.aliases import apply_device_alias
+
+        resolved = apply_device_alias(tfda_search_normalize(self.query), fields=self.fields)
+        object.__setattr__(self, "query", resolved)
 
 
 # TFDA-06 match tiers: exact permit number, exact name, name prefix, name contains, other field.

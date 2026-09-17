@@ -219,9 +219,14 @@ def search_labs(
     """Exact certificate or disease code first, then exact names, then any field containing it.
 
     Words separated by spaces must all match; county or city words filter 縣市別 instead.
+
+    A short hospital name the roster's own text does not contain is replaced first, word by word,
+    so 「成大 傷寒」 searches 「成功大學 傷寒」 (owner 2026-09-17).
     """
 
-    words = tfda_search_normalize(query).split(" ")
+    from .rules.aliases import apply_lab_aliases
+
+    words = apply_lab_aliases(tfda_search_normalize(query).split(" "))
     city_words = [word for word in words if word in _CITY_WORDS] if len(words) > 1 else []
     search_words = [word for word in words if word not in city_words]
     if not search_words:
