@@ -87,6 +87,7 @@ CDC 的採檢、容器、運送等工具目前回傳同一完整疾病紀錄，�
 1. 閱讀 [使用場景](docs/use-cases.md) 與 [範例提問](examples/prompts.md)。
 2. 查看 [資料來源與授權](docs/data-sources.md) 及 [架構與資料契約](docs/architecture.md)。
 3. 想參與開發，先看 [貢獻指南](CONTRIBUTING.md)；想回報資料問題，使用 [Issues](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues)。
+4. 目前還沒做完、以及接手前要知道的事，見 [接下來要做的事](docs/next-steps.md)。
 
 原始 ZIP 的 SHA-256 與整合說明見 [骨架來源](docs/bootstrap.md)。Fixtures 的唯一正本放在 `src/taiwan_lab_mcp/data/`，會隨 Python package 安裝。
 
