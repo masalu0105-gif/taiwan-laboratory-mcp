@@ -1352,6 +1352,20 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 審核規則第 5 版：把第 1、8、9 章與附件、圖說、以及「表格頁只補讀圖說」寫進版面關；內容關加「附件表單照原樣呈現、不能當成已填好的紀錄」「第 1 章定義照原文、不改寫成建議」；驗收題再加一題（第 1／8／9 章或附件）。
 - 本機重建：build `cdc_specimen_manual-build-a5b9ff095f07…`、generation 7，18 題驗收題全過，第 18 題（1.1 名詞解釋）我算圖對過頁面，含紅字修訂的「疾管署」照原文存成一般文字。
 
+### 第一個公開網址上線（2026-09-17，owner：「好，架起來」）
+
+- 網址 `https://lab.masalulab.com/mcp`，2026-09-17 實測從公開網路連得到。
+- 架法（owner 的機器，暫時的家；owner 打算之後改指到 Grok Bot VM）：
+  - 服務跑在 WSL：`~/taiwan-lab-mcp-http/run.sh`，`uv tool install` 裝 main 分支（`data-20260917` 那個 release 還沒有這一層，只裝得到 2 支執行檔，裝 main 才有第 3 支 `taiwan-lab-mcp-http`）。
+  - 只聽 `127.0.0.1:8090`（8080 被 WSL 裡別的東西佔著），`TAIWAN_LAB_HTTP_ALLOWED_HOSTS=lab.masalulab.com`。
+  - 資料直接讀 Windows 上的 data root（`/mnt/c/Users/User/Documents/ChatGPT/taiwan-lab-mcp-data/data-root`）。實測從 WSL 讀手冊資料庫 177 列只要 13 毫秒，不需要另外複製一份到 WSL。
+  - 對外靠既有的 Cloudflare Tunnel `acc918d8-…`：設定檔 `/mnt/c/Users/User/masalu-lab/line-bot/cloudflared-config.yml` 加一條 `lab.masalulab.com → http://localhost:8090`（原檔已備份），owner 自己加 DNS CNAME 並重啟 `cloudflared.service`（兩步都要 sudo，Claude 做不到）。
+- Host 名稱檢查實測：`Host: lab.masalulab.com` 回 200；`Host: evil.example.com` 回 `421 Invalid Host header`。
+- 公開網址實測（真的 MCP client）：24 個工具；`get_data_status` 四個來源都 available、`official_snapshot`；`get_specimen_requirement(登革熱)` 4 筆、`get_testing_location(登革熱)` 4 筆、`search_manual_procedure(不良檢體)` 2 筆、`find_authorized_lab(傷寒, 台南市)` 40 筆、`get_points(09006C)` 1 筆。
+- 還沒做：服務目前是手動起的（nohup），WSL 重開就沒了；systemd unit 已寫好放在 `~/taiwan-lab-mcp-http/taiwan-lab-mcp-http.service`，要 owner 用 sudo 安裝才會開機自動啟動。
+- 仍未決定（同 OD-21）：沒有身分驗證，拿到網址的人都查得到；要不要留查詢紀錄、隱私聲明怎麼寫。
+- 搬到別台機器只要換 tunnel 指向哪裡，`lab.masalulab.com` 這個名字不用換，所以使用者手上的網址不會失效。
+
 ### 用網址連的接法（2026-09-17，OD-21，owner：「對，開始寫那一層」）
 
 - 起因：owner 問「有沒有辦法我自己養一個後端，他們用 MCP 對那個後端發請求」，這樣使用者不必下載 72 MB 資料。MCP 官方規格本來就有兩種傳輸：stdio（本機子行程）與 Streamable HTTP；Claude 的自訂 connector 走後者，而且是從 Anthropic 雲端連到伺服器，所以 claude.ai 與手機 App 也能用。
