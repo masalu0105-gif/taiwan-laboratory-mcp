@@ -315,7 +315,10 @@ def _descriptor(data_root):
 
 
 def test_upstream_check_same_file_records_success_without_candidate(tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+
     from taiwan_lab_mcp.adapters.nhi import NHIAdapter
+    from taiwan_lab_mcp.config import DataContext
 
     _serve(tmp_path, _BASE_ROWS)
     before = _descriptor(tmp_path)
@@ -335,7 +338,15 @@ def test_upstream_check_same_file_records_success_without_candidate(tmp_path, mo
 
     monkeypatch.setenv("TAIWAN_LAB_DATA_MODE", "official_snapshot")
     monkeypatch.setenv("TAIWAN_LAB_DATA_DIR", str(tmp_path))
-    result = NHIAdapter().get_points("09006C")
+    # The check above is pinned to 2026-09-15T01:00Z, so read the answer back from an hour later
+    # rather than from the real clock: NHI is overdue after two days, and against the real clock
+    # this assertion would have started failing on 2026-09-17 and never passed again.
+    context = DataContext(
+        mode="official_snapshot",
+        data_root=tmp_path,
+        clock=lambda: datetime(2026, 9, 15, 2, 0, tzinfo=timezone.utc),
+    )
+    result = NHIAdapter(context).get_points("09006C")
     assert result.result_status == "ok"
     assert result.source_status.stale is False
 
