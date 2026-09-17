@@ -130,8 +130,15 @@ def main() -> int:
         print(f"taiwan-lab-mcp-http: {exc}", flush=True)
         return 2
 
-    where = "這台電腦" if not settings.serves_other_computers else "、".join(settings.allowed_hosts)
-    print(f"taiwan-lab-mcp-http: {settings.mode} 模式，服務對象 {where}", flush=True)
+    # Say both things separately: which socket is open, and which names are accepted. Behind a
+    # tunnel the socket is loopback while the requests still arrive addressed to a public name.
+    reach = "只聽這台電腦" if not settings.serves_other_computers else "直接聽對外位址"
+    names = (
+        "、".join(settings.allowed_hosts) if settings.allowed_hosts else "不限（沒有設定網域名稱）"
+    )
+    print(
+        f"taiwan-lab-mcp-http: {settings.mode} 模式，{reach}，接受的網域名稱：{names}", flush=True
+    )
     print(
         f"taiwan-lab-mcp-http: listening on http://{settings.host}:{settings.port}{settings.path}",
         flush=True,
