@@ -173,6 +173,20 @@ def test_discover_picks_the_roster_attachment_by_its_label():
     }
 
 
+def test_discover_accepts_a_space_before_the_roster_version():
+    """CDC spaced the version on 2026-09-18: 傳染病認可檢驗機構名冊 1150918.ods."""
+    from taiwan_lab_mcp.cdc_source import discover_cdc_labs_resource
+
+    spaced_label = "傳染病認可檢驗機構名冊 1150918.ods"
+    page = _page(SHARED_LINK, ROSTER_LINK.replace(LABEL, spaced_label), TEACHING_LINK)
+
+    discovery = discover_cdc_labs_resource(page, landing_url=LANDING)
+
+    assert discovery["attachment_label"] == spaced_label
+    assert discovery["roster_version_raw"] == "1150918"
+    assert discovery["resource_url"] == ROSTER_URL
+
+
 @pytest.mark.parametrize(
     ("links", "expected_code"),
     [
@@ -191,6 +205,10 @@ def test_discover_picks_the_roster_attachment_by_its_label():
         ),
         (
             (SHARED_LINK, ROSTER_LINK.replace('"/File/Get/35jzm', '"/Uploads/35jzm')),
+            "DISCOVERY_RESOURCE_MISSING",
+        ),
+        (
+            (SHARED_LINK, ROSTER_LINK.replace("1150914", "115091")),
             "DISCOVERY_RESOURCE_MISSING",
         ),
     ],

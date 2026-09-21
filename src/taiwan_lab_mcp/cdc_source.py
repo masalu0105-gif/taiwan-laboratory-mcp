@@ -42,7 +42,8 @@ CDC_LICENSE_NAME = "衛生福利部疾病管制署政府網站資料開放宣告
 CDC_LICENSE_URL = "https://www.cdc.gov.tw/Category/FPage/TxkBIR9agw_IBRRmvn9TcQ"
 CDC_LABS_LANDING_URL = "https://www.cdc.gov.tw/Category/Page/02d-tR1nzB8QuflX-NmM_w"
 ODS_MEDIA_TYPE = ODS_MIMETYPE.decode("ascii")
-_ROSTER_LABEL_RE = re.compile(r"^傳染病認可檢驗機構名冊([0-9]{7})\.ods$")
+# CDC spaced the label version on 2026-09-18 (名冊 1150918.ods); files up to 1150916 had none.
+_ROSTER_LABEL_RE = re.compile(r"^傳染病認可檢驗機構名冊\s*([0-9]{7})\.ods$")
 _LAST_UPDATED_RE = re.compile(r"最後更新日期\s*([0-9]{4}/[0-9]{1,2}/[0-9]{1,2})")
 _FILENAME_STAR_RE = re.compile(r"filename\*\s*=\s*UTF-8''([^;]+)", re.IGNORECASE)
 _FILENAME_RE = re.compile(r'filename\s*=\s*"?([^";]+)"?', re.IGNORECASE)
