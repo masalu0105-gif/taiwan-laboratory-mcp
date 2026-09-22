@@ -18,8 +18,8 @@
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m ruff check src tests
-.\.venv\Scripts\python.exe -m ruff format --check src tests
+.\.venv\Scripts\python.exe -m ruff check src tests scripts
+.\.venv\Scripts\python.exe -m ruff format --check src tests scripts
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m build
 $env:TAIWAN_LAB_ARTIFACT_DIR = (Resolve-Path .\dist).Path

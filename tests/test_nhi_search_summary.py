@@ -73,9 +73,7 @@ def test_search_payment_items_returns_summary_records(official):
 
 
 @pytest.mark.parametrize("query", ["糖化血色素", "糖化血紅素", "醣化血色素"])
-def test_reviewed_common_hba1c_aliases_resolve_without_changing_official_name(
-    official, query
-):
+def test_reviewed_common_hba1c_aliases_resolve_without_changing_official_name(official, query):
     result = official.search_payment_items(query)
 
     assert result.result_status == "ok"

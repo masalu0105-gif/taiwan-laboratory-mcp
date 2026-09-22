@@ -114,9 +114,7 @@ def _validate_case(case: dict[str, Any], payload: dict[str, Any]) -> list[str]:
     return errors
 
 
-async def _run_with_client(
-    client: Client, endpoint: str, matrix: dict[str, Any]
-) -> dict[str, Any]:
+async def _run_with_client(client: Client, endpoint: str, matrix: dict[str, Any]) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     listing = await client.list_tools()
     available_tools = {tool.name for tool in listing.tools}
@@ -228,9 +226,7 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append("None.")
     else:
         for row in failures:
-            lines.append(
-                f"- `{row['case_id']}` {row['question']} — " + "; ".join(row["errors"])
-            )
+            lines.append(f"- `{row['case_id']}` {row['question']} — " + "; ".join(row["errors"]))
     lines.append("")
     return "\n".join(lines)
 
@@ -242,9 +238,7 @@ def main() -> int:
     transport.add_argument("--stdio-python", type=Path)
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--stdio-cwd", type=Path, default=Path.cwd())
-    parser.add_argument(
-        "--matrix", default="tests/scenarios/persona-scenarios-v1.json", type=Path
-    )
+    parser.add_argument("--matrix", default="tests/scenarios/persona-scenarios-v1.json", type=Path)
     parser.add_argument("--json-output", type=Path)
     parser.add_argument("--markdown-output", type=Path)
     args = parser.parse_args()
