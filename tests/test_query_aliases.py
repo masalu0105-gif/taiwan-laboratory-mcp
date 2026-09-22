@@ -71,6 +71,34 @@ def test_a_covid_question_asks_for_wording_the_licences_actually_use() -> None:
     )
 
 
+@pytest.mark.parametrize("alias", ["新冠", "新冠肺炎", "武漢肺炎", "嚴重特殊傳染性肺炎"])
+def test_every_approved_covid_alias_keeps_the_same_three_source_wordings(alias: str) -> None:
+    from taiwan_lab_mcp.rules.aliases import apply_device_aliases
+
+    assert apply_device_aliases(alias, fields=("name_zh", "name_en")) == (
+        "新型冠狀病毒",
+        "sars-cov-2",
+        "covid-19",
+    )
+
+
+@pytest.mark.parametrize(
+    ("alias", "expected"),
+    [
+        ("亞培", "abbott"),
+        ("羅氏", "roche"),
+        ("西門子", "siemens"),
+        ("貝克曼", "beckman"),
+        ("賽默飛", "thermo"),
+        ("希森美康", "sysmex"),
+    ],
+)
+def test_every_approved_manufacturer_alias_is_regression_locked(alias: str, expected: str) -> None:
+    from taiwan_lab_mcp.rules.aliases import apply_device_alias
+
+    assert apply_device_alias(alias, fields=("manufacturer",)) == expected
+
+
 def test_a_broken_rule_file_stops_the_query_rather_than_quietly_matching_nothing() -> None:
     from taiwan_lab_mcp.rules.aliases import AliasRulesError, _parse_entries, _parse_multi_entries
 

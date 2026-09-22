@@ -1,6 +1,6 @@
 # Taiwan Laboratory MCP P1.1 產品需求文件（PRD-lite）
 
-文件狀態：Draft for owner review
+文件狀態：P1.1 implemented baseline；後續變更仍需 owner review
 
 版本：0.3（Round 2 revisions）
 

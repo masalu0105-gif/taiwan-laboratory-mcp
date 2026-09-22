@@ -1,6 +1,6 @@
 # 架構與資料契約
 
-> 目前實作仍以 package version `0.1.1` 發布，但已包含 P1.1 的雙模式 runtime、四組正式資料管線與 fail-closed 發布邊界。規範真源是 `docs/product-requirements.md`、`docs/software-design.md`、`docs/test-driven-development.md`；machine-readable 真源是 `src/taiwan_lab_mcp/contracts/public-contract-v1.json`。
+> 目前實作以 package version `0.1.2` 發布，包含 P1.1 的雙模式 runtime、四組正式資料管線、HTTP 防濫用守門與 fail-closed 發布邊界。規範真源是 `docs/product-requirements.md`、`docs/software-design.md`、`docs/test-driven-development.md`；machine-readable 真源是 `src/taiwan_lab_mcp/contracts/public-contract-v1.json`。
 
 <!-- public-contract-operations: 24 -->
 

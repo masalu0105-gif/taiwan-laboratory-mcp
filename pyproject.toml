@@ -1,6 +1,6 @@
 [project]
 name = "taiwan-laboratory-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server exposing Taiwan laboratory medicine public data as AI-agent tools."
 readme = "README.md"
 requires-python = ">=3.10"

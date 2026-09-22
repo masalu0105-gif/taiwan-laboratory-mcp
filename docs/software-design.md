@@ -1,10 +1,10 @@
 # Taiwan Laboratory MCP P1.1 Software Design Document
 
-文件狀態：**Planning complete；第一輪共用信任邊界＋NHI vertical slice 已實作**；目前可執行版本仍為 `0.1.1`，worktree 已包含共用 official snapshot runtime、publisher、NHI importer 與 packaged official MCP contract 的可重跑工程切片，但正式來源 qualification、owner／scope gate、CDC／TFDA importer 與整體 release gates 尚未完成或驗證
+文件狀態：**P1.1 可執行基線已實作**；目前可執行版本為 `0.1.2`，包含共用 official snapshot runtime、四組正式資料 importer／publisher、packaged MCP contract 與 HTTP 防濫用守門。TFDA 舊制與無分類碼列仍依契約維持 `review_incomplete`，不得把工程測試說成臨床或主管機關核准。
 
 設計日期：2026-09-13（Asia/Taipei）
 
-適用版本：由 `0.1.1` sample-only 升級至 P1.1 official snapshot
+適用版本：由 `0.1.1` sample-only 升級至 `0.1.2` P1.1 official snapshot
 
 規格階層：`docs/product-requirements.md` 是產品行為、public MCP operation／status／safety／truth table 的唯一真源；本文件只定義 internal architecture；`docs/test-driven-development.md` 定義驗證介面。`docs/research/*.md` 只提供來源觀察，`docs/implementation-plan.md` 只提供排程；兩者與 PRD/SDD 衝突的舊建議均視為 superseded。
 

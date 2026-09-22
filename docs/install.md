@@ -285,13 +285,22 @@ TAIWAN_LAB_DATA_MODE=official_snapshot TAIWAN_LAB_DATA_DIR=/srv/taiwan-lab-data 
 | `TAIWAN_LAB_HTTP_PORT` | `8080` | 監聽的 port |
 | `TAIWAN_LAB_HTTP_PATH` | `/mcp` | 網址路徑 |
 | `TAIWAN_LAB_HTTP_ALLOWED_HOSTS` | 空 | 逗號分隔，別人會用的網域名稱（例如 `lab.example.com`）|
+| `TAIWAN_LAB_HTTP_RATE_LIMIT_PER_MINUTE` | `240` | 每個來源 IP 每 60 秒最多請求數，必須是正整數 |
+| `TAIWAN_LAB_HTTP_MAX_REQUEST_BYTES` | `262144` | 單次 request body 上限，必須是正整數 |
+| `TAIWAN_LAB_HTTP_BEARER_TOKEN_SHA256` | 空 | 選用；設定後 `/mcp` 必須帶 bearer token，只保存 token 的 SHA-256 |
 
-**兩個安全規則，缺一就不會啟動**（會印出原因並以離開代碼 2 結束）：
+**安全規則不符合就不會啟動**（會印出原因並以離開代碼 2 結束）：
 
 1. `TAIWAN_LAB_HTTP_HOST` 不是本機位址時，一定要給 `TAIWAN_LAB_HTTP_ALLOWED_HOSTS`。
    沒有這份清單的話，任何解析到這台機器的名稱都能驅動這個服務。
 2. 同樣情況下，`TAIWAN_LAB_DATA_MODE` 一定要是 `official_snapshot`。
    範例資料是合成的，只適合自己在本機試工具，不該拿去回答別人。
+3. 限流與 request body 上限必須是正整數；錯字或 `0` 不會退回無限制模式。
+
+HTTP 回應固定帶 `Cache-Control: no-store`、`Referrer-Policy: no-referrer` 與
+`X-Content-Type-Options: nosniff`。正式執行檔關閉 uvicorn access log，不記錄查詢路徑或
+來源 IP；應用本身也不保存 request body。若需要私人端點，先產生一段長隨機 token，僅把它的
+SHA-256 放進 `TAIWAN_LAB_HTTP_BEARER_TOKEN_SHA256`，token 本身交由 MCP client 的受控設定保存。
 
 推薦的做法是**只聽 `127.0.0.1`，再用 tunnel（例如 Cloudflare Tunnel）把它接到一個網域**。
 這樣主機完全不用對外開 port，也不必處理憑證。
@@ -307,9 +316,9 @@ TAIWAN_LAB_DATA_MODE=official_snapshot TAIWAN_LAB_DATA_DIR=/srv/taiwan-lab-data 
 
 - 程式已經完成，本機（含真實正式資料）測過：24 個工具、實際查詢、兩個安全規則都驗過。
 - 2026-09-22 已在 Grok Bot VM 架設公開正式端點：`https://grok-bot-box.tail6cbb55.ts.net/mcp`。Windows 外部 MCP client 已驗證 24 個工具、四個可用且可追溯來源，以及 NHI／TFDA／CDC 實際查詢。
-- VM 整機重開後的無人值守恢復尚未證明；供應商對 public production hosting 的書面適用性也仍未確認。公開可連線不代表平台已核准正式代管。
-- 架主機的人看得到別人查了什麼。要不要留紀錄、隱私聲明怎麼寫，本專案還沒有決定，
-  也還沒有提供身分驗證或用量限制。自己架的人要自行斟酌。
+- 公開端點啟用每來源 IP 限流、request body 上限、安全回應標頭與無 access log 模式；可選的 bearer-token 驗證已實作，匿名公開端沒有啟用 token。
+- VM 的容器開機 self-heal hook、整機重啟與外部恢復證據記在[接手事項](next-steps.md)。
+- Grok Bot 條款只明確允許 internal business purposes；公開可連線不代表平台已核准公開代管。取得書面確認前，這仍是外部 production gate。
 
 ## 遇到問題或有建議
 
