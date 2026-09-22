@@ -135,9 +135,7 @@ Demo 會顯示 CDC 麻疹、NHI 糖化血色素及 TFDA HbA1c 的示範結果，
 
 ## 範圍與路線
 
-P1 先把三個查詢場景做到容易使用、可查來源、適合現場示範。LOINC、FHIR、SNOMED 保留 adapter interface；EQA／CAP 保留 adapter 與授權 TODO。院內資料、去識別化及 LIS integration 的規劃見 [ROADMAP](ROADMAP.md)。P1 不需要病人資料，也不以收集使用者查詢內容換取免費使用。
-
-歡迎分享使用經驗、提出 Workshop 情境，或透過 [教學／需求 Issue](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues/new?template=feature_request.yml) 聯絡 masalu.lab。
+目前聚焦三個公開資料查詢場景。LOINC、FHIR、SNOMED、EQA／CAP 保留介面；院內資料與 LIS 整合見 [ROADMAP](ROADMAP.md)。歡迎透過 [Issue](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues/new?template=feature_request.yml) 提出 Workshop 情境或需求。
 
 ## 使用建議
 
