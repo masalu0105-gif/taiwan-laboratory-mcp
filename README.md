@@ -129,13 +129,9 @@ Demo 會顯示 CDC 麻疹、NHI 糖化血色素及 TFDA HbA1c 的示範結果，
 
 ## 文件與參與
 
-1. [使用場景](docs/use-cases.md)、[範例提問](examples/prompts.md)
-2. [資料來源與授權](docs/data-sources.md)、[架構與資料契約](docs/architecture.md)
-3. [10 種角色、100 題 MCP 情境驗收](docs/persona-scenario-validation.md)
-4. 想參與開發，先看 [貢獻指南](CONTRIBUTING.md)；資料問題請開 [Issue](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues)
-5. 接手前要知道的事：[接下來要做的事](docs/next-steps.md)
-
-原始 ZIP 的 SHA-256 與整合說明見 [骨架來源](docs/bootstrap.md)。Fixtures 正本放在 `src/taiwan_lab_mcp/data/`，隨 package 安裝。
+- 上手：[使用場景](docs/use-cases.md)、[範例提問](examples/prompts.md)
+- 深入：[資料來源與授權](docs/data-sources.md)、[架構與資料契約](docs/architecture.md)、[情境驗收](docs/persona-scenario-validation.md)
+- 參與：[貢獻指南](CONTRIBUTING.md)、[Issues](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues)、[接手事項](docs/next-steps.md)
 
 ## 範圍與路線
 
