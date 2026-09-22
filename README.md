@@ -117,15 +117,15 @@ Demo 會顯示 CDC 麻疹、NHI 糖化血色素及 TFDA HbA1c 的示範結果，
 
 ## 工具清單
 
-| 模組 | 工具 |
-| --- | --- |
-| 資料狀態 | `get_data_status` |
-| CDC | `search_disease`、`get_specimen_requirement`、`get_collection_method`、`get_container`、`get_transport_requirement`、`get_submission_rule`、`find_authorized_lab`、`get_lab_scope` |
-| NHI | `search_payment_items`、`search_lab_code`、`get_points`、`get_payment_rule` |
-| TFDA | `search_reviewed_ivd`、`search_ivd_candidates`、`search_ivd`、`get_license`、`find_manufacturer`、`list_matching_license_records`、`compare_products` |
-| 保留介面 | `standards_status`、`eqa_status` |
+共 24 個工具，接上後呼叫 `get_data_status` 即可看到完整列表與各資料狀態。
 
-搜尋類工具一次回 5 筆摘要，用 `offset` 翻頁；完整欄位用 `get_payment_rule`、`get_points`、`get_license` 查單筆。`list_matching_license_records` 查全部許可證（含已註銷、舊制與沒有分類代碼的）。
+| 模組 | 主要工具 |
+| --- | --- |
+| CDC | `search_disease`、`get_specimen_requirement`、`find_authorized_lab` |
+| NHI | `search_payment_items`、`search_lab_code`、`get_points` |
+| TFDA | `search_ivd`、`get_license`、`find_manufacturer`、`compare_products` |
+
+搜尋類工具每次回 5 筆摘要，用 `offset` 翻頁；單筆完整欄位用 `get_*` 系列查。
 
 ## 文件與參與
 
