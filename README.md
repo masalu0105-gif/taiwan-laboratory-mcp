@@ -3,7 +3,7 @@
 [![CI](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/taiwan-laboratory-mcp)](https://pypi.org/project/taiwan-laboratory-mcp/)
 
-讓 AI Agent 直接查台灣醫檢工作最常用的三種公開資料：**CDC 採檢送驗、NHI 檢驗支付、TFDA IVD 許可證**。
+讓 AI Agent 直接查台灣醫檢與法規工作最常用的三種公開資料：**CDC 採檢送驗、NHI 檢驗支付、TFDA IVD 許可證**。
 
 免費、開源，由 masalu.lab 發起。目標是讓醫檢師第一次使用就少查一次資料，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
 
@@ -16,6 +16,7 @@
 | 「麻疹檢體怎麼採、怎麼送？」 | 檢體、時機、容器、保存、運送與送驗限制，附手冊版本及頁碼 | [CDC 採檢手冊](https://www.cdc.gov.tw/Category/Page/WV_GRwCIYrWQsEVa8ctTWg) |
 | 「HbA1c 有哪些健保碼、支付幾點？」 | 代碼、名稱、支付點數、生效期間及相關規範 | [NHI 支付標準資料集](https://data.gov.tw/dataset/174450) |
 | 「HPV DNA 有哪些相關 IVD 許可證？」 | 許可證、品名、效能、申請商、製造商、效期與註銷欄位 | [TFDA 許可證資料集](https://data.gov.tw/dataset/9576) |
+| 「同類產品有哪幾家在賣、誰的證快到期？」 | 依品名或製造商列出競品許可證，含效期、註銷與申請商，適合法規人員做競品比較與許可證管控 | 同上 |
 
 更多情境見 [使用場景](docs/use-cases.md) 與 [範例提問](examples/prompts.md)。
 
@@ -130,11 +131,11 @@ P1 先把三個查詢場景做到容易使用、可查來源、適合現場示�
 
 ## 使用建議
 
-- **用途**：結果適合公開資料查找與教學示範；實際採檢、申報、採購或醫療決策，建議仍以官方原文與機構流程為準。
-- **公開端點**：為了改善服務，端點會記錄查詢時間、來源 IP、工具名稱、查詢內容與回應狀態（不含請求標頭）。建議不要在公開端輸入病人資料、院內資料或帳號密碼；自架時套件預設不記錄，需設 `TAIWAN_LAB_HTTP_USAGE_LOG` 才會開。
-- **示範資料**：`sample_only: true` 的結果只涵蓋麻疹、登革熱與各一筆示範項目，建議只用於熟悉工具，不建議據以決策。
-- **資料解讀**：NHI 支付點數建議不要直接換算成新臺幣；TFDA 許可證比對建議不要推論產品可互換，也不建議作為廣告或效能宣傳素材。NHI 目前提供 current lookup，`as_of` 歷史查詢會明確回覆不支援。
-- **更新機制**：Release 由專案負責人電腦上的每日排程產生，該機器未開機時當天不會有新版；本機安裝後的資料不會自動更新。其餘接手事項與條款待釐清處見 [接手事項](docs/next-steps.md)。
+- 結果適合公開資料查找、教學與法規作業；採檢、申報、採購或醫療決策仍建議以官方原文為準。
+- 公開端點會記錄查詢內容（不含請求標頭）以改善服務，建議不要輸入病人或院內資料；自架預設不記錄。
+- `sample_only: true` 為示範資料，建議只用來熟悉工具。
+- NHI 點數不宜直接換算金額；TFDA 許可證比對不宜推論產品可互換或作為宣傳素材。
+- 本機安裝的資料不會自動更新；其餘接手事項見 [接手事項](docs/next-steps.md)。
 
 ## 授權
 
