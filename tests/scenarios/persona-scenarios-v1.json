@@ -1,0 +1,166 @@
+{
+  "version": "persona-scenarios-v1",
+  "scope": "P1/P1.1 official-snapshot lookup only; no patient data, diagnosis, procurement decision, claim determination, LIS, de-identification, or restricted-standard content",
+  "personas": [
+    {
+      "id": "bench-technologist",
+      "label": "醫檢師（檢驗台）",
+      "questions": [
+        {"id":"BENCH-01","question":"疾管署手冊中有哪些傷寒相關檢驗列？","tool":"search_disease","arguments":{"query":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-02","question":"麻疹檢體要求是什麼？","tool":"get_specimen_requirement","arguments":{"disease":"麻疹"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-03","question":"登革熱的採檢方式可查到哪些原文？","tool":"get_collection_method","arguments":{"disease":"登革熱"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-04","question":"傷寒檢體應使用什麼容器？","tool":"get_container","arguments":{"disease":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-05","question":"麻疹檢體的運送要求為何？","tool":"get_transport_requirement","arguments":{"disease":"麻疹"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-06","question":"登革熱檢體送驗規則有哪些？","tool":"get_submission_rule","arguments":{"disease":"登革熱"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-07","question":"傷寒檢驗送到哪裡、時效欄位有哪些？","tool":"get_testing_location","arguments":{"disease":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-08","question":"手冊對不良檢體怎麼說？","tool":"search_manual_procedure","arguments":{"query":"不良檢體"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-09","question":"用英文 typhoid 能找到對應疾病嗎？","tool":"search_disease","arguments":{"query":"typhoid"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"BENCH-10","question":"副傷寒在手冊中有哪些列？","tool":"search_disease","arguments":{"query":"副傷寒"},"expect":{"status":"ok","min_returned":1}}
+      ]
+    },
+    {
+      "id": "collection-nurse",
+      "label": "採檢護理師",
+      "questions": [
+        {"id":"NURSE-01","question":"麻疹需要送哪些檢體？","tool":"get_specimen_requirement","arguments":{"disease":"麻疹"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-02","question":"登革熱採檢原文有哪些？","tool":"get_collection_method","arguments":{"disease":"登革熱"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-03","question":"傷寒送驗容器資訊在哪些列？","tool":"get_container","arguments":{"disease":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-04","question":"麻疹檢體怎麼運送？","tool":"get_transport_requirement","arguments":{"disease":"麻疹"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-05","question":"登革熱送驗有哪些官方規則？","tool":"get_submission_rule","arguments":{"disease":"登革熱"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-06","question":"手冊的糞便檢體步驟在哪裡？","tool":"search_manual_procedure","arguments":{"query":"糞便檢體"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-07","question":"手冊第 3.5 節有哪些步驟？","tool":"search_manual_procedure","arguments":{"query":"3.5"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-08","question":"手冊如何說明檢體包裝？","tool":"search_manual_procedure","arguments":{"query":"包裝"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-09","question":"用 dengue 查得到登革熱嗎？","tool":"search_disease","arguments":{"query":"dengue"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NURSE-10","question":"用英文 malaria 能找到瘧疾手冊資料嗎？","tool":"search_disease","arguments":{"query":"malaria"},"expect":{"status":"ok","min_returned":1}}
+      ]
+    },
+    {
+      "id": "sendout-coordinator",
+      "label": "外送檢驗協調員",
+      "questions": [
+        {"id":"SEND-01","question":"哪些認可機構可做傷寒檢驗？","tool":"find_authorized_lab","arguments":{"query":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"SEND-02","question":"台南市有哪些傷寒認可機構？","tool":"find_authorized_lab","arguments":{"query":"傷寒","city":"台南市"},"expect":{"statuses":["ok","not_found"]}},
+        {"id":"SEND-03","question":"把台南與傷寒寫在同一搜尋詞能找到資料嗎？","tool":"find_authorized_lab","arguments":{"query":"台南 傷寒"},"expect":{"statuses":["ok","not_found"]}},
+        {"id":"SEND-04","question":"C 型肝炎認可實驗室第一頁有哪些？","tool":"find_authorized_lab","arguments":{"query":"C型肝炎","limit":5,"offset":0},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"SEND-05","question":"C 型肝炎認可實驗室第二頁有哪些？","tool":"find_authorized_lab","arguments":{"query":"C型肝炎","limit":5,"offset":5},"expect":{"statuses":["ok","not_found"],"max_returned":5}},
+        {"id":"SEND-06","question":"用相容工具查傷寒認可範圍會回哪些列？","tool":"get_lab_scope","arguments":{"query":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"SEND-07","question":"傷寒檢體的接收單位與聯絡欄位在哪裡？","tool":"get_testing_location","arguments":{"disease":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"SEND-08","question":"手冊如何處理運送中的檢體？","tool":"search_manual_procedure","arguments":{"query":"運送"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"SEND-09","question":"手冊對檢體外溢有什麼清消程序？","tool":"search_manual_procedure","arguments":{"query":"外溢"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"SEND-10","question":"不存在的疾病會不會被猜成認可機構？","tool":"find_authorized_lab","arguments":{"query":"不存在疾病XYZ"},"expect":{"status":"not_found","max_returned":0}}
+      ]
+    },
+    {
+      "id": "public-health-coordinator",
+      "label": "公衛實驗室協調員",
+      "questions": [
+        {"id":"PHL-01","question":"傷寒認可實驗室與方法有哪些？","tool":"find_authorized_lab","arguments":{"query":"傷寒","limit":20},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PHL-02","question":"新北市 C 型肝炎認可方法有哪些？","tool":"find_authorized_lab","arguments":{"query":"C型肝炎","city":"新北市","limit":5},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"PHL-03","question":"台北搜尋詞能否比對臺北的認可資料？","tool":"find_authorized_lab","arguments":{"query":"傷寒","city":"台北"},"expect":{"statuses":["ok","not_found"]}},
+        {"id":"PHL-04","question":"以疾病查詢認可實驗室固定前 20 筆結果為何？","tool":"get_lab_scope","arguments":{"query":"C型肝炎"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PHL-05","question":"傷寒的疾病手冊原始列有哪些？","tool":"search_disease","arguments":{"query":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PHL-06","question":"傷寒各檢驗方法的地點與時效資料在哪裡？","tool":"get_testing_location","arguments":{"disease":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PHL-07","question":"麻疹各檢驗方法的地點與時效資料在哪裡？","tool":"get_testing_location","arguments":{"disease":"麻疹"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PHL-08","question":"手冊中的名詞解釋有哪些可搜尋段落？","tool":"search_manual_procedure","arguments":{"query":"名詞解釋"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PHL-09","question":"limit 超過認可實驗室上限時是否拒絕？","tool":"find_authorized_lab","arguments":{"query":"傷寒","limit":21},"expect":{"status":"invalid_request"}},
+        {"id":"PHL-10","question":"負 offset 是否會被拒絕？","tool":"find_authorized_lab","arguments":{"query":"傷寒","offset":-1},"expect":{"status":"invalid_request"}}
+      ]
+    },
+    {
+      "id": "nhi-coding-specialist",
+      "label": "健保編碼查詢人員",
+      "questions": [
+        {"id":"NHI-01","question":"HbA1c 相關支付項目有哪些？","tool":"search_payment_items","arguments":{"query":"HbA1c"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"NHI-02","question":"一般人寫糖化血色素時能找到 09006C 嗎？","tool":"search_payment_items","arguments":{"query":"糖化血色素"},"expect":{"status":"ok","min_returned":1,"equals":{"items.0.record.code_raw":"09006C"}}},
+        {"id":"NHI-03","question":"官方用語醣化血紅素能找到哪些項目？","tool":"search_payment_items","arguments":{"query":"醣化血紅素"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NHI-04","question":"09006C 現行點數是多少？","tool":"get_points","arguments":{"code":"09006C"},"expect":{"status":"ok","min_returned":1,"equals":{"items.0.record.code_raw":"09006C"}}},
+        {"id":"NHI-05","question":"09006C 的完整支付規則與備註為何？","tool":"get_payment_rule","arguments":{"query":"09006C"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NHI-06","question":"用相容代碼搜尋查 09006C 會回什麼？","tool":"search_lab_code","arguments":{"query":"09006C"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"NHI-07","question":"查詢 09006C 的歷史日期會明確拒絕嗎？","tool":"get_points","arguments":{"code":"09006C","as_of":"2024-01-01"},"expect":{"status":"historical_query_unsupported","warnings":["historical_query_unsupported"]}},
+        {"id":"NHI-08","question":"搜尋結果超過五筆時是否拒絕過大的 limit？","tool":"search_payment_items","arguments":{"query":"0","limit":6},"expect":{"status":"invalid_request"}},
+        {"id":"NHI-09","question":"第二頁支付項目能用 offset 查詢嗎？","tool":"search_payment_items","arguments":{"query":"0","limit":5,"offset":5},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"NHI-10","question":"不存在的支付代碼會維持查無資料嗎？","tool":"get_points","arguments":{"code":"ZZ999Z"},"expect":{"status":"not_found","max_returned":0}}
+      ]
+    },
+    {
+      "id": "ivd-regulatory-specialist",
+      "label": "IVD 法規人員",
+      "questions": [
+        {"id":"TFDA-01","question":"已審核 IVD 中有哪些新冠相關許可證？","tool":"search_reviewed_ivd","arguments":{"query":"新冠"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"TFDA-02","question":"新冠相關 IVD 候選資料與覆蓋警示為何？","tool":"search_ivd_candidates","arguments":{"query":"新冠"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"TFDA-03","question":"相容 IVD 搜尋查 HbA1c 會回哪些已審核項目？","tool":"search_ivd","arguments":{"query":"HbA1c"},"expect":{"statuses":["ok","not_found","candidate_matches_available"]}},
+        {"id":"TFDA-04","question":"衛部醫器陸輸字第000546號的官方欄位有哪些？","tool":"get_license","arguments":{"license_no":"衛部醫器陸輸字第000546號"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"TFDA-05","question":"Roche 製造廠有哪些許可證列？","tool":"find_manufacturer","arguments":{"name":"Roche"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"TFDA-06","question":"Abbott 製造廠有哪些許可證列？","tool":"find_manufacturer","arguments":{"name":"Abbott"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"TFDA-07","question":"全許可證資料中查新冠並優先顯示 IVD 會得到什麼？","tool":"list_matching_license_records","arguments":{"query":"新冠","prefer_ivd":true},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"TFDA-08","question":"只查 included 範圍的新冠許可證有哪些？","tool":"list_matching_license_records","arguments":{"query":"新冠","ivd_scope":"included"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"TFDA-09","question":"不存在的許可證字號會回查無資料嗎？","tool":"get_license","arguments":{"license_no":"衛部醫器輸字第999999號"},"expect":{"status":"not_found","max_returned":0}},
+        {"id":"TFDA-10","question":"已審核 IVD 查詢超過五筆上限是否拒絕？","tool":"search_reviewed_ivd","arguments":{"query":"新冠","limit":6},"expect":{"status":"invalid_request"}}
+      ]
+    },
+    {
+      "id": "procurement-reviewer",
+      "label": "採購前資料覆核人員",
+      "questions": [
+        {"id":"PROC-01","question":"系統會拒絕直接比較新冠產品優劣嗎？","tool":"compare_products","arguments":{"query":"新冠"},"expect":{"status":"deprecated_unsupported","warnings":["deprecated_unsupported"]}},
+        {"id":"PROC-02","question":"新冠所有可能許可證有哪些，僅列來源不做推薦？","tool":"list_matching_license_records","arguments":{"query":"新冠"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"PROC-03","question":"優先列出 IVD 只改排序、不做篩除時結果為何？","tool":"list_matching_license_records","arguments":{"query":"新冠","prefer_ivd":true},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"PROC-04","question":"優先顯示大類 C 只改排序時結果為何？","tool":"list_matching_license_records","arguments":{"query":"新冠","prefer_main_category":"C"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"PROC-05","question":"明確只看 included IVD 時有哪些來源列？","tool":"list_matching_license_records","arguments":{"query":"新冠","ivd_scope":"included"},"expect":{"status":"ok","min_returned":1,"max_returned":5}},
+        {"id":"PROC-06","question":"候選 IVD 查詢是否顯示審核覆蓋資訊？","tool":"search_ivd_candidates","arguments":{"query":"新冠"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PROC-07","question":"已審核 IVD 查詢是否只回 included？","tool":"search_reviewed_ivd","arguments":{"query":"新冠"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PROC-08","question":"用製造廠名稱 Roche 查詢時是否只比對製造廠？","tool":"find_manufacturer","arguments":{"name":"Roche"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PROC-09","question":"特定許可證可否回完整官方欄位供人工覆核？","tool":"get_license","arguments":{"license_no":"衛部醫器陸輸字第000546號"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"PROC-10","question":"空白產品詞是否被拒絕而不做猜測？","tool":"list_matching_license_records","arguments":{"query":""},"expect":{"status":"invalid_request"}}
+      ]
+    },
+    {
+      "id": "educator",
+      "label": "醫檢教育與工作坊講師",
+      "questions": [
+        {"id":"EDU-01","question":"目前各官方來源快照狀態為何？","tool":"get_data_status","arguments":{},"expect":{"statuses":[null],"equals":{"data_mode":"official_snapshot"}}},
+        {"id":"EDU-02","question":"示範中文疾病搜尋：傷寒有哪些資料？","tool":"search_disease","arguments":{"query":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-03","question":"示範英文別名搜尋：dengue 能找到什麼？","tool":"search_disease","arguments":{"query":"dengue"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-04","question":"示範章節搜尋：3.5 有哪些步驟？","tool":"search_manual_procedure","arguments":{"query":"3.5"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-05","question":"示範認可實驗室搜尋：傷寒有哪些機構？","tool":"find_authorized_lab","arguments":{"query":"傷寒"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-06","question":"示範健保名稱搜尋：HbA1c 有哪些項目？","tool":"search_payment_items","arguments":{"query":"HbA1c"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-07","question":"示範健保代碼精查：09006C 點數為何？","tool":"get_points","arguments":{"code":"09006C"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-08","question":"示範 TFDA 已審核搜尋：新冠有哪些資料？","tool":"search_reviewed_ivd","arguments":{"query":"新冠"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-09","question":"示範許可證精查：000546 號有哪些官方欄位？","tool":"get_license","arguments":{"license_no":"衛部醫器陸輸字第000546號"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"EDU-10","question":"示範查無資料：未知疾病會如何回覆？","tool":"search_disease","arguments":{"query":"不存在疾病XYZ"},"expect":{"status":"not_found","max_returned":0}}
+      ]
+    },
+    {
+      "id": "mcp-adopter",
+      "label": "MCP 安裝與整合人員",
+      "questions": [
+        {"id":"IT-01","question":"安裝後是否載入 official_snapshot 模式？","tool":"get_data_status","arguments":{},"expect":{"statuses":[null],"equals":{"data_mode":"official_snapshot"}}},
+        {"id":"IT-02","question":"空白 CDC 查詢是否 fail closed？","tool":"search_disease","arguments":{"query":""},"expect":{"status":"invalid_request"}},
+        {"id":"IT-03","question":"NHI 負 offset 是否被拒絕？","tool":"search_payment_items","arguments":{"query":"HbA1c","offset":-1},"expect":{"status":"invalid_request"}},
+        {"id":"IT-04","question":"TFDA limit 為零是否被拒絕？","tool":"search_reviewed_ivd","arguments":{"query":"新冠","limit":0},"expect":{"status":"invalid_request"}},
+        {"id":"IT-05","question":"認可實驗室 limit 為零是否被拒絕？","tool":"find_authorized_lab","arguments":{"query":"傷寒","limit":0},"expect":{"status":"invalid_request"}},
+        {"id":"IT-06","question":"保留的受限標準工具是否只回未設定狀態？","tool":"standards_status","arguments":{},"expect":{"status":"data_unavailable","warnings":["reserved_capability_unconfigured"]}},
+        {"id":"IT-07","question":"保留的 EQA 工具是否只回未設定狀態？","tool":"eqa_status","arguments":{},"expect":{"status":"data_unavailable","warnings":["reserved_capability_unconfigured"]}},
+        {"id":"IT-08","question":"過時的產品比較工具是否明確拒絕？","tool":"compare_products","arguments":{"query":"新冠"},"expect":{"status":"deprecated_unsupported","warnings":["deprecated_unsupported"]}},
+        {"id":"IT-09","question":"精確支付代碼查詢能否從 MCP 回傳結構化結果？","tool":"get_points","arguments":{"code":"09006C"},"expect":{"status":"ok","min_returned":1}},
+        {"id":"IT-10","question":"精確 TFDA 許可證查詢能否從 MCP 回傳結構化結果？","tool":"get_license","arguments":{"license_no":"衛部醫器陸輸字第000546號"},"expect":{"status":"ok","min_returned":1}}
+      ]
+    },
+    {
+      "id": "governance-reviewer",
+      "label": "資料治理與安全覆核人員",
+      "questions": [
+        {"id":"GOV-01","question":"每個官方來源是否有可讀的 serving 狀態？","tool":"get_data_status","arguments":{},"expect":{"statuses":[null],"equals":{"data_mode":"official_snapshot"}}},
+        {"id":"GOV-02","question":"CDC 查無資料時是否保留來源與安全邊界？","tool":"search_disease","arguments":{"query":"不存在疾病XYZ"},"expect":{"status":"not_found","max_returned":0}},
+        {"id":"GOV-03","question":"認可實驗室查無資料時是否不推測其他機構？","tool":"find_authorized_lab","arguments":{"query":"不存在疾病XYZ"},"expect":{"status":"not_found","max_returned":0}},
+        {"id":"GOV-04","question":"NHI 歷史點數查詢是否明確標為不支援？","tool":"get_points","arguments":{"code":"09006C","as_of":"2024-01-01"},"expect":{"status":"historical_query_unsupported","warnings":["historical_query_unsupported"]}},
+        {"id":"GOV-05","question":"NHI 不存在代碼是否不回傳近似代碼？","tool":"get_payment_rule","arguments":{"query":"ZZ999Z"},"expect":{"status":"not_found","max_returned":0}},
+        {"id":"GOV-06","question":"TFDA 不存在證號是否維持查無資料？","tool":"get_license","arguments":{"license_no":"衛部醫器輸字第999999號"},"expect":{"status":"not_found","max_returned":0}},
+        {"id":"GOV-07","question":"產品比較是否維持停用且不輸出排名？","tool":"compare_products","arguments":{"query":"新冠"},"expect":{"status":"deprecated_unsupported","warnings":["deprecated_unsupported"]}},
+        {"id":"GOV-08","question":"受限標準內容是否維持未接入？","tool":"standards_status","arguments":{},"expect":{"status":"data_unavailable","warnings":["reserved_capability_unconfigured"]}},
+        {"id":"GOV-09","question":"EQA 內容是否維持未接入？","tool":"eqa_status","arguments":{},"expect":{"status":"data_unavailable","warnings":["reserved_capability_unconfigured"]}},
+        {"id":"GOV-10","question":"全許可證搜尋空白詞是否拒絕而不回全庫？","tool":"list_matching_license_records","arguments":{"query":""},"expect":{"status":"invalid_request"}}
+      ]
+    }
+  ]
+}

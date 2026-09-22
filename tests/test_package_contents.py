@@ -38,7 +38,9 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/review_protocols/tfda-r1-auto-review/2.json",
     "taiwan_lab_mcp/rules/cdc_disease_alias/v1.json",
     "taiwan_lab_mcp/rules/cdc_lab_alias/v1.json",
+    "taiwan_lab_mcp/rules/nhi_aliases/v1.json",
     "taiwan_lab_mcp/rules/tfda_term_alias/v1.json",
+    "taiwan_lab_mcp/rules/tfda_term_alias/v2.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v1.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v2.json",
     "taiwan_lab_mcp/rules/tfda_ivd/v1.json",
@@ -80,10 +82,12 @@ def _denied(path: str) -> bool:
 
 @pytest.mark.parametrize("suffix", [".whl", ".tar.gz"])
 def test_built_archive_contains_only_release_safe_files(tmp_path, suffix):
-    artifact_dir = Path(os.environ.get("TAIWAN_LAB_ARTIFACT_DIR", "dist"))
+    artifact_dir_value = os.environ.get("TAIWAN_LAB_ARTIFACT_DIR")
+    if artifact_dir_value is None:
+        pytest.skip("set TAIWAN_LAB_ARTIFACT_DIR to verify freshly built archives")
+    artifact_dir = Path(artifact_dir_value)
     matches = sorted(artifact_dir.glob(f"*{suffix}"))
-    if not matches:
-        pytest.skip(f"no {suffix} artifact in {artifact_dir}")
+    assert matches, f"no {suffix} artifact in {artifact_dir}"
     assert len(matches) == 1
     files = _archive_files(matches[0])
     assert REQUIRED_FILES <= set(files)

@@ -306,7 +306,8 @@ TAIWAN_LAB_DATA_MODE=official_snapshot TAIWAN_LAB_DATA_DIR=/srv/taiwan-lab-data 
 ### 目前的狀態與尚未決定的事
 
 - 程式已經完成，本機（含真實正式資料）測過：24 個工具、實際查詢、兩個安全規則都驗過。
-- **還沒有實際架在公開主機上跑過**，所以還沒有可以直接用的公開網址。
+- 2026-09-22 已在 Grok Bot VM 架設公開正式端點：`https://grok-bot-box.tail6cbb55.ts.net/mcp`。Windows 外部 MCP client 已驗證 24 個工具、四個可用且可追溯來源，以及 NHI／TFDA／CDC 實際查詢。
+- VM 整機重開後的無人值守恢復尚未證明；供應商對 public production hosting 的書面適用性也仍未確認。公開可連線不代表平台已核准正式代管。
 - 架主機的人看得到別人查了什麼。要不要留紀錄、隱私聲明怎麼寫，本專案還沒有決定，
   也還沒有提供身分驗證或用量限制。自己架的人要自行斟酌。
 

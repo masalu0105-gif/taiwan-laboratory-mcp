@@ -28,6 +28,14 @@ CDC 結果須保留條件與例外；NHI 支付點數不能直接當成新臺幣
 
 沒有裝的資料會回 `data_unavailable`，不影響其他已裝好的資料。
 
+## 直接連公開端點
+
+不想在自己的電腦下載資料，可以把支援 Streamable HTTP 的 MCP host 指向：
+
+`https://grok-bot-box.tail6cbb55.ts.net/mcp`
+
+這個端點在 2026-09-22 從 VM 外部以真正 MCP client 驗證過 24 個工具與四組可追溯的正式 snapshot。它沒有身分驗證或用量限制，網址持有人都能查詢；不得輸入病人資料、院內資料、帳號密碼或其他機密內容。結果僅供公開資料查找，不能代替採檢、申報、採購或醫療決策。VM 整機重啟的無人值守恢復與供應商對 public production hosting 的書面適用性仍未確認，詳見[安裝說明](docs/install.md)與[接手事項](docs/next-steps.md)。
+
 ## 五分鐘看示範資料（Windows PowerShell）
 
 需先安裝 Python 3.10 以上與 Git。本專案尚未發布到 PyPI，請從此 repo 安裝。
@@ -88,6 +96,7 @@ CDC 的採檢、容器、運送等工具目前回傳同一完整疾病紀錄，�
 2. 查看 [資料來源與授權](docs/data-sources.md) 及 [架構與資料契約](docs/architecture.md)。
 3. 想參與開發，先看 [貢獻指南](CONTRIBUTING.md)；想回報資料問題，使用 [Issues](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/issues)。
 4. 目前還沒做完、以及接手前要知道的事，見 [接下來要做的事](docs/next-steps.md)。
+5. 查看 [10 種角色、100 題 MCP 情境驗收](docs/persona-scenario-validation.md)與可重跑的測試矩陣。
 
 原始 ZIP 的 SHA-256 與整合說明見 [骨架來源](docs/bootstrap.md)。Fixtures 的唯一正本放在 `src/taiwan_lab_mcp/data/`，會隨 Python package 安裝。
 

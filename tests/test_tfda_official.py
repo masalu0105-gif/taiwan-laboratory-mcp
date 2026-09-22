@@ -178,6 +178,42 @@ def test_list_matching_ranks_by_match_tier_then_blank_cancellation(built):
     assert "coverage_review_incomplete" in result.warnings
 
 
+def test_covid_alias_unions_all_source_wordings_without_duplicate_rows(tmp_path):
+    rows = [
+        _row(
+            許可證字號="衛部醫器輸字第100001號",
+            中文品名="新型冠狀病毒檢測試劑",
+            醫器主類別一="B 血液學及病理學",
+            醫器次類別一="B.9225 合成品項",
+        ),
+        _row(
+            許可證字號="衛部醫器輸字第100002號",
+            英文品名="SARS-CoV-2 Test Reagent",
+            醫器主類別一="B 血液學及病理學",
+            醫器次類別一="B.9225 合成品項",
+        ),
+        _row(
+            許可證字號="衛部醫器輸字第100003號",
+            中文品名="新型冠狀病毒 COVID-19 聯合試劑",
+            醫器主類別一="B 血液學及病理學",
+            醫器次類別一="B.9225 合成品項",
+        ),
+    ]
+    build_tfda_snapshot(_zip_bytes(rows), tmp_path)
+
+    result = _adapter(tmp_path).search_reviewed_ivd("新冠", limit=5)
+
+    assert result.result_status == "ok"
+    assert result.query["query"] == "新冠"
+    assert result.total_matches == 3
+    assert _rows(result) == [2, 3, 4]
+    assert [item.record.matched_by for item in result.items] == [
+        ["name_zh"],
+        ["name_en"],
+        ["name_zh"],
+    ]
+
+
 def test_preferences_change_order_but_not_totals(built):
     adapter = _adapter(built[0])
     for kwargs in ({"prefer_ivd": True}, {"prefer_main_category": "B"}):

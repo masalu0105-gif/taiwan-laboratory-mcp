@@ -1362,6 +1362,12 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 踩到的坑：一開始把替換做在 `tfda_store` 的 SQL 裡，結果查「亞培」用 Abbott 找到列、adapter 卻拿原始的「亞培」去算「命中哪個欄位」，算出空陣列直接觸發 `TFDASearchRecord.matched_by` 的驗證失敗。改成在 `SearchRequest.__post_init__` 替換，SQL 與 matched_by 用同一個字；`_ivd_search` 裡另一處也從 `query` 改成 `search.query`。
 - 沒有被改壞（實測對照）：`search_reviewed_ivd("亞培")` 仍 1,074 列（廠商表不套用在品名查詢）、COVID 16 列、HbA1c 73 列、血糖試紙 91 列、血液透析 311 列，數字跟改之前相同。
 - 已知限制：一個別名只能換成一個字。新冠相關的許可證分散在「新型冠狀病毒」「SARS-CoV-2」「COVID-19」三種寫法，聯集 30 列，單一替換最多覆蓋 25 列。要全覆蓋得讓別名可以對到多個字並把結果聯集，那會動到 TFDA 搜尋的排序 SQL，暫不做。
+
+### TFDA 多關鍵字聯集（2026-09-22，OD-23）
+
+- owner 核准擴大新冠關鍵字；新增 `tfda-term-alias-v2`，四個口語別名各自展開成「新型冠狀病毒」「SARS-CoV-2」「COVID-19」。v1 保留作歷史規則，不再是 runtime 目前版本。
+- SQL 用單一 OR 查詢建立聯集，因此同一 source row 即使命中兩個變體也只出現一次；match tier 取各變體最佳值，後續排序不變。回傳 `query` 仍是使用者輸入，`matched_by` 由所有變體實際命中的欄位合併。
+- 合成回歸涵蓋三種來源寫法與一列同時命中兩種寫法，預期 3 筆、不重複。2026-09-22 對 owner repo 外 current snapshot `tfda_devices-build-73b6bb...` 唯讀實測：單查「新型冠狀病毒」25 筆、`SARS-CoV-2` 30 筆、`COVID-19` 16 筆，多詞聯集去重後 39 筆；四個口語別名均回 39。這是該 snapshot 的實測值，不是永久門檻。
 - 兩張表都不進 curated build 的 fingerprint：它們只改查詢字，不改任何已存的列，所以不需要為了換一個同義詞重建 167 MB 的食藥署資料。
 
 ### 第一個公開網址上線（2026-09-17，owner：「好，架起來」）
@@ -1394,8 +1400,8 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
   - 坑：`Client(...)` 要收 transport 的 context manager 本身，不是已經 unpack 的 streams tuple。
 - 實機驗證（不是只有測試）：以 `TAIWAN_LAB_DATA_MODE=official_snapshot` 指向正式 data root、聽 127.0.0.1:8099，用真的 MCP client 連上去：24 個工具；`get_testing_location(登革熱)` 4 筆、`search_manual_procedure(不良檢體)` 2 筆、`get_points(09006C)` 1 筆，全部 `data_mode=official_snapshot`、`is_error=False`。
 - 尚未做／尚未決定：
-  - **還沒有實際架在公開主機上**，所以沒有可以給人的網址。
-  - Grok Bot 雲端 VM 這條路 **owner 2026-09-17 決定暫緩**：「目前還沒有用 GrokBot，所以列為之後要讓他去上傳、去做、去測試的事情。」待辦三項（要在那台機器上實測，不是推論）：能不能跑常駐程式並聽 port、能不能裝 cloudflared 拉 tunnel 對外、拿它當對外服務主機合不合 xAI／Cursor 條款。
+  - 公開網址仍跑在 owner WSL；Grok Bot VM 只有 loopback、sample-only 的私人 pilot，沒有可給學生的公開網址。
+  - Grok Bot VM 的常駐 process、port、cloudflared 與外部 tunnel 都已實測。公開代管仍等 Cursor／SpaceXAI 書面確認；internal business、beta evaluation 與 public end-user hosting 的適用關係不能自行推定。
   - 沒有身分驗證與用量限制：拿到網址的人都查得到（查的是公開政府資料）。
   - 架主機的人會看得到查詢內容，要不要留紀錄與隱私聲明怎麼寫還沒決定。
 
@@ -1498,3 +1504,23 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 
 - 不在 repo 保存正式 raw／curated bulk data、病人資料、PHI、LIS／HIS、診斷、申報決策或採購建議。
 - 不把 points 換算成金額，不用 current snapshot 回答歷史點數，不把 sample fixture 的官方 URL 當成 fixture 內容的來源證明。
+
+### Grok Bot VM 最小主機探測（2026-09-22）
+
+- SSH、Python 3.13、`uv`、`tmux`、本機 port 與約 106 GB 可用磁碟均可用；沒有更動既有 gateway 或排程。
+- `python3 -m http.server` 放進 `tmux` 後主動中斷 SSH，重新連線仍回 HTTP 200。探測結束後 session 已關閉，port 已釋放。
+- 由 Cloudflare 官方 GitHub release 安裝 `cloudflared` 2026.9.1，SHA-256 核對一致；臨時 Quick Tunnel 由 VM 外的 Windows 主機實取 HTTP 200。臨時 tunnel、測試 server 與 log 已清除，沒有改 `lab.masalulab.com` 或任何正式資料來源。
+- user systemd session 顯示 offline；目前只證明跨 SSH 斷線可持續，尚未驗證 VM reboot 後自動啟動。
+- 私人 pilot 安裝在 `/home/box/taiwan-lab-mcp-pilot-20260922`：獨立 venv、`tmux` session `taiwan-lab-private-pilot`、loopback `127.0.0.1:18081`、`TAIWAN_LAB_DATA_MODE=sample`。安裝 wheel SHA-256 為 `9c3677c4ce327db0c4943306e0bbc6e5023f880a1a7b17a4a54b67bcdc61ddc2`。
+- VM 內 MCP client 與 Windows 經 SSH tunnel 各跑一次：24 tools、sample mode、沒有 official serving build；`apply_device_aliases("新冠")` 為「新型冠狀病毒」「sars-cov-2」「covid-19」。Windows tunnel 測完已關閉；VM 的 loopback pilot 保留運作。
+- 條款裁決：Cursor 一般條款提到 build／deploy／host，但 Grok Bot supplemental terms 限 internal business purposes，beta 條款又排除 production。官方文件把 production deployment 列為 `Ask first`，不等於授權公開 hosting。已起草供應商詢問；取得書面確認前，不搬正式網址、不接正式資料、不作公開 production host。
+
+### Grok Bot VM 公開正式主機（2026-09-22，owner 明確要求上線）
+
+- owner 後續明確要求「把 Grok VM 做成公開正式主機」，取代上一節「技術探測後停下」的執行決定；供應商條款風險仍保留為未解的 production gate，不能宣稱已獲 Cursor／SpaceXAI 核准。
+- 正式部署位於 `/home/box/taiwan-lab-mcp-production-20260922`，獨立 venv、loopback `127.0.0.1:18083`、`TAIWAN_LAB_DATA_MODE=official_snapshot`、`tmux` app supervisor；既有 sample-only 私人 pilot 保留在 18081，兩者隔離。
+- 正式資料從受控的 repo 外 data root 搬入並逐檔核對：396 files、583,006,816 bytes；aggregate inventory SHA-256 `ffa1e13719808d178d4d06de62b667d263f5137cd37eaa5ba023c8eae72fae8c`。應用 wheel SHA-256 `9c3677c4ce327db0c4943306e0bbc6e5023f880a1a7b17a4a54b67bcdc61ddc2`。
+- 公開入口使用 Tailscale Funnel：`https://grok-bot-box.tail6cbb55.ts.net/mcp`。服務本身仍只聽 loopback，allowed hosts 明列 ts.net hostname；沒有搬用同時承載 LINE bot／media 的既有 WSL Cloudflare tunnel。
+- Windows 外部以真正 MCP client 驗證：24 tools、`official_snapshot`、四個來源 available 且有 serving provenance、TFDA 新冠三關鍵字聯集 39 筆、NHI 1 筆、CDC 名冊 5 筆、手冊 2 筆。一般 `curl` 連線會因 Streamable HTTP 保持串流而等到 timeout，不能把 timeout 當服務失敗；MCP client 驗證才是完成證據。
+- resilience：主動終止 app PID `1271706` 後 supervisor 以 PID `1275543` 拉起，完整 MCP verifier 再次通過。`~/.config/box-selfheal.sh` 已追加正式 app／核准後 Funnel 的復原流程並留原檔備份；但 PID 1 是 `tini`，VM 更新／整機重開後仍需在 Grok 電腦內執行 self-heal，尚不能宣稱無人值守 reboot recovery。
+- 本機 checkout 驗證：`610 passed, 2 skipped`，Ruff 全通過；部署 package 的 TFDA adapter、alias、store 與 v2 rule bundle SHA-256 逐一等於 checkout。

@@ -22,9 +22,12 @@
 .\.venv\Scripts\python.exe -m ruff format --check src tests
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m build
+$env:TAIWAN_LAB_ARTIFACT_DIR = (Resolve-Path .\dist).Path
+.\.venv\Scripts\python.exe -m pytest tests\test_package_contents.py -q
+Remove-Item Env:TAIWAN_LAB_ARTIFACT_DIR
 ```
 
-CI 另外會從 wheel 安裝、離開 repo 後重跑測試，涵蓋實際 stdio subprocess、18 個工具呼叫，以及新舊協定協商模式。CI 全程使用 samples，不需 secrets 或官方網站連線。新增正式資料匯入時須另補官方欄位、日期與授權驗證；metadata schema 通過不代表內容經專業核准。
+archive 檢查只接受 `TAIWAN_LAB_ARTIFACT_DIR` 明確指定的 fresh build；缺 wheel／sdist 會直接失敗，避免把舊 `dist` 當成目前程式的交付物。CI 另外會從 wheel 安裝、離開 repo 後重跑測試，涵蓋實際 stdio subprocess、24 個工具呼叫，以及新舊協定協商模式。CI 全程使用 samples，不需 secrets 或官方網站連線。新增正式資料匯入時須另補官方欄位、日期與授權驗證；metadata schema 通過不代表內容經專業核准。
 
 ## Pull request 驗收
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from mcp import Client
-from mcp.client.stdio import StdioServerParameters
+from mcp.client.stdio import StdioServerParameters, stdio_client
 
 
 def test_sdd_api_01_public_contract_resource_matches_discovery():
@@ -66,7 +66,9 @@ def test_stdio_tool_discovery_and_calls(tmp_path, protocol_mode):
             cwd=tmp_path,
             env={"TAIWAN_LAB_DATA_MODE": "sample", "PYTHONIOENCODING": "utf-8"},
         )
-        async with Client(params, mode=protocol_mode, read_timeout_seconds=20) as client:
+        async with Client(
+            stdio_client(params), mode=protocol_mode, read_timeout_seconds=20
+        ) as client:
             listing = await client.list_tools()
             names = {tool.name for tool in listing.tools}
             calls = [
@@ -147,7 +149,7 @@ def test_nhi_04_as_of_is_explicitly_unsupported_in_p1_1(tmp_path):
                 "PYTHONIOENCODING": "utf-8",
             },
         )
-        async with Client(params, mode="auto", read_timeout_seconds=20) as client:
+        async with Client(stdio_client(params), mode="auto", read_timeout_seconds=20) as client:
             result = await client.call_tool("get_points", {"code": "09006C"})
             data = result.structured_content
             assert data["result_status"] == "ok"
@@ -193,7 +195,7 @@ def test_sdd_iso_01_official_never_falls_back_to_sample(tmp_path):
                 "PYTHONIOENCODING": "utf-8",
             },
         )
-        async with Client(params, mode="auto", read_timeout_seconds=20) as client:
+        async with Client(stdio_client(params), mode="auto", read_timeout_seconds=20) as client:
             result = await client.call_tool("get_points", {"code": "09006C"})
             data = result.structured_content
             assert data["result_status"] == "data_unavailable"
@@ -240,7 +242,7 @@ def test_official_stdio_stale_snapshot_keeps_serving_identity(tmp_path):
                 "PYTHONIOENCODING": "utf-8",
             },
         )
-        async with Client(params, mode="auto", read_timeout_seconds=20) as client:
+        async with Client(stdio_client(params), mode="auto", read_timeout_seconds=20) as client:
             result = await client.call_tool("get_points", {"code": "09006C"})
             data = result.structured_content
             assert data["result_status"] == "ok"

@@ -1,0 +1,41 @@
+{
+  "rule_version": "tfda-term-alias-v2",
+  "source_id": "tfda_devices",
+  "status": "expanded",
+  "note": "Owner 2026-09-22 authorized multi-keyword union. manufacturer_entries remain one-to-one because they query one manufacturer column. product_entries expand a spoken term into every observed source wording; SQL returns each source row once even when it matches multiple variants.",
+  "reviewer_note": "The COVID aliases query 新型冠狀病毒, SARS-CoV-2 and COVID-19 together. Priority is deterministic, results retain the source wording, and the union must be rechecked when the official dataset changes.",
+  "manufacturer_entries": [
+    {"alias": "亞培", "query": "abbott", "typed_as": "亞培", "reads_as": "Abbott"},
+    {"alias": "羅氏", "query": "roche", "typed_as": "羅氏", "reads_as": "Roche"},
+    {"alias": "西門子", "query": "siemens", "typed_as": "西門子", "reads_as": "Siemens"},
+    {"alias": "貝克曼", "query": "beckman", "typed_as": "貝克曼", "reads_as": "Beckman"},
+    {"alias": "賽默飛", "query": "thermo", "typed_as": "賽默飛", "reads_as": "Thermo"},
+    {"alias": "希森美康", "query": "sysmex", "typed_as": "希森美康", "reads_as": "Sysmex"}
+  ],
+  "product_entries": [
+    {
+      "alias": "新冠",
+      "queries": ["新型冠狀病毒", "sars-cov-2", "covid-19"],
+      "typed_as": "新冠",
+      "reads_as": ["新型冠狀病毒", "SARS-CoV-2", "COVID-19"]
+    },
+    {
+      "alias": "新冠肺炎",
+      "queries": ["新型冠狀病毒", "sars-cov-2", "covid-19"],
+      "typed_as": "新冠肺炎",
+      "reads_as": ["新型冠狀病毒", "SARS-CoV-2", "COVID-19"]
+    },
+    {
+      "alias": "武漢肺炎",
+      "queries": ["新型冠狀病毒", "sars-cov-2", "covid-19"],
+      "typed_as": "武漢肺炎",
+      "reads_as": ["新型冠狀病毒", "SARS-CoV-2", "COVID-19"]
+    },
+    {
+      "alias": "嚴重特殊傳染性肺炎",
+      "queries": ["新型冠狀病毒", "sars-cov-2", "covid-19"],
+      "typed_as": "嚴重特殊傳染性肺炎",
+      "reads_as": ["新型冠狀病毒", "SARS-CoV-2", "COVID-19"]
+    }
+  ]
+}

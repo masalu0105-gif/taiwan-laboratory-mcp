@@ -1,14 +1,17 @@
 # 資料來源與授權
 
-核對日期：2026-09-12。此頁確認官方資料入口與來源宣告；尚未完成正式資料下載、匯入或逐欄臨床複核。
+核對日期：2026-09-18。四組來源已有 repo 外正式 snapshot 與查詢路徑；每次更新仍須重新發現／下載、驗證 provenance 與 schema，通過各來源 review／publish gate 才能切換 current。
+
+<!-- official-source-ids: cdc_manual,cdc_recognized_labs,nhi_fee,tfda_device -->
 
 ## P1 官方來源
 
 | Source ID | 官方入口與提供者 | 來源宣告 | 專案目前狀態 |
 | --- | --- | --- | --- |
-| `cdc_specimen` | [傳染病檢體採檢手冊](https://www.cdc.gov.tw/Category/Page/WV_GRwCIYrWQsEVa8ctTWg)，衛生福利部疾病管制署 | 官方文件頁；需核對每份文件本身版本與適用條件 | 入口已確認；文件重製與資料整理的適用條件待逐份記錄 |
-| `nhi_payment` | [醫療服務給付項目及支付標準 CSV](https://data.gov.tw/dataset/174450)，衛生福利部中央健康保險署 | 每日更新；政府資料開放授權條款第 1 版 | 詮釋資料已確認；未匯入 |
-| `tfda_device_license` | [醫療器材許可證資料集](https://data.gov.tw/dataset/9576)，衛生福利部食品藥物管理署 | 每 7 日更新；政府資料開放授權條款第 1 版；大量資料採 ZIP | 詮釋資料已確認；未匯入；該資料集包含多類醫材，不能整份視為 IVD |
+| `cdc_manual` | [傳染病檢體採檢手冊](https://www.cdc.gov.tw/Category/Page/WV_GRwCIYrWQsEVa8ctTWg)，衛生福利部疾病管制署 | 官方文件頁；每次同步重新發現附件並核對 PDF 版本 | 已建立整本手冊 snapshot、頁面 locator、完整性與 review gate；正式作業仍須核對原文 |
+| `cdc_recognized_labs` | 疾管署認可傳染病檢驗機構名冊，衛生福利部疾病管制署 | 從官方 landing page 重新發現 ODS；頁面日期不能取代附件版本 | 已建立 ODS importer、正式 snapshot 與自動更新；不把機構列壓成單一證號列 |
+| `nhi_fee` | [醫療服務給付項目及支付標準 CSV](https://data.gov.tw/dataset/174450)，衛生福利部中央健康保險署 | metadata license code `1`；政府資料開放授權條款第 1 版 | 已建立 7 欄 importer、正式 snapshot 與自動更新；點數不是金額，也不是歷史資料庫 |
+| `tfda_device` | [醫療器材許可證資料集](https://data.gov.tw/dataset/9576)，衛生福利部食品藥物管理署 | 政府資料開放授權條款第 1 版；CSV endpoint 實際按 ZIP 驗證 | 已建立 34 欄 importer、正式 snapshot 與自動更新；全量醫材不能整份視為 IVD，涵蓋固定 `review_incomplete` |
 
 更新頻率是來源宣告，不能當成最近一次成功同步的證據。資料入口頁的修改時間，也不等於每一筆紀錄或 PDF 的版本時間。
 

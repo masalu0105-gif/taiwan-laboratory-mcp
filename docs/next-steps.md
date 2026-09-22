@@ -1,55 +1,57 @@
 # 接下來要做的事
 
-> 2026-09-18 收尾時整理。專案主要開發已經告一段落，這份只列「還沒做完」與「之後要接手的人要知道」的事。
+> 2026-09-22 更新。專案主要開發已經告一段落，這份只列「還沒做完」與「之後要接手的人要知道」的事。
 > 已經做完的東西寫在 [實作紀錄](implementation-notes.md)，決定寫在 [PRD 第 9 節](product-requirements.md)。
 
-## 現在的狀態（2026-09-18 實查）
+## 現在的狀態（2026-09-22 實查）
 
 - 四份官方資料都在服務：健保支付標準、食藥署醫材許可證、疾管署認可檢驗機構名冊（1150916）、疾管署傳染病檢體採檢手冊（1150826）。
 - 24 個查詢工具，兩種接法：裝在自己電腦上（`taiwan-lab-mcp`）、連網址（`taiwan-lab-mcp-http`）。
-- 公開網址 `https://lab.masalulab.com/mcp`，跑在 owner 電腦的 WSL 裡，對外走既有的 Cloudflare Tunnel。
+- 公開正式網址 `https://grok-bot-box.tail6cbb55.ts.net/mcp`，跑在 Grok Bot VM，對外走 Tailscale Funnel；Windows 外部 MCP client 已完整驗證。
 - 每天 09:30 自動檢查四個官方來源，通過就換版並自動發 GitHub Release。
-- 程式最新 commit `2379656`，CI 四個平台全綠。
+- 功能基線 commit `2379656`；收尾文件 commit `d7088cf`。當時 CI 四個平台全綠。
 
 ## 待辦
 
-### 1. 把公開網址的服務裝成開機自動啟動（owner 執行，需要密碼）
+### 1. VM 整機重開後的自動恢復仍待平台支援
 
-現在服務是手動起的，WSL 一重開公開網址就會斷。unit 檔已經寫好放在 `/home/flumox/taiwan-lab-mcp-http/taiwan-lab-mcp-http.service`。
+正式 app 由 `tmux` supervisor 監督，子程序崩潰與 SSH 斷線都已實測可恢復／持續；Grok VM 的 PID 1 是 `tini`，沒有可用的 systemd boot hook。`~/.config/box-selfheal.sh` 已能復原 Tailscale、SSH、正式 app 與已核准的 Funnel，但 VM 更新或整機重開後仍要由 Grok 電腦內執行一次。舊 WSL unit 指令不再是正式主機方案。
 
-```
-wsl -e sudo cp /home/flumox/taiwan-lab-mcp-http/taiwan-lab-mcp-http.service /etc/systemd/system/
-wsl -e sudo systemctl enable --now taiwan-lab-mcp-http
-```
+不得據此宣稱 VM 永不斷線；平台級自動開機恢復仍是外部 blocker。
 
 ### 2. Mac 實機驗證（owner 有 Mac 時）
 
 程式與 `scripts/install-taiwan-lab-mcp.sh` 目前只有 GitHub 的自動測試驗過，**沒有人在真的 Mac 上走完一次安裝**。安裝說明的〈已知限制〉照實寫了這件事，驗過之後要一起改掉。
 
-### 3. Grok Bot 雲端 VM（owner 2026-09-17 決定暫緩，等他建置起來再做）
+### 3. Grok Bot 雲端 VM（公開 production 已啟用；供應商條款仍未確認）
 
-owner 原話：「目前還沒有用 GrokBot，所以列為之後要讓他去上傳、去做、去測試的事情。」2026-09-18 再次確認：「等我把 Growbook 那個部分建置起來，我們再來進行。」
+2026-09-22 已在該 VM 做最小、可回復的實測：
 
-搬過去之前要在**那台機器上實測**這三件，不能用推論的（官方公告頁沒寫）：
+1. Python HTTP server 放進 `tmux` 後中斷 SSH，重新連線仍可取得 HTTP 200；測完已停止，port 已釋放。
+2. 安裝官方 `cloudflared` 2026.9.1 並核對 release SHA-256；臨時 Quick Tunnel 從外部 Windows 主機取得 HTTP 200，測完已停止，沒有改正式 DNS 或既有 tunnel。
+3. 目前沒有 user systemd session，可證明的是「跨 SSH 斷線持續」，還沒證明 VM 重開後自動恢復。
 
-1. 能不能跑一直開著的常駐程式並聽 port。最小測法：
-   `python3 -m http.server 8080 &` 然後 `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080`，回 200 才算過。
-2. 能不能裝 cloudflared 並讓 tunnel 一直連著。
-3. 拿它當對外服務的主機，合不合 xAI／Cursor 的使用條款。
+同日已部署獨立的私人 pilot：`/home/box/taiwan-lab-mcp-pilot-20260922`，只聽 `127.0.0.1:18081`、固定 `sample` mode、使用獨立 venv 與 `tmux`，沒有正式資料。VM 內與 Windows 經 SSH tunnel 都以 MCP client 實測：24 個工具、`get_data_status.data_mode=sample`、0 個 official serving build，TFDA 新冠別名展開三個查詢詞。Windows 可用 `ssh -N -L 18082:127.0.0.1:18081 grok-box` 暫時取得 `http://127.0.0.1:18082/mcp`；關掉 SSH tunnel 就不再能從 Windows 存取。
 
-三項都過就照 `docs/install.md` 的〈進階：一台主機服務多個人〉搬：在 VM 上裝同一個工具、跑同一支啟動腳本、把 `lab.masalulab.com` 改指到那邊的 cloudflared。**使用者手上的網址不用換。**
+owner 於 2026-09-22 明確要求改為公開正式主機。正式部署位於 `/home/box/taiwan-lab-mcp-production-20260922`，只聽 `127.0.0.1:18083`，使用 `official_snapshot` 與 Tailscale Funnel。外部驗證結果：24 tools、四個來源 available 且可追溯、TFDA 多關鍵字聯集 39 筆、NHI／CDC 查詢皆有 evidence-backed row。資料 396 個檔案、583,006,816 bytes，aggregate inventory SHA-256 為 `ffa1e13719808d178d4d06de62b667d263f5137cd37eaa5ba023c8eae72fae8c`。
 
-### 4. 新冠相關的查詢只覆蓋一部分（要不要做由 owner 決定）
+條款風險沒有因技術上線而消失：Cursor 一般條款雖把 build／deploy／host 列入 Service，但 Grok Bot 補充條款限 internal business purposes，beta 功能只供 evaluation；production deployment 的 `Ask first` 文件也沒有授予公開代管權。供應商書面確認仍是未完成的 owner／production gate，不能把目前公開可連線解讀成供應商已核准。
 
-一個別名只能換成一個字。新冠的許可證分散在「新型冠狀病毒」「SARS-CoV-2」「COVID-19」三種寫法，聯集 30 列，目前單一替換覆蓋 25 列。要全覆蓋得讓一個別名對到多個字再把結果合併，會動到食藥署搜尋的排序（10 萬筆那張表），風險比較高，暫不做。
-
-### 5. 公開服務的規矩還沒定（owner 決定）
+### 4. 公開服務的規矩還沒定（owner 決定）
 
 - **沒有身分驗證**：拿到網址的人都查得到。查的是公開政府資料，風險低，但網址發出去就收不回來。
 - **架主機的人看得到查詢內容**：要不要留紀錄、隱私聲明怎麼寫，還沒決定。上課發給學生前建議先講一句。
 - 也還沒有用量限制。
 
 ## 之後接手的人要知道的兩件事
+
+### TFDA 新冠別名會查三種來源寫法
+
+owner 2026-09-22 核准多關鍵字聯集。`tfda-term-alias-v2` 會把「新冠」「新冠肺炎」「武漢肺炎」「嚴重特殊傳染性肺炎」展開成「新型冠狀病毒」「SARS-CoV-2」「COVID-19」三個查詢詞；同一來源列只回一次，排序使用所有變體的最佳 match tier，再沿用既有許可證字號與來源列順序。
+
+### 建置後要明確驗證 fresh archives
+
+source 測試不會自動讀取 repo 裡可能過期的 `dist/`。先執行 `python -m build`，再把 `TAIWAN_LAB_ARTIFACT_DIR` 指向該次輸出並單獨跑 `tests/test_package_contents.py`；缺 wheel、sdist 或必要 contract／review protocol／rule bundle 都會失敗。CI 也按這個順序執行，不能把 package test 的 skip 當成 archive gate 通過。
 
 ### 程式改完，記得把 owner 電腦上裝的那份一起更新
 

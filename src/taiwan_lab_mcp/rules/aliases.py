@@ -24,7 +24,7 @@ from ..util import tfda_search_normalize
 LAB_ALIAS_RULE = "cdc_lab_alias"
 LAB_ALIAS_RULE_VERSION = "cdc-lab-alias-v1"
 DEVICE_ALIAS_RULE = "tfda_term_alias"
-DEVICE_ALIAS_RULE_VERSION = "tfda-term-alias-v1"
+DEVICE_ALIAS_RULE_VERSION = "tfda-term-alias-v2"
 # The one search that reads the licence's maker column; everything else reads names.
 MANUFACTURER_FIELDS = ("manufacturer",)
 
@@ -53,8 +53,42 @@ def _parse_entries(document: Any, version: str, key: str) -> dict[str, str]:
     return aliases
 
 
-def _document(rule: str) -> Any:
-    resource = files("taiwan_lab_mcp").joinpath("rules", rule, "v1.json")
+def _parse_multi_entries(document: Any, version: str, key: str) -> dict[str, tuple[str, ...]]:
+    """Return alias -> ordered query variants; every variant must be normalized and unique."""
+
+    try:
+        entries = document[key]
+        aliases = {entry["alias"]: entry["queries"] for entry in entries}
+    except (KeyError, TypeError) as exc:
+        raise AliasRulesError(f"{version}: {key} is missing or malformed") from exc
+    if document.get("rule_version") != version:
+        raise AliasRulesError(f"{version}: rule_version does not match")
+    if not entries or len(aliases) != len(entries):
+        raise AliasRulesError(f"{version}: {key} is empty or lists an alias twice")
+    parsed: dict[str, tuple[str, ...]] = {}
+    for alias, queries in aliases.items():
+        if (
+            not isinstance(queries, list)
+            or not queries
+            or not all(isinstance(query, str) for query in queries)
+        ):
+            raise AliasRulesError(f"{version}: {alias!r} queries must be a non-empty string list")
+        variants = tuple(queries)
+        if len(set(variants)) != len(variants):
+            raise AliasRulesError(f"{version}: {alias!r} lists one query twice")
+        if not alias or alias in variants:
+            raise AliasRulesError(f"{version}: {alias!r} cannot change a search")
+        if alias != tfda_search_normalize(alias) or any(
+            query != tfda_search_normalize(query) for query in variants
+        ):
+            raise AliasRulesError(f"{version}: {alias!r} queries are not normalized text")
+        parsed[alias] = variants
+    return parsed
+
+
+def _document(rule: str, version: str) -> Any:
+    filename = f"v{version.rsplit('-v', 1)[1]}.json"
+    resource = files("taiwan_lab_mcp").joinpath("rules", rule, filename)
     try:
         return json.loads(resource.read_bytes().decode("utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as exc:
@@ -65,17 +99,19 @@ def _document(rule: str) -> Any:
 def load_lab_aliases() -> dict[str, str]:
     """Short hospital names the roster's own text does not contain."""
 
-    return _parse_entries(_document(LAB_ALIAS_RULE), LAB_ALIAS_RULE_VERSION, "entries")
+    return _parse_entries(
+        _document(LAB_ALIAS_RULE, LAB_ALIAS_RULE_VERSION), LAB_ALIAS_RULE_VERSION, "entries"
+    )
 
 
 @lru_cache(maxsize=1)
-def load_device_aliases() -> tuple[dict[str, str], dict[str, str]]:
+def load_device_aliases() -> tuple[dict[str, str], dict[str, tuple[str, ...]]]:
     """Maker names and product words, kept apart because they read different columns."""
 
-    document = _document(DEVICE_ALIAS_RULE)
+    document = _document(DEVICE_ALIAS_RULE, DEVICE_ALIAS_RULE_VERSION)
     return (
         _parse_entries(document, DEVICE_ALIAS_RULE_VERSION, "manufacturer_entries"),
-        _parse_entries(document, DEVICE_ALIAS_RULE_VERSION, "product_entries"),
+        _parse_multi_entries(document, DEVICE_ALIAS_RULE_VERSION, "product_entries"),
     )
 
 
@@ -87,8 +123,15 @@ def apply_lab_aliases(words: list[str]) -> list[str]:
 
 
 def apply_device_alias(query: str, *, fields: tuple[str, ...]) -> str:
-    """Replace the whole term, choosing the table by which column the search reads."""
+    """Compatibility helper returning the first resolved query variant."""
+
+    return apply_device_aliases(query, fields=fields)[0]
+
+
+def apply_device_aliases(query: str, *, fields: tuple[str, ...]) -> tuple[str, ...]:
+    """Expand one spoken term into every source wording, keeping deterministic priority."""
 
     makers, products = load_device_aliases()
-    table = makers if tuple(fields) == MANUFACTURER_FIELDS else products
-    return table.get(query, query)
+    if tuple(fields) == MANUFACTURER_FIELDS:
+        return (makers.get(query, query),)
+    return products.get(query, (query,))

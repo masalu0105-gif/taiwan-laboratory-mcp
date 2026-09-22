@@ -57,9 +57,14 @@ def test_looking_for_a_maker_by_its_chinese_name_asks_for_the_english_one() -> N
 
 
 def test_a_covid_question_asks_for_wording_the_licences_actually_use() -> None:
-    from taiwan_lab_mcp.rules.aliases import apply_device_alias
+    from taiwan_lab_mcp.rules.aliases import apply_device_alias, apply_device_aliases
 
     assert apply_device_alias("新冠", fields=("name_zh", "name_en")) != "新冠"
+    assert apply_device_aliases("新冠", fields=("name_zh", "name_en")) == (
+        "新型冠狀病毒",
+        "sars-cov-2",
+        "covid-19",
+    )
     assert (
         apply_device_alias("嚴重特殊傳染性肺炎", fields=("name_zh", "name_en"))
         != "嚴重特殊傳染性肺炎"
@@ -67,7 +72,7 @@ def test_a_covid_question_asks_for_wording_the_licences_actually_use() -> None:
 
 
 def test_a_broken_rule_file_stops_the_query_rather_than_quietly_matching_nothing() -> None:
-    from taiwan_lab_mcp.rules.aliases import AliasRulesError, _parse_entries
+    from taiwan_lab_mcp.rules.aliases import AliasRulesError, _parse_entries, _parse_multi_entries
 
     with pytest.raises(AliasRulesError):
         _parse_entries({"rule_version": "wrong", "entries": []}, "cdc-lab-alias-v1", "entries")
@@ -76,6 +81,26 @@ def test_a_broken_rule_file_stops_the_query_rather_than_quietly_matching_nothing
             {"rule_version": "cdc-lab-alias-v1", "entries": [{"alias": "a"}]},
             "cdc-lab-alias-v1",
             "entries",
+        )
+    with pytest.raises(AliasRulesError):
+        # A union rule may not silently collapse repeated variants.
+        _parse_multi_entries(
+            {
+                "rule_version": "tfda-term-alias-v2",
+                "product_entries": [{"alias": "新冠", "queries": ["新型冠狀病毒", "新型冠狀病毒"]}],
+            },
+            "tfda-term-alias-v2",
+            "product_entries",
+        )
+    with pytest.raises(AliasRulesError):
+        # Every union member must already use the same normalization as the index.
+        _parse_multi_entries(
+            {
+                "rule_version": "tfda-term-alias-v2",
+                "product_entries": [{"alias": "新冠", "queries": ["COVID-19"]}],
+            },
+            "tfda-term-alias-v2",
+            "product_entries",
         )
     with pytest.raises(AliasRulesError):
         # The same alias twice would silently drop one of them.

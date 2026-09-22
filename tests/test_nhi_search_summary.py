@@ -72,6 +72,19 @@ def test_search_payment_items_returns_summary_records(official):
     assert alias.record_type == "nhi_fee_summary"
 
 
+@pytest.mark.parametrize("query", ["糖化血色素", "糖化血紅素", "醣化血色素"])
+def test_reviewed_common_hba1c_aliases_resolve_without_changing_official_name(
+    official, query
+):
+    result = official.search_payment_items(query)
+
+    assert result.result_status == "ok"
+    assert result.total_matches == 1
+    assert result.items[0].record.code_raw == "09006C"
+    assert result.items[0].record.name_zh_raw == "醣化血紅素"
+    assert result.items[0].record.matched_by == ["alias"]
+
+
 def test_exact_code_lookups_keep_the_full_record(official):
     full = official.get_points("00193C").items[0].record
     assert full.record_type == "nhi_fee"

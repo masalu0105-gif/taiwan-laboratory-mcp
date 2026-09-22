@@ -1,5 +1,45 @@
 {
   "rule_version": "nhi-aliases-v1",
   "source_id": "nhi_fee",
-  "entries": []
+  "entries": [
+    {
+      "alias_raw": "糖化血色素",
+      "code": "09006C",
+      "language": "zh-TW",
+      "basis_type": "maintainer_reviewed_common_term",
+      "basis_url": "https://info.nhi.gov.tw/api/iode0000s01/Dataset?rId=A21030000I-D20021-001",
+      "basis_locator": "官方支付項目 09006C 名稱為「醣化血紅素（HbA1c）」；本別名僅處理「醣/糖」及「紅素/色素」常見用字差異，不改寫官方原文",
+      "rule_version": "nhi-aliases-v1",
+      "reviewer_id": "ai-reviewer:codex-gpt-5.6-sol",
+      "reviewed_at": "2026-09-22T14:30:00+08:00",
+      "decision_status": "approved",
+      "collision_disposition": "return_all"
+    },
+    {
+      "alias_raw": "糖化血紅素",
+      "code": "09006C",
+      "language": "zh-TW",
+      "basis_type": "maintainer_reviewed_common_term",
+      "basis_url": "https://info.nhi.gov.tw/api/iode0000s01/Dataset?rId=A21030000I-D20021-001",
+      "basis_locator": "官方支付項目 09006C 名稱為「醣化血紅素（HbA1c）」；本別名僅處理「醣/糖」常見用字差異，不改寫官方原文",
+      "rule_version": "nhi-aliases-v1",
+      "reviewer_id": "ai-reviewer:codex-gpt-5.6-sol",
+      "reviewed_at": "2026-09-22T14:30:00+08:00",
+      "decision_status": "approved",
+      "collision_disposition": "return_all"
+    },
+    {
+      "alias_raw": "醣化血色素",
+      "code": "09006C",
+      "language": "zh-TW",
+      "basis_type": "maintainer_reviewed_common_term",
+      "basis_url": "https://info.nhi.gov.tw/api/iode0000s01/Dataset?rId=A21030000I-D20021-001",
+      "basis_locator": "官方支付項目 09006C 名稱為「醣化血紅素（HbA1c）」；本別名僅處理「紅素/色素」常見用字差異，不改寫官方原文",
+      "rule_version": "nhi-aliases-v1",
+      "reviewer_id": "ai-reviewer:codex-gpt-5.6-sol",
+      "reviewed_at": "2026-09-22T14:30:00+08:00",
+      "decision_status": "approved",
+      "collision_disposition": "return_all"
+    }
+  ]
 }

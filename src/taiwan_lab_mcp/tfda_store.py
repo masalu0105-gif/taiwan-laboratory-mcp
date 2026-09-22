@@ -6,7 +6,7 @@ import json
 import sqlite3
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -306,26 +306,14 @@ class SearchRequest:
     rank_by_manufacturer: bool = False
     limit: int = 20
     offset: int = 0
+    queries: tuple[str, ...] = field(init=False)
 
     def __post_init__(self) -> None:
-        from .rules.aliases import apply_device_alias
+        from .rules.aliases import apply_device_aliases
 
-        resolved = apply_device_alias(tfda_search_normalize(self.query), fields=self.fields)
-        object.__setattr__(self, "query", resolved)
-
-
-# TFDA-06 match tiers: exact permit number, exact name, name prefix, name contains, other field.
-_NAME_TIER_SQL = (
-    "CASE WHEN license_no_search = :q THEN 0 "
-    "WHEN name_zh_search = :q OR name_en_search = :q THEN 1 "
-    "WHEN substr(name_zh_search, 1, :q_length) = :q "
-    "OR substr(name_en_search, 1, :q_length) = :q THEN 2 "
-    "WHEN instr(name_zh_search, :q) > 0 OR instr(name_en_search, :q) > 0 THEN 3 ELSE 4 END"
-)
-_MANUFACTURER_TIER_SQL = (
-    "CASE WHEN manufacturer_name_search = :q THEN 0 "
-    "WHEN substr(manufacturer_name_search, 1, :q_length) = :q THEN 1 ELSE 2 END"
-)
+        resolved = apply_device_aliases(tfda_search_normalize(self.query), fields=self.fields)
+        object.__setattr__(self, "query", resolved[0])
+        object.__setattr__(self, "queries", resolved)
 
 
 def search_rows(
@@ -338,16 +326,35 @@ def search_rows(
     """
 
     columns = dict(SEARCH_FIELDS)
-    query = tfda_search_normalize(request.query)
+    queries = tuple(tfda_search_normalize(query) for query in request.queries)
     params: dict[str, Any] = {
-        "q": query,
-        "q_length": len(query),
         "limit": request.limit,
         "offset": request.offset,
     }
-    conditions = [
-        "(" + " OR ".join(f"instr({columns[name]}, :q) > 0" for name in request.fields) + ")"
-    ]
+    query_conditions = []
+    tier_expressions = []
+    for index, query in enumerate(queries):
+        params[f"q_{index}"] = query
+        params[f"q_length_{index}"] = len(query)
+        query_conditions.extend(
+            f"instr({columns[name]}, :q_{index}) > 0" for name in request.fields
+        )
+        if request.rank_by_manufacturer:
+            tier_expressions.append(
+                f"CASE WHEN manufacturer_name_search = :q_{index} THEN 0 "
+                f"WHEN substr(manufacturer_name_search, 1, :q_length_{index}) = :q_{index} "
+                "THEN 1 ELSE 2 END"
+            )
+        else:
+            tier_expressions.append(
+                f"CASE WHEN license_no_search = :q_{index} THEN 0 "
+                f"WHEN name_zh_search = :q_{index} OR name_en_search = :q_{index} THEN 1 "
+                f"WHEN substr(name_zh_search, 1, :q_length_{index}) = :q_{index} "
+                f"OR substr(name_en_search, 1, :q_length_{index}) = :q_{index} THEN 2 "
+                f"WHEN instr(name_zh_search, :q_{index}) > 0 "
+                f"OR instr(name_en_search, :q_{index}) > 0 THEN 3 ELSE 4 END"
+            )
+    conditions = ["(" + " OR ".join(query_conditions) + ")"]
     if request.ivd_scopes is not None:
         placeholders = []
         for index, scope in enumerate(request.ivd_scopes):
@@ -371,7 +378,9 @@ def search_rows(
     if misses:
         order.append(" + ".join(misses))
     order.extend(["cancellation_raw_nonempty", "license_no_raw", "source_row_number"])
-    tier = _MANUFACTURER_TIER_SQL if request.rank_by_manufacturer else _NAME_TIER_SQL
+    tier = (
+        tier_expressions[0] if len(tier_expressions) == 1 else f"min({', '.join(tier_expressions)})"
+    )
     where = " AND ".join(conditions)
     rows = [
         dict(row)
@@ -402,6 +411,12 @@ def license_rows(
     return (rows[0]["total_matches"] if rows else 0), rows
 
 
-def matched_fields(row: dict[str, Any], query: str, fields: tuple[str, ...]) -> list[str]:
-    normalized = tfda_search_normalize(query)
-    return [name for name, column in SEARCH_FIELDS if name in fields and normalized in row[column]]
+def matched_fields(
+    row: dict[str, Any], queries: tuple[str, ...], fields: tuple[str, ...]
+) -> list[str]:
+    normalized = tuple(tfda_search_normalize(query) for query in queries)
+    return [
+        name
+        for name, column in SEARCH_FIELDS
+        if name in fields and any(query in row[column] for query in normalized)
+    ]

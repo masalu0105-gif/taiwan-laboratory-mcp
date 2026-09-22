@@ -1,34 +1,37 @@
 # 架構與資料契約
 
-> 本文件描述 v0.1.1 sample-only 現況。P1.1 的目標契約已由 `docs/product-requirements.md`、`docs/software-design.md` 與 `docs/test-driven-development.md` 取代；下列 legacy keys 不得用於 P1.1 public JSON。
+> 目前實作仍以 package version `0.1.1` 發布，但已包含 P1.1 的雙模式 runtime、四組正式資料管線與 fail-closed 發布邊界。規範真源是 `docs/product-requirements.md`、`docs/software-design.md`、`docs/test-driven-development.md`；machine-readable 真源是 `src/taiwan_lab_mcp/contracts/public-contract-v1.json`。
 
-目前為以原 V0.1 ZIP 整合的 0.1.1 開發／教學示範版。MCP 與 samples 已實作；正式資料同步與領域內容複核仍待完成。
+<!-- public-contract-operations: 24 -->
+
+MCP 目前公開 24 個工具。sample mode 使用 package 內合成資料；`official_snapshot` mode 只讀 repo 外已審核且完整性驗證通過的 snapshot。正式資料不存在、損壞或未通過 serving gate 時回報 unavailable／blocked，不會退回 sample。
 
 ## 最小架構
 
 ```text
 MCP host / AI Agent
-        │ stdio
+        │ stdio 或 streamable HTTP
         ▼
-Python MCP server
+Python MCP server（同一份 24-tool registry）
         │
-        ├── CDC 採檢送驗查詢
-        ├── NHI 檢驗支付查詢
-        └── TFDA IVD 查詢
-                 │
-                 ▼
-       經驗證的資料與來源欄位
+        ├── sample mode ─────── package 內合成 fixtures
+        └── official_snapshot ─ repo 外 current manifest
+                                      │
+                                      ├── NHI 支付標準
+                                      ├── TFDA 醫材許可證
+                                      ├── CDC 認可檢驗機構
+                                      └── CDC 採檢手冊
 ```
 
-沿用原骨架的 `src/taiwan_lab_mcp/adapters/{cdc,nhi,tfda}.py` 與官方 MCP Python SDK。`server.py` 註冊 18 個工具；`adapters/base.py` 驗證環境模式並載入 package 內的 JSON samples；`models.py` 定義 metadata 契約。資料不依賴目前工作目錄。正式資料同步將獨立於工具呼叫；目前沒有雲端資料庫、向量資料庫或模型 API 呼叫。
+`server.py` 依 public contract 註冊 24 個工具；stdio 與 HTTP transport 共用同一個 server registry。`adapters/base.py` 驗證資料模式，`models.py` 驗證 public response 與 provenance，來源專屬 importer／store／autoupdate 模組負責建立與切換 snapshot。資料不依賴目前工作目錄，也沒有向量資料庫或模型 API 呼叫。
 
 官方 [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) 與 [PyPI](https://pypi.org/project/mcp/) 於 2026-09-12 核對為 v2 穩定系列，PyPI 版本 2.2.0。原骨架整合時仍須以實際 import、stdio 啟動和 client 呼叫驗證相容性。
 
 ## 查詢結果
 
-查詢結果以 `status: sample_only` 或 `not_found` 標記是否命中，且兩者一律附 `data_mode: sample`、`sample_only: true` 及警示。`get_data_status` 回報 `official_data_loaded: false`。`not_found` 僅代表在本次資料範圍內未找到；不得衍生成「台灣沒有核准產品」「不能給付」或「沒有這種送驗方式」。
+查詢結果明確帶 `data_mode`、`sample_only`、來源狀態與警示。sample 命中固定為 `sample_only: true`；正式命中固定為 `sample_only: false` 並綁定 snapshot identity、artifact hash、locator 與 provenance。`not_found` 只代表該 snapshot 與搜尋條件未命中；不得衍生成「台灣沒有核准產品」「不能給付」或「沒有這種送驗方式」。
 
-每筆紀錄保留 `provenance`、`source_url`、`version`、`updated_at`、`sample_only`。`DataRecord` 驗證頂層來源欄位與 provenance 一致；未提供更新時間時需附未知說明。正式紀錄的契約要求取得時間、授權與非合成的處理方式。這只驗證資料結構，尚未實作正式資料載入，也不等於來源、授權或醫學內容已核准。產品比較與空結果都保留來源、樣本狀態及限制。
+每筆紀錄保留 `provenance`、`source_url`、`version`、`updated_at`、`sample_only`。正式資料另由 current manifest、immutable build identity 與 review evidence 控制 serving；結構驗證或自動測試通過仍不等於新的官方版本、臨床內容或發布已獲核准。產品比較維持停用，空結果保留來源、資料狀態及限制。
 
 ### 三個領域的保真原則
 
@@ -42,7 +45,9 @@ Python MCP server
 
 ## Samples 與正式資料
 
-所有 fixtures 都帶 `sample_only: true`，缺少此欄位或填入字串 `"true"` 都會被拒收。`TAIWAN_LAB_DATA_MODE` 只接受 `sample`，其他值使啟動失敗；正式模式尚未實作。此版不自動載入 `.env`，也沒有遠端抓取與網路回退。未來正式模式必須沿用資料契約，並另測查無資料與同步失敗的行為。
+所有 fixtures 都帶 `sample_only: true`，缺少此欄位或填入字串 `"true"` 都會被拒收。`TAIWAN_LAB_DATA_MODE` 只接受 `sample` 或 `official_snapshot`；official mode 需要明確的 data root，runtime 只讀 current manifest 指向的 curated build。工具呼叫不會臨時下載官方資料，official unavailable 也不會網路回退或混用 sample。
+
+正式同步走 raw → staged → curated／quarantine：下載與 schema 驗證失敗不改 current；新 candidate 未通過 review／publish gate 時維持上一個已核准 snapshot並揭露 stale／pending 狀態。原始檔、正式資料庫與 current pointer 都在 repo 外，package 只帶 contract、schema、rules、review protocols 與 sample fixtures。
 
 ## Adapter 邊界
 
