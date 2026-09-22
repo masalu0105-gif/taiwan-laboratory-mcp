@@ -35,6 +35,8 @@ else:
     since = datetime.now(timezone.utc) - timedelta(days=n)
     label = "今天到現在" if n == 1 else f"最近 {n} 天"
 
+LOOPBACK = {"127.0.0.1", "::1", "localhost", "unknown"}
+
 rows = []
 with open(path, encoding="utf-8") as handle:
     for line in handle:
