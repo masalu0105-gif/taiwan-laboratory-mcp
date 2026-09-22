@@ -43,6 +43,23 @@ owner 於 2026-09-22 明確要求改為公開正式主機。正式部署位於 `
 - Uvicorn access log 已關閉，避免把來源 IP 與 URL 寫入 app log；應用程式仍可能記錄啟動或錯誤事件，但不保存查詢內容。
 - bearer token 驗證可選，設定只接受 SHA-256；目前公開 production 沒有開啟，維持 owner 要求的匿名公開。這是單機基本保護，不是 CDN／WAF 或分散式 DDoS 防護。
 
+### 5. 主機端資料每日更新（2026-09-22 上線）
+
+Grok VM 上沒有 cron 也沒有 systemd（PID 1 是 `tini`），排程沿用旁邊 app supervisor 的做法：tmux session `taiwan-lab-data-updater` 跑一個 sleep 迴圈，每天台北時間 10:30 叫 `grok-production-update-data.sh`。`grok-production-start.sh` 會起這個 session，boot self-heal hook 呼叫 start.sh，所以整機重開後會一起回來。`grok-production-status.sh` 多印 `data_updater=` 與 `data_update_last=`。
+
+腳本正本在 repo 的 `scripts/ops/`，主機上另有一份在 production 目錄。`--dry-run` 不是提早 return，是對著 `cp -a` 出來的 data-root 複本走完同一段安裝程式。
+
+2026-09-22 驗過的：
+
+- 模擬跑：四份下載、SHA-256 相符、install-snapshot、讀取測試都過，正式資料沒被動到
+- 真的換版：空目錄先裝 data-20260918 的名冊（`installed`、generation 1），再裝 data-20260922（`installed`、generation 2、snapshot id 換掉）
+- 故意給錯的 `--sha256`：`BUNDLE_SHA256_MISMATCH`，rc=4
+- GitHub API 匿名額度用完回 403：擋在動資料之前，rc=1。第一次模擬真的撞到，因此改走已登入的 `gh api`（5000/hr）並加三次重試
+- 排程觸發：把 `TAIWAN_LAB_UPDATE_AT` 設成兩分鐘後，準時在該分鐘第 01 秒觸發並跑完
+- 正式跑一次：四份都 `already_installed`，不重啟，`listener` 前後都在，公開網址 HTTP 200
+
+還沒驗的：真的遇到「主機是舊版、Release 是新版」的那一天，走完換版加重啟那一整段。要等官方出新版，或人工把主機降版一次再跑。
+
 ## 之後接手的人要知道的兩件事
 
 ### TFDA 新冠別名會查三種來源寫法
