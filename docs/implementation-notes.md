@@ -1533,3 +1533,15 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 10 persona、100 題公開矩陣為 `100/100 passed`，median 747.5 ms、max 1533.6 ms；報告在 `reports/persona-scenarios/2026-09-22-public-hardening-final.md`。TFDA `coverage_review_incomplete` 仍依 17,606 張缺分類代碼的來源事實 fail closed，沒有為了漂亮數字改成 complete。
 - GitHub Actions run `35698168537` 在 Ubuntu Python 3.10／3.13、macOS 3.13、Windows 3.13 全綠；本機完整測試 `631 passed, 2 skipped`，fresh wheel／sdist package test `2 passed`，repo 外 fresh venv 確認 import `0.1.2`。
 - `scripts/ops/install-grok-vm-boot-hook.sh` 把 boot self-heal 接到 vendor 的 `start-desktop.sh` 並保留原檔備份；人工執行一次回 `boot_selfheal_ok attempt=1`。供應商控制面沒有 Restart，容器內 PID 1／`pod-daemon` 對 TERM／KILL 不重建，所以「整個容器重建後自動恢復」仍標未驗證，不得誤報。
+
+## 2026-09-22 晚：公開網址換回 lab.masalulab.com，並開始記錄使用情形
+
+- owner 裁決兩件：公開網址換回自有網域；公開端要記錄使用情形，記到含查詢內容那一級。
+- Cloudflare tunnel 改架在 Grok VM 上（先前 2026-09-22 稍早的紀錄說「沒有搬用既有 WSL tunnel」，那是當時的狀態，今晚改成這台自己開一條新的）。
+  - `cloudflared` 2026.9.1 重新安裝，雜湊三方比對：GitHub API 的 asset digest、release 說明裡的 SHA256 Checksums、實際下載檔，三者皆為 `03f1f25d…d68cc`。
+  - 新通道 `taiwan-lab-mcp`，id `28d989ae-9bea-4b3d-8082-899552f8a516`，設定檔 `cloudflared-config.yml` 指 `lab.masalulab.com → http://127.0.0.1:18083`，`ingress validate` 通過。
+  - DNS 以 `--overwrite-dns` 從舊的 WSL tunnel（`acc918d8`）改指新通道。WSL 那份設定檔裡仍留著一條 `lab.masalulab.com → localhost:8090`，已失效但沒清，之後整理 WSL 時再處理。
+  - `TAIWAN_LAB_HTTP_ALLOWED_HOSTS` 前面加上 `lab.masalulab.com` 與 `lab.masalulab.com:443`；舊的 ts.net 名稱保留，既有使用者不會斷。
+  - 實測：`lab.masalulab.com` 200、ts.net 200、`evil.example.com` 421。真的 MCP client 連 `https://lab.masalulab.com/mcp` 拿到 24 個工具，查「糖化血色素」回 09006C 200 點。
+- 改 supervisor 腳本後只重啟 app 沒有用：跑著的 bash 迴圈讀的還是改檔前的內容，要連 tmux session 一起重啟才會吃到新的環境變數。
+- 使用紀錄實測：經 Cloudflare 進來的請求，`X-Forwarded-For` 帶得到真實來源，記到的 `122.121.62.221` 與測試端對外 IP 相符；經 Tailscale Funnel 進來的記到 tailnet 位址。主機自己的健康檢查是 `127.0.0.1`，報表已把它與外部使用者分開算。

@@ -37,7 +37,7 @@
 公開端點：
 
 ```powershell
-python scripts/run_persona_scenarios.py --url "https://grok-bot-box.tail6cbb55.ts.net/mcp"
+python scripts/run_persona_scenarios.py --url "https://lab.masalulab.com/mcp"
 ```
 
 安裝 wheel 後的本機 stdio（`<python>` 必須是裝有本套件的乾淨環境）：

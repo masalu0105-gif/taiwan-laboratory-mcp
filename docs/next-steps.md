@@ -7,7 +7,7 @@
 
 - 四份官方資料都在服務：健保支付標準、食藥署醫材許可證、疾管署認可檢驗機構名冊（1150916）、疾管署傳染病檢體採檢手冊（1150826）。
 - 24 個查詢工具，兩種接法：裝在自己電腦上（`taiwan-lab-mcp`）、連網址（`taiwan-lab-mcp-http`）。
-- 公開正式網址 `https://grok-bot-box.tail6cbb55.ts.net/mcp`，跑在 Grok Bot VM，對外走 Tailscale Funnel；Windows 外部 MCP client 已完整驗證。
+- 公開正式網址 `https://lab.masalulab.com/mcp`，跑在 Grok Bot VM，對外走 Tailscale Funnel；Windows 外部 MCP client 已完整驗證。
 - 每天 09:30 自動檢查四個官方來源，通過就換版並自動發 GitHub Release。
 - 程式版號 `0.1.2`；GitHub Actions run `35698168537` 在 Ubuntu、macOS、Windows 四組全綠。公開 Release 必須讓 tag、wheel、sdist 與四份資料資產維持同一組可安裝狀態。
 

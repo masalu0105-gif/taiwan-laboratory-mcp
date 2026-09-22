@@ -35,6 +35,8 @@ else:
     since = datetime.now(timezone.utc) - timedelta(days=n)
     label = "今天到現在" if n == 1 else f"最近 {n} 天"
 
+LOOPBACK = {"127.0.0.1", "::1", "localhost", "unknown"}
+
 rows = []
 with open(path, encoding="utf-8") as handle:
     for line in handle:
@@ -58,13 +60,27 @@ if not rows:
     print("\n這段期間沒有人呼叫。")
     raise SystemExit
 
+# The host checks itself over loopback after every restart. That is this
+# machine talking to itself, not somebody using the service.
+selfcheck = [r for r in rows if r.get("client") in LOOPBACK]
+rows = [r for r in rows if r.get("client") not in LOOPBACK]
+
+if not rows:
+    print("\n這段期間沒有外部的人呼叫。")
+    if selfcheck:
+        print(f"（只有主機自己的例行檢查 {len(selfcheck)} 次。）")
+    raise SystemExit
+
 calls = [r for r in rows if not r.get("refused")]
 refused = [r for r in rows if r.get("refused")]
 people = {r.get("client", "?") for r in rows}
 
 print(f"\n總共被呼叫 {len(calls)} 次，來自 {len(people)} 個不同的地方。")
+print("（同一個人用手機和電腦連會算成兩個，數字看趨勢就好。）")
 if refused:
     print(f"另有 {len(refused)} 次被擋下來（多半是同一個人短時間問太快）。")
+if selfcheck:
+    print(f"另外主機自己的例行檢查 {len(selfcheck)} 次，沒算進上面。")
 
 first, last = min(r["_at"] for r in rows), max(r["_at"] for r in rows)
 print(f"第一次 {first.astimezone(TAIPEI):%m-%d %H:%M}，最後一次 {last.astimezone(TAIPEI):%m-%d %H:%M}。")
