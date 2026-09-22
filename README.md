@@ -6,7 +6,9 @@
 
 免費、開源，由 masalu.lab 發起。希望醫檢師第一次使用就能解決一個查資料的麻煩，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
 
-> **目前基準版本：0.1.2。** Package 提供 24 個工具與合成示範資料。四組正式資料都可以從 Releases 下載安裝（見[安裝說明](docs/install.md)，有一鍵安裝腳本）：健保支付標準（專案負責人審核；檢驗範圍由 AI 審核，[審核紀錄](docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md)）、食藥署醫療器材許可證（10 萬多筆全收錄、每筆標出是否屬體外診斷等標籤，由 AI 代審，[審核紀錄](docs/reviews/tfda-ivd-ai-review-2026-09-14.md)）、疾管署傳染病認可檢驗機構名冊，以及疾管署傳染病檢體採檢手冊（整本，含第 2 章採檢規定、第 7 章送驗地點與各章條文）。官方有新版時，專案負責人電腦上的每日排程會自動檢查，全部通過才換版，並自動發布新的下載包。安裝後的程式不會自動下載新版資料。不可用於實際採檢、申報或採購。
+> **最快的試法：不用安裝，把 MCP host 指向 `https://grok-bot-box.tail6cbb55.ts.net/mcp` 就能查四組正式資料。**（往下看〈最快的用法〉一節，含限制說明。）
+
+> **目前基準版本：0.1.2**，已發布在 [PyPI](https://pypi.org/project/taiwan-laboratory-mcp/)，`uv tool install taiwan-laboratory-mcp` 一行裝好程式。Package 提供 24 個工具與合成示範資料。四組正式資料都可以從 Releases 下載安裝（見[安裝說明](docs/install.md)，有一鍵安裝腳本）：健保支付標準（專案負責人審核；檢驗範圍由 AI 審核，[審核紀錄](docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md)）、食藥署醫療器材許可證（10 萬多筆全收錄、每筆標出是否屬體外診斷等標籤，由 AI 代審，[審核紀錄](docs/reviews/tfda-ivd-ai-review-2026-09-14.md)）、疾管署傳染病認可檢驗機構名冊，以及疾管署傳染病檢體採檢手冊（整本，含第 2 章採檢規定、第 7 章送驗地點與各章條文）。官方有新版時，專案負責人電腦上的每日排程會自動檢查，全部通過才換版，並自動發布新的下載包。安裝後的程式不會自動下載新版資料。不可用於實際採檢、申報或採購。
 
 ## 三個先做好的問題
 
@@ -22,23 +24,43 @@
 
 CDC 結果須保留條件與例外；NHI 支付點數不能直接當成新臺幣金額；TFDA 許可證比對不能推論產品可互換。查不到資料時，說明搜尋範圍及資料狀態。實際作業仍需核對官方原文與適用的機構流程。
 
-## 查正式資料（Windows／macOS）
+## 最快的用法：連公開網址，什麼都不用下載
 
-照 **[安裝說明](docs/install.md)** 做。最快的做法是用那份說明最前面的一鍵安裝腳本：它會下載四組資料、逐檔核對 SHA-256、裝進你指定的資料夾，並把設定加進 Claude 桌面版（先備份原檔）。想一步一步自己來，同一份說明底下有完整的手動步驟。
-
-沒有裝的資料會回 `data_unavailable`，不影響其他已裝好的資料。
-
-## 直接連公開端點
-
-不想在自己的電腦下載資料，可以把支援 Streamable HTTP 的 MCP host 指向：
+四份正式資料已經放在一台雲端主機上。把支援 Streamable HTTP 的 MCP host 指向這個網址就能查：
 
 `https://grok-bot-box.tail6cbb55.ts.net/mcp`
 
-這個端點在 2026-09-22 從 VM 外部以真正 MCP client 驗證過 24 個工具與四組可追溯的正式 snapshot。匿名流量有每來源 IP 限流、256 KiB 請求上限、不快取回應及不記錄 HTTP access log；private deployment 另可要求 bearer token。公開端仍不應接收病人資料、院內資料、帳號密碼或其他機密內容。結果僅供公開資料查找，不能代替採檢、申報、採購或醫療決策。資料庫、排程與 MCP 查詢服務是 owner 自有工作流程；Grok Bot 條款只明確寫 internal business purposes，因此目前保留的條款不確定性只針對匿名公開端點是否落在該用語內，不把它誤寫成「代管資料庫」或已知違規，詳見[接手事項](docs/next-steps.md)。
+你的電腦不用裝程式、不用下載 600 MB 資料、不用申請任何金鑰。適合上課發給學生、臨時在別人電腦上示範，或只是想先試試看。
+
+這個端點在 2026-09-22 從 VM 外部以真正 MCP client 驗證過 24 個工具與四組可追溯的正式 snapshot。主機端有 supervisor 看著服務，程式異常結束會自動重啟，主機重開也會跑一次自癒腳本。**資料本身不會自動更新**：主機上是部署當下的 snapshot，換新版要重新部署（每日檢查官方新版的排程跑在專案負責人自己的電腦上，產出的是 GitHub 下載包）。
+
+匿名流量有每來源 IP 限流、256 KiB 請求上限、不快取回應及不記錄 HTTP access log；private deployment 另可要求 bearer token。公開端仍不應接收病人資料、院內資料、帳號密碼或其他機密內容。結果僅供公開資料查找，不能代替採檢、申報、採購或醫療決策。資料庫、排程與 MCP 查詢服務是 owner 自有工作流程；Grok Bot 條款只明確寫 internal business purposes，因此目前保留的條款不確定性只針對匿名公開端點是否落在該用語內，不把它誤寫成「代管資料庫」或已知違規，詳見[接手事項](docs/next-steps.md)。
+
+## 想裝在自己電腦（Windows／macOS）
+
+需要離線查、或想自己掌握資料版本，照 **[安裝說明](docs/install.md)** 做。最快的做法是用那份說明最前面的一鍵安裝腳本：它會下載四組資料、逐檔核對 SHA-256、裝進你指定的資料夾，並把設定加進 Claude 桌面版（先備份原檔）。想一步一步自己來，同一份說明底下有完整的手動步驟。
+
+只要裝程式不要資料的話，`uv tool install taiwan-laboratory-mcp` 一行就好，跑起來是合成示範資料。
+
+沒有裝的資料會回 `data_unavailable`，不影響其他已裝好的資料。
 
 ## 五分鐘看示範資料（Windows PowerShell）
 
-需先安裝 Python 3.10 以上與 Git。本專案尚未發布到 PyPI，請從此 repo 安裝。
+套件在 PyPI 上，裝程式只要一行（不含正式資料，跑起來是合成示範資料）：
+
+```powershell
+uv tool install taiwan-laboratory-mcp
+```
+
+沒有 uv 也可以用 pip，需先安裝 Python 3.10 以上：
+
+```powershell
+python -m pip install taiwan-laboratory-mcp
+$env:PYTHONIOENCODING = 'utf-8'
+python -m taiwan_lab_mcp.demo
+```
+
+想從原始碼跑（需要 Git）：
 
 ```powershell
 git clone https://github.com/masalu0105-gif/taiwan-laboratory-mcp.git
