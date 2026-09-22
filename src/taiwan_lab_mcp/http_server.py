@@ -16,14 +16,17 @@ one wrong is silent rather than noisy:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from hashlib import sha256
 from hmac import compare_digest
 from ipaddress import ip_address
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover - import cost only matters at runtime
@@ -38,6 +41,11 @@ MAX_TRACKED_CLIENTS = 10_000
 # Binding to one of these serves only programs already running on this computer.
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
+# Usage recording is off unless a path is given, so nobody running this package
+# elsewhere starts keeping other people's queries without choosing to.
+DEFAULT_USAGE_LOG_MAX_BYTES = 50 * 1024 * 1024
+# One recorded call must not be able to grow without bound, whatever was sent.
+MAX_RECORDED_ARGUMENT_CHARS = 2_000
 
 
 class HttpConfigurationError(Exception):
@@ -54,6 +62,8 @@ class HttpSettings:
     rate_limit_per_minute: int = DEFAULT_RATE_LIMIT_PER_MINUTE
     max_request_bytes: int = DEFAULT_MAX_REQUEST_BYTES
     bearer_token_sha256: str | None = field(default=None, repr=False)
+    usage_log_path: Path | None = None
+    usage_log_max_bytes: int = DEFAULT_USAGE_LOG_MAX_BYTES
 
     @classmethod
     def from_env(cls) -> HttpSettings:
@@ -84,6 +94,10 @@ class HttpSettings:
             raise HttpConfigurationError(
                 "TAIWAN_LAB_HTTP_BEARER_TOKEN_SHA256 must be 64 lowercase hexadecimal characters"
             )
+        usage_log = os.environ.get("TAIWAN_LAB_HTTP_USAGE_LOG", "").strip()
+        usage_log_max_bytes = _positive_int_from_env(
+            "TAIWAN_LAB_HTTP_USAGE_LOG_MAX_BYTES", DEFAULT_USAGE_LOG_MAX_BYTES
+        )
         return cls(
             host=os.environ.get("TAIWAN_LAB_HTTP_HOST", DEFAULT_HOST).strip() or DEFAULT_HOST,
             port=port,
@@ -93,6 +107,8 @@ class HttpSettings:
             rate_limit_per_minute=rate_limit,
             max_request_bytes=max_request_bytes,
             bearer_token_sha256=token_sha256 or None,
+            usage_log_path=Path(usage_log) if usage_log else None,
+            usage_log_max_bytes=usage_log_max_bytes,
         )
 
     @property
@@ -137,14 +153,92 @@ def _positive_int_from_env(name: str, default: int) -> int:
     return value
 
 
+class UsageRecorder:
+    """Append one JSON line per call, so the operator can see who asked what.
+
+    Off unless a path is configured. When it is on, the operator is keeping other
+    people's query text, so the deployment has to say so; see the public endpoint
+    section of README.md. Never records headers, so a bearer token cannot land here.
+    """
+
+    def __init__(self, path: Path, max_bytes: int = DEFAULT_USAGE_LOG_MAX_BYTES):
+        self.path = path
+        self.max_bytes = max_bytes
+
+    def record(self, entry: dict) -> None:
+        # Recording is a side errand. A broken disk must never turn a working
+        # answer into an error for the person who asked.
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self._rotate_if_large()
+            line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+        except OSError:
+            return
+
+    def _rotate_if_large(self) -> None:
+        try:
+            if self.path.stat().st_size <= self.max_bytes:
+                return
+        except FileNotFoundError:
+            return
+        self.path.replace(self.path.with_suffix(self.path.suffix + ".1"))
+
+
+def describe_call(body: bytes) -> dict:
+    """Pull the tool name and arguments out of one JSON-RPC request body.
+
+    Returns empty strings rather than raising, because an unparseable body is a
+    thing a stranger can send and must not take the server down.
+    """
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return {"method": "", "tool": "", "arguments": ""}
+    if isinstance(payload, list):
+        payload = payload[0] if payload else {}
+    if not isinstance(payload, dict):
+        return {"method": "", "tool": "", "arguments": ""}
+
+    method = payload.get("method")
+    params = payload.get("params")
+    params = params if isinstance(params, dict) else {}
+    tool = params.get("name")
+    arguments = params.get("arguments")
+    if arguments is None:
+        rendered = ""
+    else:
+        try:
+            rendered = json.dumps(arguments, ensure_ascii=False, separators=(",", ":"))
+        except (TypeError, ValueError):
+            rendered = ""
+    if len(rendered) > MAX_RECORDED_ARGUMENT_CHARS:
+        rendered = rendered[:MAX_RECORDED_ARGUMENT_CHARS] + "…(截斷)"
+    return {
+        "method": method if isinstance(method, str) else "",
+        "tool": tool if isinstance(tool, str) else "",
+        "arguments": rendered,
+    }
+
+
 class PublicHttpGuard:
-    """Bound anonymous HTTP traffic without retaining request bodies or query text."""
+    """Bound anonymous HTTP traffic, and optionally record who called which tool.
+
+    Recording is off unless `usage_log_path` is set. With it off the request body
+    is still buffered to enforce the size limit, but nothing about it is kept.
+    """
 
     def __init__(self, app, settings: HttpSettings, *, clock=time.monotonic):
         self.app = app
         self.settings = settings
         self.clock = clock
         self._requests: dict[str, deque[float]] = defaultdict(deque)
+        self.recorder = (
+            UsageRecorder(settings.usage_log_path, settings.usage_log_max_bytes)
+            if settings.usage_log_path is not None
+            else None
+        )
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope.get("path") != self.settings.path:
@@ -165,7 +259,7 @@ class PublicHttpGuard:
         while recent and recent[0] <= now - 60:
             recent.popleft()
         if len(recent) >= self.settings.rate_limit_per_minute:
-            await self._reject(send, 429, "rate_limit_exceeded", retry_after="60")
+            await self._deny(send, client_key, 429, "rate_limit_exceeded", retry_after="60")
             return
         recent.append(now)
 
@@ -176,7 +270,7 @@ class PublicHttpGuard:
             if not supplied or not compare_digest(
                 supplied_sha256, self.settings.bearer_token_sha256
             ):
-                await self._reject(send, 401, "authentication_required")
+                await self._deny(send, client_key, 401, "authentication_required")
                 return
 
         content_length = headers.get("content-length")
@@ -184,13 +278,13 @@ class PublicHttpGuard:
             try:
                 declared_length = int(content_length)
             except ValueError:
-                await self._reject(send, 400, "invalid_content_length")
+                await self._deny(send, client_key, 400, "invalid_content_length")
                 return
             if declared_length < 0:
-                await self._reject(send, 400, "invalid_content_length")
+                await self._deny(send, client_key, 400, "invalid_content_length")
                 return
             if declared_length > self.settings.max_request_bytes:
-                await self._reject(send, 413, "request_too_large")
+                await self._deny(send, client_key, 413, "request_too_large")
                 return
 
         body_messages = []
@@ -200,7 +294,7 @@ class PublicHttpGuard:
             message = await receive()
             body_bytes += len(message.get("body", b""))
             if body_bytes > self.settings.max_request_bytes:
-                await self._reject(send, 413, "request_too_large")
+                await self._deny(send, client_key, 413, "request_too_large")
                 return
             body_messages.append(message)
             more_body = bool(message.get("more_body", False))
@@ -210,8 +304,25 @@ class PublicHttpGuard:
                 return body_messages.pop(0)
             return await receive()
 
+        call = None
+        started = self.clock()
+        if self.recorder is not None:
+            call = describe_call(b"".join(m.get("body", b"") for m in body_messages))
+
         async def secure_send(message):
             if message["type"] == "http.response.start":
+                if self.recorder is not None and call is not None:
+                    self.recorder.record(
+                        {
+                            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                            "client": client_key,
+                            "method": call["method"],
+                            "tool": call["tool"],
+                            "arguments": call["arguments"],
+                            "status": message.get("status"),
+                            "ms": round((self.clock() - started) * 1000),
+                        }
+                    )
                 secured_names = {b"cache-control", b"referrer-policy", b"x-content-type-options"}
                 response_headers = [
                     pair
@@ -243,6 +354,29 @@ class PublicHttpGuard:
                 except ValueError:
                     pass
         return direct_host
+
+    async def _deny(
+        self, send, client_key: str, status: int, code: str, *, retry_after: str | None = None
+    ) -> None:
+        """Turn a caller away, and note it if recording is on.
+
+        These refusals happen before the body is parsed, so there is no tool name
+        to record. What the operator needs here is that someone was turned away at
+        all, and how often.
+        """
+        if self.recorder is not None:
+            self.recorder.record(
+                {
+                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "client": client_key,
+                    "method": "",
+                    "tool": "",
+                    "arguments": "",
+                    "status": status,
+                    "refused": code,
+                }
+            )
+        await self._reject(send, status, code, retry_after=retry_after)
 
     @staticmethod
     async def _reject(send, status: int, code: str, *, retry_after: str | None = None) -> None:

@@ -246,3 +246,161 @@ def test_a_question_asked_over_the_web_gets_the_same_answer_shape() -> None:
         "nhi_fee",
         "tfda_device",
     }
+
+
+def _read_usage(path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text("utf-8").splitlines() if line.strip()]
+
+
+def test_usage_is_not_recorded_unless_a_path_is_given(tmp_path) -> None:
+    """Anyone running this package elsewhere must not start keeping queries by default."""
+
+    from taiwan_lab_mcp.http_server import HttpSettings, build_http_app
+
+    settings = HttpSettings()
+    assert settings.usage_log_path is None
+
+    app = build_http_app(settings)
+
+    async def run() -> None:
+        transport = httpx2.ASGITransport(app=app)
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=transport, base_url="http://lab.test") as http:
+                await http.post("/mcp", json={"jsonrpc": "2.0", "method": "tools/list", "id": 1})
+
+    asyncio.run(run())
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_usage_recording_keeps_the_tool_name_and_what_was_asked(tmp_path) -> None:
+    from taiwan_lab_mcp.http_server import HttpSettings, build_http_app
+
+    log = tmp_path / "usage.jsonl"
+    app = build_http_app(HttpSettings(usage_log_path=log))
+
+    async def run() -> None:
+        transport = httpx2.ASGITransport(app=app)
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=transport, base_url="http://lab.test") as http:
+                await http.post(
+                    "/mcp",
+                    headers={"x-forwarded-for": "203.0.113.9"},
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "search_payment_items",
+                            "arguments": {"query": "糖化血色素"},
+                        },
+                    },
+                )
+
+    asyncio.run(run())
+    entries = _read_usage(log)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry["client"] == "203.0.113.9"
+    assert entry["method"] == "tools/call"
+    assert entry["tool"] == "search_payment_items"
+    assert "糖化血色素" in entry["arguments"]
+    assert isinstance(entry["status"], int)
+    assert entry["at"].endswith("+00:00")
+
+
+def test_usage_recording_notes_who_was_turned_away(tmp_path) -> None:
+    """A refusal is the entry the operator most needs; it leaves by another door."""
+
+    from taiwan_lab_mcp.http_server import HttpSettings, build_http_app
+
+    log = tmp_path / "usage.jsonl"
+    app = build_http_app(HttpSettings(rate_limit_per_minute=1, usage_log_path=log))
+
+    async def run() -> None:
+        transport = httpx2.ASGITransport(app=app)
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=transport, base_url="http://lab.test") as http:
+                for _ in range(2):
+                    await http.post(
+                        "/mcp",
+                        headers={"x-forwarded-for": "203.0.113.10"},
+                        json={"jsonrpc": "2.0"},
+                    )
+
+    asyncio.run(run())
+    refusals = [entry for entry in _read_usage(log) if entry.get("refused")]
+    assert len(refusals) == 1
+    assert refusals[0]["refused"] == "rate_limit_exceeded"
+    assert refusals[0]["status"] == 429
+    assert refusals[0]["client"] == "203.0.113.10"
+
+
+def test_usage_recording_survives_a_body_that_is_not_json(tmp_path) -> None:
+    """A stranger can post anything; recording it must not take the server down."""
+
+    from taiwan_lab_mcp.http_server import HttpSettings, build_http_app
+
+    log = tmp_path / "usage.jsonl"
+    app = build_http_app(HttpSettings(usage_log_path=log))
+
+    async def run() -> httpx2.Response:
+        transport = httpx2.ASGITransport(app=app)
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=transport, base_url="http://lab.test") as http:
+                return await http.post("/mcp", content=b"\xff\xfe not json at all")
+
+    response = asyncio.run(run())
+    assert response.status_code < 500
+    entries = _read_usage(log)
+    assert len(entries) == 1
+    assert entries[0]["method"] == ""
+    assert entries[0]["tool"] == ""
+
+
+def test_a_huge_argument_is_cut_down_before_it_is_written(tmp_path) -> None:
+    from taiwan_lab_mcp.http_server import MAX_RECORDED_ARGUMENT_CHARS, describe_call
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {"name": "search_payment_items", "arguments": {"query": "多" * 50_000}},
+        }
+    ).encode("utf-8")
+    described = describe_call(body)
+    assert described["tool"] == "search_payment_items"
+    assert len(described["arguments"]) <= MAX_RECORDED_ARGUMENT_CHARS + len("…(截斷)")
+
+
+def test_the_usage_file_is_rolled_over_instead_of_growing_forever(tmp_path) -> None:
+    from taiwan_lab_mcp.http_server import UsageRecorder
+
+    log = tmp_path / "usage.jsonl"
+    recorder = UsageRecorder(log, max_bytes=200)
+    for index in range(40):
+        recorder.record({"at": "2026-09-22T00:00:00+00:00", "client": "x", "n": index})
+
+    assert log.exists()
+    assert log.stat().st_size <= 400
+    assert (tmp_path / "usage.jsonl.1").exists()
+
+
+def test_recording_a_call_never_breaks_the_answer(tmp_path) -> None:
+    """If the log cannot be written the caller must still get their data."""
+
+    from taiwan_lab_mcp.http_server import HttpSettings, build_http_app
+
+    unwritable = tmp_path / "usage.jsonl"
+    unwritable.mkdir()  # a directory where a file is expected
+    app = build_http_app(HttpSettings(usage_log_path=unwritable))
+
+    async def run() -> httpx2.Response:
+        transport = httpx2.ASGITransport(app=app)
+        async with app.router.lifespan_context(app):
+            async with httpx2.AsyncClient(transport=transport, base_url="http://lab.test") as http:
+                return await http.post("/mcp", json={"jsonrpc": "2.0", "method": "tools/list"})
+
+    response = asyncio.run(run())
+    assert response.status_code < 500
