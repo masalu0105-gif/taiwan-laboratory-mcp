@@ -35,7 +35,7 @@
 | `SDD-CDC-01` | CDC PDF 關係與審查 | 雙頁碼、跨頁表頭、同疾病多採檢項目／目的不合併，發布前人工與醫檢複核 |
 | `SDD-ODS-01` | CDC ODS 合併格語意 | 只解析已知 12 欄；依 merge span 繼承，禁止 blanket forward-fill |
 | `SDD-SEC-01` | 下載 trust boundary | HTTPS、host allowlist、大小限制、安全解壓、內容 magic 驗證 |
-| `SDD-OBS-01` | 可觀測且不洩漏查詢 | sync 產生機器可讀報告；status 回資料狀態；預設不記錄查詢內容 |
+| `SDD-OBS-01` | 可觀測，記錄由部署者決定 | sync 產生機器可讀報告；status 回資料狀態；預設不記錄查詢內容，設 `TAIWAN_LAB_HTTP_USAGE_LOG` 才開，開了就記查詢字句且不含請求標頭 |
 | `SDD-AUDIT-01` | 核准證據綁定 | validation、golden 與 review records 內容定址並綁定同一 build subject digest |
 | `SDD-API-01` | 單一 MCP operation contract | tool 參數、候選範圍、狀態 enum 與安全旗標只有一份 canonical matrix |
 | `SDD-QUAL-01` | 官方來源 qualification 可重跑 | 完整官方 artifact 不進 Git；命令、工具版本、input/output hash 與核准報告可由第二人重跑 |
