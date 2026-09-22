@@ -3,9 +3,23 @@
 [![CI](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/taiwan-laboratory-mcp)](https://pypi.org/project/taiwan-laboratory-mcp/)
 
-讓 AI Agent 直接查台灣醫檢與法規工作最常用的三種公開資料：**CDC 採檢送驗、NHI 檢驗支付、TFDA IVD 許可證**。
+讓 AI Agent 成為醫檢與法規人員的資料助理，直接查台灣三個最常翻的官方來源：**疾管署（CDC）採檢送驗、健保署（NHI）檢驗支付、食藥署（TFDA）IVD 許可證**。
 
-免費、開源，由 masalu.lab 發起。目標是讓醫檢師第一次使用就少查一次資料，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
+過去要在三個網站之間切換、翻 PDF、對代碼；現在用自然語言問一句，Agent 就回你採檢條件、支付點數或許可證明細，並附上官方來源、資料版本與頁碼，方便直接核對。
+
+**誰會用到**
+
+- **醫檢師**：採檢前查檢體、容器與送驗規定；申報時查健保碼與點數。
+- **法規／RA 人員**：查競品許可證、追蹤效期與註銷、比對申請商與製造商，做競品分析與許可證管控。
+- **採購與業務**：確認產品是否有證、證在誰名下、對應哪些健保項目。
+- **教學與訓練**：帶進醫院、學會與 Workshop，學生零安裝就能上手。
+
+**為什麼能放心用**
+
+- 四組資料全部來自政府開放資料與官方公告，不改寫、不推論。
+- 每筆結果附 `provenance`、資料 snapshot 與原始位置，官方更新時自動比對換版。
+- 24 個工具透過標準 MCP 協定提供，Claude、Cursor 等支援 MCP 的 host 都能接。
+- 免費、開源（MIT），由 masalu.lab 發起與維護。
 
 > **零安裝試用：把 MCP host 指向 `https://lab.masalulab.com/mcp`，立刻查四組正式資料。**
 
