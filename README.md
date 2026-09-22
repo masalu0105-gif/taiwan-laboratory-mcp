@@ -6,7 +6,7 @@
 
 免費、開源，由 masalu.lab 發起。希望醫檢師第一次使用就能解決一個查資料的麻煩，願意分享給同事，也能帶進醫院、學會與 Workshop 的教學現場。
 
-> **最快的試法：不用安裝，把 MCP host 指向 `https://grok-bot-box.tail6cbb55.ts.net/mcp` 就能查四組正式資料。**（往下看〈最快的用法〉一節，含限制說明。）
+> **最快的試法：不用安裝，把 MCP host 指向 `https://lab.masalulab.com/mcp` 就能查四組正式資料。**（往下看〈最快的用法〉一節，含限制說明。）
 
 > **目前基準版本：0.1.2**，已發布在 [PyPI](https://pypi.org/project/taiwan-laboratory-mcp/)，`uv tool install taiwan-laboratory-mcp` 一行裝好程式。Package 提供 24 個工具與合成示範資料。四組正式資料都可以從 Releases 下載安裝（見[安裝說明](docs/install.md)，有一鍵安裝腳本）：健保支付標準（專案負責人審核；檢驗範圍由 AI 審核，[審核紀錄](docs/reviews/nhi-lab-scope-ai-review-2026-09-14.md)）、食藥署醫療器材許可證（10 萬多筆全收錄、每筆標出是否屬體外診斷等標籤，由 AI 代審，[審核紀錄](docs/reviews/tfda-ivd-ai-review-2026-09-14.md)）、疾管署傳染病認可檢驗機構名冊，以及疾管署傳染病檢體採檢手冊（整本，含第 2 章採檢規定、第 7 章送驗地點與各章條文）。官方有新版時，專案負責人電腦上的每日排程會自動檢查，全部通過才換版，並自動發布新的下載包。安裝後的程式不會自動下載新版資料。不可用於實際採檢、申報或採購。
 
@@ -28,7 +28,7 @@ CDC 結果須保留條件與例外；NHI 支付點數不能直接當成新臺幣
 
 四份正式資料已經放在一台雲端主機上。把支援 Streamable HTTP 的 MCP host 指向這個網址就能查：
 
-`https://grok-bot-box.tail6cbb55.ts.net/mcp`
+`https://lab.masalulab.com/mcp`
 
 你的電腦不用裝程式、不用下載 600 MB 資料、不用申請任何金鑰。適合上課發給學生、臨時在別人電腦上示範，或只是想先試試看。
 
