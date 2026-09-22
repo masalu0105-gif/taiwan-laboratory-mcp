@@ -9,15 +9,15 @@
 - 24 個查詢工具，兩種接法：裝在自己電腦上（`taiwan-lab-mcp`）、連網址（`taiwan-lab-mcp-http`）。
 - 公開正式網址 `https://grok-bot-box.tail6cbb55.ts.net/mcp`，跑在 Grok Bot VM，對外走 Tailscale Funnel；Windows 外部 MCP client 已完整驗證。
 - 每天 09:30 自動檢查四個官方來源，通過就換版並自動發 GitHub Release。
-- 功能基線 commit `2379656`；收尾文件 commit `d7088cf`。當時 CI 四個平台全綠。
+- 程式版號 `0.1.2`；GitHub Actions run `35698168537` 在 Ubuntu、macOS、Windows 四組全綠。公開 Release 必須讓 tag、wheel、sdist 與四份資料資產維持同一組可安裝狀態。
 
 ## 待辦
 
-### 1. VM 整機重開後的自動恢復仍待平台支援
+### 1. VM 整機重建後的恢復驗證仍需供應商控制面
 
-正式 app 由 `tmux` supervisor 監督，子程序崩潰與 SSH 斷線都已實測可恢復／持續；Grok VM 的 PID 1 是 `tini`，沒有可用的 systemd boot hook。`~/.config/box-selfheal.sh` 已能復原 Tailscale、SSH、正式 app 與已核准的 Funnel，但 VM 更新或整機重開後仍要由 Grok 電腦內執行一次。舊 WSL unit 指令不再是正式主機方案。
+正式 app 由 `tmux` supervisor 監督，子程序崩潰與 SSH 斷線都已實測可恢復／持續。2026-09-22 已把 `~/.config/box-boot-selfheal.sh` 掛入 Grok 映像既有的 `/usr/local/bin/start-desktop.sh`，啟動時會呼叫 `~/.config/box-selfheal.sh`，復原 Tailscale、SSH、正式 app 與已核准的 Funnel；安裝程式、啟動程式與 vendor launcher 原檔備份都已保留。
 
-不得據此宣稱 VM 永不斷線；平台級自動開機恢復仍是外部 blocker。
+boot hook 已人工執行成功，但 Grok 控制台沒有 Restart 操作，容器內對 PID 1／`pod-daemon` 發送 TERM／KILL 也不會重建容器。因此仍不能宣稱「整機重建後已實測自動恢復」或「永不斷線」。供應商真正重建容器後，需核對 `box-boot-selfheal.log` 新增一次 `boot_selfheal_ok`、公開 MCP verifier 通過；vendor image 更新也可能覆寫 launcher，狀態檢查要一併核對 hook marker。
 
 ### 2. Mac 實機驗證（owner 有 Mac 時）
 
@@ -29,7 +29,7 @@
 
 1. Python HTTP server 放進 `tmux` 後中斷 SSH，重新連線仍可取得 HTTP 200；測完已停止，port 已釋放。
 2. 安裝官方 `cloudflared` 2026.9.1 並核對 release SHA-256；臨時 Quick Tunnel 從外部 Windows 主機取得 HTTP 200，測完已停止，沒有改正式 DNS 或既有 tunnel。
-3. 目前沒有 user systemd session，可證明的是「跨 SSH 斷線持續」，還沒證明 VM 重開後自動恢復。
+3. 目前沒有 user systemd session；已改接既有 desktop launcher 並完成人工 boot hook 驗證，但平台控制面不提供 Restart，還沒證明整個容器重建後自動恢復。
 
 同日已部署獨立的私人 pilot：`/home/box/taiwan-lab-mcp-pilot-20260922`，只聽 `127.0.0.1:18081`、固定 `sample` mode、使用獨立 venv 與 `tmux`，沒有正式資料。VM 內與 Windows 經 SSH tunnel 都以 MCP client 實測：24 個工具、`get_data_status.data_mode=sample`、0 個 official serving build，TFDA 新冠別名展開三個查詢詞。Windows 可用 `ssh -N -L 18082:127.0.0.1:18081 grok-box` 暫時取得 `http://127.0.0.1:18082/mcp`；關掉 SSH tunnel 就不再能從 Windows 存取。
 
@@ -37,11 +37,11 @@ owner 於 2026-09-22 明確要求改為公開正式主機。正式部署位於 `
 
 條款風險沒有因技術上線而消失：Cursor 一般條款雖把 build／deploy／host 列入 Service，但 Grok Bot 補充條款限 internal business purposes，beta 功能只供 evaluation；production deployment 的 `Ask first` 文件也沒有授予公開代管權。供應商書面確認仍是未完成的 owner／production gate，不能把目前公開可連線解讀成供應商已核准。
 
-### 4. 公開服務的規矩還沒定（owner 決定）
+### 4. 公開服務 guard 已上線；匿名公開是 owner 既定範圍
 
-- **沒有身分驗證**：拿到網址的人都查得到。查的是公開政府資料，風險低，但網址發出去就收不回來。
-- **架主機的人看得到查詢內容**：要不要留紀錄、隱私聲明怎麼寫，還沒決定。上課發給學生前建議先講一句。
-- 也還沒有用量限制。
+- `0.1.2` 已加每來源每分鐘 240 次的記憶體內 sliding-window 限流、256 KiB request body 上限、`Cache-Control: no-store`、`Referrer-Policy: no-referrer` 與 `nosniff`。
+- Uvicorn access log 已關閉，避免把來源 IP 與 URL 寫入 app log；應用程式仍可能記錄啟動或錯誤事件，但不保存查詢內容。
+- bearer token 驗證可選，設定只接受 SHA-256；目前公開 production 沒有開啟，維持 owner 要求的匿名公開。這是單機基本保護，不是 CDN／WAF 或分散式 DDoS 防護。
 
 ## 之後接手的人要知道的兩件事
 
@@ -66,12 +66,10 @@ source 測試不會自動讀取 repo 裡可能過期的 `dist/`。先執行 `pyt
 
 ```
 uv build --wheel --out-dir <scratch>
-uv pip install --python "C:/Users/User/AppData/Roaming/uv/tools/taiwan-laboratory-mcp/Scripts/python.exe" --reinstall-package taiwan-laboratory-mcp <scratch>/taiwan_laboratory_mcp-0.1.1-py3-none-any.whl "pypdfium2==5.13.0"
+uv pip install --python "C:/Users/User/AppData/Roaming/uv/tools/taiwan-laboratory-mcp/Scripts/python.exe" --reinstall-package taiwan-laboratory-mcp <scratch>/taiwan_laboratory_mcp-0.1.2-py3-none-any.whl "pypdfium2==5.13.0"
 ```
 
-公開網址那台（WSL）另外裝，目前是從 main 分支裝：
-`uv tool install --force 'https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/refs/heads/main.zip'`
-（HTTP 那一層還沒進任何 Release，所以裝 tag 只會拿到 2 支執行檔。）
+公開網址的 Grok VM 使用獨立 venv，部署精確的 `0.1.2` wheel；公開 Release 也應包含同版 wheel、sdist 與四份資料資產，避免 installer 從 latest release 取到舊程式。
 
 ### 食藥署的涵蓋狀態永遠是 `review_incomplete`，這不是待辦
 

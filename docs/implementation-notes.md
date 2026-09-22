@@ -1524,3 +1524,12 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - Windows 外部以真正 MCP client 驗證：24 tools、`official_snapshot`、四個來源 available 且有 serving provenance、TFDA 新冠三關鍵字聯集 39 筆、NHI 1 筆、CDC 名冊 5 筆、手冊 2 筆。一般 `curl` 連線會因 Streamable HTTP 保持串流而等到 timeout，不能把 timeout 當服務失敗；MCP client 驗證才是完成證據。
 - resilience：主動終止 app PID `1271706` 後 supervisor 以 PID `1275543` 拉起，完整 MCP verifier 再次通過。`~/.config/box-selfheal.sh` 已追加正式 app／核准後 Funnel 的復原流程並留原檔備份；但 PID 1 是 `tini`，VM 更新／整機重開後仍需在 Grok 電腦內執行 self-heal，尚不能宣稱無人值守 reboot recovery。
 - 本機 checkout 驗證：`610 passed, 2 skipped`，Ruff 全通過；部署 package 的 TFDA adapter、alias、store 與 v2 rule bundle SHA-256 逐一等於 checkout。
+
+### 公開端點 hardening、0.1.2 與復原鉤子（2026-09-22）
+
+- HTTP ASGI guard 新增單來源每分鐘 240 次 sliding-window 限流、256 KiB body 上限、可選 bearer token SHA-256 驗證及安全 response headers；設定格式錯誤會 fail closed。受信任的 `X-Forwarded-For` 只在直連 peer 為 loopback 時採用最右側有效位址，且限流先於驗證。Uvicorn access log 關閉，避免新查詢把來源 IP／URL寫入 `app.log`。
+- production 只允許實際使用的 `grok-bot-box.tail6cbb55.ts.net` 與 loopback host；移除未使用的 `lab.masalulab.com`。舊 candidate、0.1.1 wheel 與 supervisor 已移到 `/home/box/taiwan-lab-mcp-backups/20260922-pre-0.1.2`，沒有刪除正式資料或私人 sample pilot。
+- 部署 wheel `taiwan_laboratory_mcp-0.1.2-py3-none-any.whl` SHA-256 `d9cc419482fa30aac8a7dc3ac7439fd051c72916dba3c4dcdbbecfec7dda56a8`。公開 URL 的 24-tool verifier 通過，四來源 available／traceable；超過上限的 body 回 413，安全 headers 存在。
+- 10 persona、100 題公開矩陣為 `100/100 passed`，median 747.5 ms、max 1533.6 ms；報告在 `reports/persona-scenarios/2026-09-22-public-hardening-final.md`。TFDA `coverage_review_incomplete` 仍依 17,606 張缺分類代碼的來源事實 fail closed，沒有為了漂亮數字改成 complete。
+- GitHub Actions run `35698168537` 在 Ubuntu Python 3.10／3.13、macOS 3.13、Windows 3.13 全綠；本機完整測試 `631 passed, 2 skipped`，fresh wheel／sdist package test `2 passed`，repo 外 fresh venv 確認 import `0.1.2`。
+- `scripts/ops/install-grok-vm-boot-hook.sh` 把 boot self-heal 接到 vendor 的 `start-desktop.sh` 並保留原檔備份；人工執行一次回 `boot_selfheal_ok attempt=1`。供應商控制面沒有 Restart，容器內 PID 1／`pod-daemon` 對 TERM／KILL 不重建，所以「整個容器重建後自動恢復」仍標未驗證，不得誤報。
