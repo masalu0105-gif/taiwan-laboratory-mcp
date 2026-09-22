@@ -92,7 +92,7 @@
 - `sync.py`：只有從上游抓到的 bytes 會在 fetch 階段寫入 `raw/nhi_fee/<raw-revision-id>/artifacts/source.csv` 與 `fetch.json`；之後 parse／validate 失敗也保留原始檔（SDD 失敗矩陣要求 raw 保留）。同一 raw revision 再抓時不覆寫第一份 `fetch.json`；既有 raw bytes 不同時回 `IMMUTABLE_RAW_CONFLICT` 且不覆寫；`--input` 離線檔沒有上游來源證明，不建立 raw。報告的 artifact 加上 `data_root_relative_path`，存到本機時 `local_artifact_available=true`，另加 `raw_fetch_record_data_root_relative_path`。
 - `nhi_source.py`：授權改為核對 metadata 代碼 `"1"`；discovery 另存 `license_code`、網頁顯示名稱「政府資料開放授權條款-第1版」與 `https://data.gov.tw/license`。`tests/test_fetch.py` 的 synthetic metadata 改成 live 觀察到的形狀（publisher OID `2.16.886.101.20003.20065.20022`、license `"1"`）。
 - 未改：`build_nhi_snapshot` 的 synthetic discovery identity 與 `tests/test_snapshot_publish.py` 仍使用舊字串 `A21030000I`／「政府資料開放授權條款－第 1 版」。它們只影響 synthetic build 的 hash，不是官方 discovery；待 synthetic builder 下一次調整時一併更新。
-- live 下載（owner 已授權）：`taiwan-lab-data sync nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --data-dir C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\data-root --json` exit 0、`status=passed`、`candidate_status=review_pending`、6,173 rows、1,725,985 bytes、SHA-256 `624e8d0ace8f7e0d5c3ed3102069df94ee25f05e2b39a0d60822e7f1a51ca271`、raw revision `75b33643398099badae9a59ba4067f3aa70b0cd8f551ea18f8dee6696eaa62ab`、官方 `modifiedDate` `2026-09-14 07:05:47`（時區未標）。hash 與研究文件 2026-09-13 的下載相同：官方更新時間變了、檔案內容沒變。沒有建立 curated build 或 current pointer；data root 位於 repo 外，不進 git。
+- live 下載（owner 已授權）：`taiwan-lab-data sync nhi_fee --publisher-oid 2.16.886.101.20003.20065.20022 --data-dir <data-root 的上層>\data-root --json` exit 0、`status=passed`、`candidate_status=review_pending`、6,173 rows、1,725,985 bytes、SHA-256 `624e8d0ace8f7e0d5c3ed3102069df94ee25f05e2b39a0d60822e7f1a51ca271`、raw revision `75b33643398099badae9a59ba4067f3aa70b0cd8f551ea18f8dee6696eaa62ab`、官方 `modifiedDate` `2026-09-14 07:05:47`（時區未標）。hash 與研究文件 2026-09-13 的下載相同：官方更新時間變了、檔案內容沒變。沒有建立 curated build 或 current pointer；data root 位於 repo 外，不進 git。
 
 ### Owner gate：尚待決定的事項
 
@@ -117,7 +117,7 @@
 
 ## 官方 golden 候選與審核清單草案（2026-09-14，待 owner review）
 
-- 位置（repo 外，不進 git）：`C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\owner-review\`
+- 位置（repo 外，不進 git）：`<data-root 的上層>\owner-review\`
   - `nhi-golden-candidates-2026-09-14.json`：10 個 `GoldenCaseV1`（`NHI-G-001`～`NHI-G-010`），全部 `official_source=true`、`review_status=review_pending`、reviewer 欄位為 null，綁定 raw artifact SHA-256 `624e8d0ace8f7e0d5c3ed3102069df94ee25f05e2b39a0d60822e7f1a51ca271` 與 evidence path `raw/nhi_fee/75b33643398099badae9a59ba4067f3aa70b0cd8f551ea18f8dee6696eaa62ab/artifacts/source.csv`；檔案 25,357 bytes、SHA-256 `a5c98d9012af0bf7df9f2fb21f5ec797efb465ea80114a51b8474e93df47b763`。
   - `nhi-golden-candidates-2026-09-14.md`：同 10 題的人工核對表（由程式從原始檔取值產生）。
   - `nhi-review-checklist-draft.md`：`NHI-R1-SOURCE`／`NHI-R1-SCHEMA` 白話審核清單草案；嚴重程度沿用 PRD §8.3 定義；「輕微問題可否通過」與「審核人名稱寫法」待 owner 決定。
@@ -143,7 +143,7 @@
 - 新增 package resource `src/taiwan_lab_mcp/review_protocols/nhi-r1-owner-review/1.json`：owner 核准的 A／B 清單、`PUB-R1-OWNER` 範圍（只限本機 MCP serving）、golden case 覆蓋要求與嚴重度政策（critical／major 拒絕、minor 記錄後接受）。檔案不含 owner 姓名。
 - `importers/nhi.py`：`_application_build_identity()` 回傳 `distribution` 或 `development`；抽出 `_write_curated_db()` 讓 synthetic 與正式 build 共用同一份 SQLite schema；新增 `build_official_nhi_snapshot()`。它在任何 curated 寫入前依序確認：raw bytes 與 `fetch.json` 及 raw revision ID 一致、application identity 為 installed distribution（editable／development 回 `APPLICATION_BUILD_IDENTITY_MISSING`）、三個 owner review 齊全且無 critical／major、至少 10 個 approved official golden cases 全部通過。之後寫 DB、validation、candidate、三份 `ReviewRecordV1`（`identity_assurance=local_asserted`）、approved `QualificationCertificateV1`、manifest、check record，最後經 `publish_current_descriptor` CAS 發布。
 - 規格解讀（待文件確認）：SDD §7.3 manifest 範例的 `modified_at_precision` 為 `second`，但 PRD public `OfficialContentDate.precision` 只允許 `day|month|year|unknown`。manifest 保留 raw precision，`stores.py` 對外投影時非 `day|month|year` 一律顯示 `unknown`，避免宣稱超出契約的精確度。
-- 正式 build（repo 外 installed wheel、application identity `distribution` `c63972f5e092cf8831d6e907f4d9ae5ee0717c878cd978928b69513b2e593397`、review protocol SHA-256 `02e54bec67bb4aad9d5907fd68e3cd74f2395a193c184639a66f1a5d2042a01a`）：data root `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\data-root`，snapshot `nhi_fee-build-17880b71d636e6a7fade0aa6671570e650cc2efa7b387fefe2cb861c2c9f012c`，6,173 rows，DB SHA-256 `659d0c034da1e677543f89c6839f3bd9b4429e29edd6a32b51c3f8e8efcc26c7`，manifest SHA-256 `fb6fa688ef2ec3250d7463dfae93f0b55856fa3c004694c11a2e959c3f36654c`，generation 1，publish event `publish-58fe6593f71497a8b04505d26a3342f7ca8e9169c0d8382695cc5ed3fe5caefe`。三份 review 的 reviewer 為 owner（姓名只在 repo 外 data root），`NHI-R1-SCHEMA` 記 2 個 minor（兩題備註只差換行）；publisher actor 記為 `claude-code-for-owner`。證據檔（approved golden bundle、網站核對報告）已複製進該 build 的 `audit/evidence/`。
+- 正式 build（repo 外 installed wheel、application identity `distribution` `c63972f5e092cf8831d6e907f4d9ae5ee0717c878cd978928b69513b2e593397`、review protocol SHA-256 `02e54bec67bb4aad9d5907fd68e3cd74f2395a193c184639a66f1a5d2042a01a`）：data root `<data-root 的上層>\data-root`，snapshot `nhi_fee-build-17880b71d636e6a7fade0aa6671570e650cc2efa7b387fefe2cb861c2c9f012c`，6,173 rows，DB SHA-256 `659d0c034da1e677543f89c6839f3bd9b4429e29edd6a32b51c3f8e8efcc26c7`，manifest SHA-256 `fb6fa688ef2ec3250d7463dfae93f0b55856fa3c004694c11a2e959c3f36654c`，generation 1，publish event `publish-58fe6593f71497a8b04505d26a3342f7ca8e9169c0d8382695cc5ed3fe5caefe`。三份 review 的 reviewer 為 owner（姓名只在 repo 外 data root），`NHI-R1-SCHEMA` 記 2 個 minor（兩題備註只差換行）；publisher actor 記為 `claude-code-for-owner`。證據檔（approved golden bundle、網站核對報告）已複製進該 build 的 `audit/evidence/`。
 - 同一 installed wheel 以 official mode 查詢：`get_points("09006C")` 為 `ok`、200 點、`effective_end_raw=29101231`、attribution 與授權正確、notes 含非官方聲明；`as_of="2026-09-13"` 回 `historical_query_unsupported`、0 items；`ZZZ999` 回 `not_found`；`search_payment_items("醣化")` 共 13 筆；status 為 `available`、`serving_review_status=approved`、`coverage_status=review_incomplete`。
 - repo 內 `dist/`（2026-09-14 00:40 建立、git ignored）是舊 archive，不含新增的 review protocol；未覆寫。在未設定 `TAIWAN_LAB_ARTIFACT_DIR` 時，`tests/test_package_contents.py` 會讀到這份舊 archive 而失敗；本輪 archive 驗證改用 session scratchpad 內重建的 wheel／sdist。
 - 仍未做：curated artifact 再散布（GitHub Release）核准、`NHI-R1-SCOPE`、新舊版差異偵測（「有變才發」）、`review`／`publish` CLI、audit 對 review protocol 是否為 package 內核准版本的比對。
@@ -151,7 +151,7 @@
 ### 提交、本機 MCP 設定與「有變才發」上游檢查（2026-09-14）
 
 - owner 要求後，commit `3238d70`（feat: owner-reviewed official NHI build and local serving）已 push 到 `origin/main`；push 後 `git rev-parse HEAD` 與 `git ls-remote origin refs/heads/main` 同為 `3238d70451d1295d46d3a997cd53911823929e08`。
-- 本機 MCP：以 `uv tool install` 安裝 wheel（`C:\Users\User\.local\bin\taiwan-lab-mcp.exe`、`taiwan-lab-data.exe`），並以 `claude mcp add-json taiwan-laboratory ... -s user` 加入 Claude Code 使用者設定，env 為 `TAIWAN_LAB_DATA_MODE=official_snapshot`、`TAIWAN_LAB_DATA_DIR=C:/Users/User/Documents/ChatGPT/taiwan-lab-mcp-data/data-root`、`PYTHONIOENCODING=utf-8`；`claude mcp list` 顯示 `✔ Connected`。Claude 桌面聊天 App 的設定檔未修改。
+- 本機 MCP：以 `uv tool install` 安裝 wheel（`<使用者的 bin 目錄>\taiwan-lab-mcp.exe`、`taiwan-lab-data.exe`），並以 `claude mcp add-json taiwan-laboratory ... -s user` 加入 Claude Code 使用者設定，env 為 `TAIWAN_LAB_DATA_MODE=official_snapshot`、`TAIWAN_LAB_DATA_DIR=<data-root 的上層>/data-root`、`PYTHONIOENCODING=utf-8`；`claude mcp list` 顯示 `✔ Connected`。Claude 桌面聊天 App 的設定檔未修改。
 - 新增 `sync.run_nhi_upstream_check()` 與 CLI `taiwan-lab-data check nhi_fee --publisher-oid <oid> --actor <id> --data-dir <path> [--json]`：先讀 current descriptor 與 serving manifest，再跑既有 upstream sync（保留 raw revision），用 raw artifact SHA-256 與 serving build 比對，最後經既有 `publish_operational_check` 寫 immutable check record 並更新 descriptor，serving snapshot 不變。
   - 同一 SHA-256：`result=unchanged`、check success、candidate none、`stale=false`，不重建（SDD §9.2／TDD §6.4）。
   - 不同 SHA-256：`result=changed`、check success、candidate `review_pending`（id 為新 raw revision）、`stale=true` 與 `newer_candidate_pending_review`（SDD §8.3）；在該次 sync attempt 目錄寫 `diff.json`（新增／刪除代碼、逐代碼變動欄位、筆數與代碼數）與中文 `diff-summary.md`。`review_gate` 以整數運算標示筆數或代碼數變動是否超過 10%（SDD §13.2 啟動期門檻；非官方門檻）。
@@ -164,7 +164,7 @@
 
 ### 每日排程與 email 通知（2026-09-14）
 
-- 排程腳本放 repo 外（本機設定，不進 git）：`C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\automation\`
+- 排程腳本放 repo 外（本機設定，不進 git）：`<data-root 的上層>\automation\`
   - `Invoke-NhiDailyCheck.ps1`：跑 uv tool 安裝版 `taiwan-lab-data.exe check nhi_fee --json`，每次寫 `logs\nhi-daily-check-<時間>.log`，並覆寫 `STATUS.txt`（第一行固定「OK：…」或「異常：…」）。`unchanged` 只更新 STATUS、不寄信；`changed` 寄信附 `diff-summary.md`；`failed`、`no_serving_snapshot`、輸出無法解析寄信並記「異常」、exit 1。
   - `Register-NhiDailyCheckTask.ps1`：建立使用者排程 `taiwan-lab-nhi-daily-check`，每天 09:30、錯過補跑、不重複執行、30 分鐘上限；動作走既有 `scheduled-task-ops\Run-HiddenTask.vbs`（wscript 隱藏執行，避免跳出主控台視窗）；已存在時拒絕覆寫，`-Check` 只讀。
 - email 走 Google Workspace CLI（`gws` 0.16.0，`gmail +send`），收件人為 owner 帳號。先前記憶寫的 `gog` CLI 在本機查不到（`where gog` 無結果），實際可用的是 `gws`。
@@ -227,10 +227,10 @@ owner 在 Claude Code 對話中回覆「1A、2b 安裝說明那些都要幫我�
   - evidence 放三個檔：本名改代號的公開版 approved golden 檔 `nhi-golden-approved-2026-09-14-public.json`、原網站核對報告、確認頁。
 - 結果：build `nhi_fee-build-76a1402a4dab09361252852e6a8ae0fbd9fa85c0d1ea0feb00a70d8e4b6b55ad`、6,173 rows、DB SHA-256 `659d0c03…`（與原 build bytes 相同）、manifest SHA-256 `fec96b40…`、generation 8、publish event `publish-1993a745…`。新 build 目錄所有檔案逐一搜尋本名：0 筆。舊 build `nhi_fee-build-17880b71…` 保留在 data root，可 rollback。
 - 以新的 MCP stdio 行程查詢：`get_points("09006C")` ok、200 點、snapshot 結尾 `0d8e4b6b55ad`、stale false；`get_data_status` nhi_fee available。
-- 匯出下載包：`C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\release\nhi_fee-snapshot-76a1402a4dab.zip`，1,630,389 bytes，SHA-256 `aa29a34f1c8399f2aa5938bf057b2568ed02fd0d9fd1397291ebe600bd6a0ec6`，manifest＋13 個檔案；ZIP 內每個檔案搜尋本名：0 筆。
+- 匯出下載包：`<data-root 的上層>\release\nhi_fee-snapshot-76a1402a4dab.zip`，1,630,389 bytes，SHA-256 `aa29a34f1c8399f2aa5938bf057b2568ed02fd0d9fd1397291ebe600bd6a0ec6`，manifest＋13 個檔案；ZIP 內每個檔案搜尋本名：0 筆。
 - 試裝：
   - 第一次試裝到 session scratchpad 深層資料夾時，`install-snapshot` 以未處理的 `FileNotFoundError` 當掉。原因是 `audit\evidence\` 暫存檔完整路徑超過 Windows 260 字元上限，已寫入部分檔案，沒有切換 current。
-  - 改試裝到 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\trial-install`：`installed`、generation 1、寫入 13 檔；再裝一次 `already_installed`、寫入 0 檔；查 `09006C` 200 點、stale false、`local_artifact_available=true`。
+  - 改試裝到 `<data-root 的上層>\trial-install`：`installed`、generation 1、寫入 13 檔；再裝一次 `already_installed`、寫入 0 檔；查 `09006C` 200 點、stale false、`local_artifact_available=true`。
 - 長路徑修正：
   - `install_nhi_snapshot_bundle` 新增 `max_path_length`（Windows 預設 259，其他平台不限）。寫入任何檔案前，先計算每個目標連同暫存檔名的絕對路徑長度，超過回 `BUNDLE_PATH_TOO_LONG`（exit 2）。
   - 寫檔的 `OSError` 改回 `BUNDLE_WRITE_FAILED`（exit 6），不再丟出 traceback。
@@ -271,7 +271,7 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 結論：新 build 不依賴舊 build，可以清掉。
   - 另記風險：data root 放在很深的資料夾時，Windows 260 字元路徑上限會讓 runtime 讀不到 audit evidence，回 `serving_integrity_failure`。安裝時已有路徑長度檢查；自行搬移資料夾的使用者仍可能碰到，安裝說明建議短路徑。
 - 清理方式：本機擋刪除指令，因此寫成 owner 雙擊執行的腳本。
-  - 腳本：`taiwan-lab-mcp-data\automation\Clear-OldTaiwanLabData.ps1`，桌面啟動檔 `C:\Users\User\Desktop\clear-taiwan-lab-old-data.cmd`。
+  - 腳本：`taiwan-lab-mcp-data\automation\Clear-OldTaiwanLabData.ps1`，桌面啟動檔 `<使用者家目錄>\Desktop\clear-taiwan-lab-old-data.cmd`。
   - 執行流程：先列清單、要求輸入 Y；舊 build 若仍是 serving 就停止；全部移到資源回收筒（可還原，非永久刪除）；最後以 `taiwan-lab-data status` 確認 nhi_fee 仍 available。
   - 清單：舊 build `17880b71…`、`trial-install`、`trial-install-2`、`release-download-check`、`%TEMP%\tlsim-a`、`tlsim-b`、`tlsim-b-moved`、`tlsim-b-export`。
   - 刻意保留：serving build、raw、checks／publish events、`owner-review` 原始審核紀錄（其中兩個檔含本名，屬 owner 審核原始紀錄，不視為舊版資料）、`release` 正式下載包、`tfda-validation`。
@@ -359,7 +359,7 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   4. entry 名稱只要求 `.csv` 副檔名，不要求一定是 `68_2.csv`。
 - 未做（依規格需要 owner 決定或屬後續切片）：TFDA live 下載（publisher OID、metadata API、license 代碼、host allowlist 文件都沒寫）、raw 保存、註銷／效期 truth table、三組分類 code 解析、IVD registry（`TFDA-R1-IVD` reviewer 未指定，OD-03）、curated SQLite、public contract 補欄位（TFDARecord 缺 PRD 要求欄位、warning registry 缺 TFDA codes）、official adapter、golden cases。這一片不代表 `REL-G2` 或任何 TFDA gate 完成。
 - 測試：`tests/test_tfda_importer.py` 42 個（研究 header 比對、字串與 row hash、多列字號、摘要數字、magic bytes、截斷 ZIP、10 種 entry 規則、反斜線路徑、解壓上限剛好等於與超過、壓縮檔上限、壓縮比、宣告大小竄改、16 種 CSV／日期／必填失敗、無 BOM 警告、staged 報告只寫 staged、失敗報告、CLI）。
-- 官方檔一次性驗證（owner 同意）：2026-09-14 21:32 以 curl 下載 `https://data.fda.gov.tw/data/opendata/export/68/csv`（HTTP 200、`application/zip`、無 redirect），存於 repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\tfda-validation\tfda-68-csv-20260914.zip`（16,265,433 bytes、SHA-256 `de880620c56177e492806618f103fc7ac55b4f7302e7870c9992facba7f08292`，與研究文件 2026-09-13 的 ZIP hash 相同）。以 uv tool 安裝版 `taiwan-lab-data validate tfda_devices --input ... --json` 檢查：exit 0、`passed`；entry `68_2.csv` 70,554,601 bytes、SHA-256 `bce64d9276d1072ce9b52c098bbd943184a357d1dcff2cab722e75ddb5d5c370`；104,619 列、93,219 個許可證字號、11,229 個字號有多列、單一字號最多 4 列；註銷狀態空白 49,659／已註銷 53,731／已廢止 1,229；空值數 註銷日期 49,543、註銷理由 53,879、舊證字號 103,615、醫療器材級數 11,439、劑型 104,619、包裝 104,432、申請商名稱 1、申請商統一編號 794、製造廠國別 25，均與研究文件 §5／§6 實測值一致；四個日期欄沒有格式錯誤、有效日期沒有空白。輸出存於同資料夾 `validate-20260914.json`。這只是離線檢查，沒有建立 raw revision、candidate 或任何 MCP 可查的資料。
+- 官方檔一次性驗證（owner 同意）：2026-09-14 21:32 以 curl 下載 `https://data.fda.gov.tw/data/opendata/export/68/csv`（HTTP 200、`application/zip`、無 redirect），存於 repo 外 `<data-root 的上層>\tfda-validation\tfda-68-csv-20260914.zip`（16,265,433 bytes、SHA-256 `de880620c56177e492806618f103fc7ac55b4f7302e7870c9992facba7f08292`，與研究文件 2026-09-13 的 ZIP hash 相同）。以 uv tool 安裝版 `taiwan-lab-data validate tfda_devices --input ... --json` 檢查：exit 0、`passed`；entry `68_2.csv` 70,554,601 bytes、SHA-256 `bce64d9276d1072ce9b52c098bbd943184a357d1dcff2cab722e75ddb5d5c370`；104,619 列、93,219 個許可證字號、11,229 個字號有多列、單一字號最多 4 列；註銷狀態空白 49,659／已註銷 53,731／已廢止 1,229；空值數 註銷日期 49,543、註銷理由 53,879、舊證字號 103,615、醫療器材級數 11,439、劑型 104,619、包裝 104,432、申請商名稱 1、申請商統一編號 794、製造廠國別 25，均與研究文件 §5／§6 實測值一致；四個日期欄沒有格式錯誤、有效日期沒有空白。輸出存於同資料夾 `validate-20260914.json`。這只是離線檢查，沒有建立 raw revision、candidate 或任何 MCP 可查的資料。
 
 ### 健保「哪些項目算檢驗」AI 審核（2026-09-14）
 
@@ -649,7 +649,7 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   1. 規則檔名與 status 不沿用 `nhi-r1-owner-review`／`owner_approved`，因為這次不是 owner 本人審核；閘門名稱 `PUB-R1-OWNER` 維持不變，審核紀錄寫明是 AI 代審。
   2. 正式結果 notes 沒有加「由 AI 審核，未經人工複核」：PRD §9 OD-02 在 2026-09-14 已由 owner 取消這段備註；AI 身分寫在審核紀錄、規則檔與驗收題。
   3. 官方每週更新後的新版，每日檢查只標示「有新版等待審核」並寄信，不會自動換版；換版要再審一次（本次授權只涵蓋這一版）。
-- AI 審核做了什麼（repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\tfda-review\`）：
+- AI 審核做了什麼（repo 外 `<data-root 的上層>\tfda-review\`）：
   - 來源（`TFDA-R1-SOURCE`）：raw revision `aa385977…` 的 `fetch.json` 為 canonical，ZIP 16,265,433 bytes、SHA-256 `de880620…` 相符；metadata 發布機關代號、識別碼、授權代碼 1 與 2026-09-14 owner 確認頁一致；今天 09:30 排程重新下載的檔案 hash 相同。官方許可證查詢網站 `info.fda.gov.tw` 在這台電腦 DNS 解析失敗（`curl: (6) Could not resolve host`），沒有做網站逐筆比對，記為 minor 1。
   - 欄位（`TFDA-R1-SCHEMA`）：`verify_curated_roundtrip.py`（SHA-256 `7c8bed5d…`）自己解壓、解析 CSV、解析分類代碼與判定標籤，與資料庫逐列比對 104,619 列：列號、row hash、34 欄原文、分類代碼、主類別字母、IVD 標籤 0 筆不符；報告 `tfda-curated-roundtrip-2026-09-15.json`（SHA-256 `e363fd57…`）。比對的資料庫 SHA-256 `6d5d204b…` 與後來正式建置的資料庫相同。
   - 驗收題：`select_golden_cases.py`（SHA-256 `62771d09…`）以獨立解析從原始檔挑 14 題，每題寫出 34 欄原文與標籤預期值，涵蓋有效、已註銷、已廢止、註銷狀態空白但有日期、有狀態沒日期、過期未註銷、同字號兩家製造廠（2 列）、`excluded`（B.9245）、舊制、缺代碼、D–P 代碼、統編前導零與級數空白、英文品名尾端換行；程式內建比對全部通過。清單 `tfda-golden-ai-review-2026-09-15.md`（SHA-256 `97227287…`），預期值 `tfda-golden-ai-approved-2026-09-15.json`（SHA-256 `99052e91…`）。
@@ -862,7 +862,7 @@ owner 在 Claude Code 對話中回覆「1A 2A但是給AI審 3A 4B甚至我想取
   - 只有 Windows job 失敗，2 failed、397 passed：`test_install_tfda_bundle_serves_the_same_permits`、`test_cli_export_and_install_tfda_snapshot`。
   - 原因：CI 的 pytest 暫存資料夾路徑較長，食藥署 build 審核證據檔的完整路徑 267 字元，被安裝前的 Windows 路徑長度檢查擋下（`BUNDLE_PATH_TOO_LONG`，上限 259）。檢查照設計運作；本機暫存路徑較短，所以本機沒有重現。
   - 修正：這兩個測試關掉路徑長度檢查（直接呼叫的測試傳 `max_path_length=None`，CLI 測試暫時改掉函式預設值）。路徑長度檢查本身由 `tests/test_snapshot_bundle.py::test_install_refuses_paths_over_the_limit_before_writing` 測。
-  - 一般使用者：以重建後的食藥署 build 計算，最長檔案是 `curated/tfda_devices/<build>/audit/evidence/tfda-source-identity-confirmation-2026-09-14.md`（相對路徑 167 字元）；裝在安裝說明建議的 `C:\Users\User\taiwan-lab-data` 時，連同暫存檔名共 207 字元；使用者名稱 20 個字元時 223 字元，都在上限內。
+  - 一般使用者：以重建後的食藥署 build 計算，最長檔案是 `curated/tfda_devices/<build>/audit/evidence/tfda-source-identity-confirmation-2026-09-14.md`（相對路徑 167 字元）；裝在安裝說明建議的 `<使用者家目錄>\taiwan-lab-data` 時，連同暫存檔名共 207 字元；使用者名稱 20 個字元時 223 字元，都在上限內。
   - 這段期間發布腳本回 `waiting_for_ci`，沒有發布任何 Release。
 
 ### 食藥署以第 2 版重建、第一個自動發布的下載包（2026-09-15，OD-10／OD-11）
@@ -1254,7 +1254,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 順手修掉的包裝問題：本機某個工具在程式資料夾內留下快取檔 `.impeccable/hook.cache.json`（git 已忽略，但打包時被收進 wheel 與 sdist）。發布腳本比對「安裝版檔案」與 `origin/main` 時，因為這兩個多出來的檔案回 `blocked`，下載包發不出去。修法：`pyproject.toml` 加 `[tool.hatch.build] exclude = ["**/.impeccable"]`，並在安裝包內容檢查加一條「路徑不得含 .impeccable」。先加檢查跑出 2 failed，改完重建後全過，wheel 檔案數 82。提交 commit `cc43058`，CI 通過（run 35038392287）。
 - 發布：修好包裝問題、把乾淨的 wheel 裝回 uv tool 環境後，`publish_data_release.py` 先 `--dry-run` 回 `would_release`，接著實際發布 GitHub Release `data-20260916`（標籤指向 commit `cc43058`）。四個下載包：健保 1,718,254 bytes、食藥署 64,832,909 bytes、疾管署名冊 518,772 bytes（`cdc_authorized_labs-snapshot-9de0bd3b5be7.zip`）、疾管署採檢手冊 3,867,442 bytes（`cdc_specimen_manual-snapshot-2c40d87bd71c.zip`），每個包另附 `.sha256`。Release 標題原本只寫「健保＋食藥署資料」，已改成「健保＋食藥署＋疾管署資料 2026-09-16」，發布腳本也一起改。
 - 發布說明新增的內容：疾管署兩個資料集各自的頁面、版本、筆數與審核方式；名冊寫「名冊上有這筆認可項目不等於當次收件」；手冊寫第 2 章 370 列、版次 1150826、核准日期，以及「第 7 章送驗地點與修訂對照表還沒收錄」；顯名加上疾管署與該署資料開放宣告網址。
-- 從使用者角度實測一次：用 `gh release download` 抓下兩個疾管署下載包，照 `.sha256` 帶 `--sha256` 安裝到一個全新的空資料夾（`C:\Users\User\AppData\Local\Temp\claude\tlm9`）：名冊寫入 14 個檔、手冊 16 個檔，兩個都 `installed`。在那個資料夾查：手冊「COVID-19」6 列、「登革熱」4 列（送驗方式「2-8oC↵(B 類感染性物質P650 包裝)」）、名冊「台南 傷寒」40 筆；健保與食藥署在該資料夾沒有安裝，照規則回 `data_unavailable`。
+- 從使用者角度實測一次：用 `gh release download` 抓下兩個疾管署下載包，照 `.sha256` 帶 `--sha256` 安裝到一個全新的空資料夾（`<使用者家目錄>\AppData\Local\Temp\claude\tlm9`）：名冊寫入 14 個檔、手冊 16 個檔，兩個都 `installed`。在那個資料夾查：手冊「COVID-19」6 列、「登革熱」4 列（送驗方式「2-8oC↵(B 類感染性物質P650 包裝)」）、名冊「台南 傷寒」40 筆；健保與食藥署在該資料夾沒有安裝，照規則回 `data_unavailable`。
 - 一併更新 `docs/install.md`：下載清單加兩個疾管署資料包、安裝指令說明四種來源、錯誤碼對照補上來源名稱、試查範例加採檢手冊與名冊、過期規則補疾管署兩天、每日自查指令補兩個 `check` 指令、已知限制改寫（手冊只有第 2 章、保存欄不是送驗前保存、名冊命中不等於收件）。
 - 第一次在 scratchpad 內安裝時回 `BUNDLE_PATH_TOO_LONG`：scratchpad 路徑本來就長，加上 build 資料夾名稱超過 Windows 260 字元。這正是安裝說明裡寫的那條限制，改用短資料夾就成功。
 
@@ -1377,7 +1377,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
   - 服務跑在 WSL：`~/taiwan-lab-mcp-http/run.sh`，`uv tool install` 裝 main 分支（`data-20260917` 那個 release 還沒有這一層，只裝得到 2 支執行檔，裝 main 才有第 3 支 `taiwan-lab-mcp-http`）。
   - 只聽 `127.0.0.1:8090`（8080 被 WSL 裡別的東西佔著），`TAIWAN_LAB_HTTP_ALLOWED_HOSTS=lab.masalulab.com`。
   - 資料直接讀 Windows 上的 data root（`/mnt/c/Users/User/Documents/ChatGPT/taiwan-lab-mcp-data/data-root`）。實測從 WSL 讀手冊資料庫 177 列只要 13 毫秒，不需要另外複製一份到 WSL。
-  - 對外靠既有的 Cloudflare Tunnel `acc918d8-…`：設定檔 `/mnt/c/Users/User/masalu-lab/line-bot/cloudflared-config.yml` 加一條 `lab.masalulab.com → http://localhost:8090`（原檔已備份），owner 自己加 DNS CNAME 並重啟 `cloudflared.service`（兩步都要 sudo，Claude 做不到）。
+  - 對外靠既有的 Cloudflare Tunnel `<舊 tunnel id>`：設定檔 `/mnt/c/Users/User/masalu-lab/line-bot/cloudflared-config.yml` 加一條 `lab.masalulab.com → http://localhost:8090`（原檔已備份），owner 自己加 DNS CNAME 並重啟 `cloudflared.service`（兩步都要 sudo，Claude 做不到）。
 - Host 名稱檢查實測：`Host: lab.masalulab.com` 回 200；`Host: evil.example.com` 回 `421 Invalid Host header`。
 - 公開網址實測（真的 MCP client）：24 個工具；`get_data_status` 四個來源都 available、`official_snapshot`；`get_specimen_requirement(登革熱)` 4 筆、`get_testing_location(登革熱)` 4 筆、`search_manual_procedure(不良檢體)` 2 筆、`find_authorized_lab(傷寒, 台南市)` 40 筆、`get_points(09006C)` 1 筆。
 - 還沒做：服務目前是手動起的（nohup），WSL 重開就沒了；systemd unit 已寫好放在 `~/taiwan-lab-mcp-http/taiwan-lab-mcp-http.service`，要 owner 用 sudo 安裝才會開機自動啟動。
@@ -1410,7 +1410,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 症狀：2026-09-16 09:30 排程的發布步驟 `exit=6`、`{"result":"failed","reasons":["KeyError:'rows'"]}`；GitHub 上的下載包停在手冊 build `cdc_specimen_manual-snapshot-2c40d87bd71c.zip`，沒有第 7 章與第 3–9 章。
 - 原因：手冊改成一次建四張表之後，manifest 的 `layout_summary` 從 `{"rows": 370, "table_pages": [...]}` 變成以資料表名稱分開的 dict（`cdc_specimen_requirement`／`cdc_testing_location`／`cdc_receiving_unit`／`cdc_manual_clause`），repo 外的 `automation\publish_data_release.py` 產生發布說明時還在讀 `layout_summary["rows"]`。
 - `--dry-run` 為什麼擋不住：dry run 在 `_release_notes()` 之前就回傳 `would_release`，出事的那段程式根本沒跑到（對應 feedback「dry-run 承諾≠實部行為」）。
-- 改法（都在 repo 外 `C:\Users\User\Documents\ChatGPT\taiwan-lab-mcp-data\automation\publish_data_release.py`，該資料夾不是 git repo）：
+- 改法（都在 repo 外 `<data-root 的上層>\automation\publish_data_release.py`，該資料夾不是 git repo）：
   - 手冊段落改成逐表列出：第 2 章 370 列（55 個表格頁）、第 7 章 218 列、7.9 收件單位 4 列、其餘章節與附件圖說 177 列。
   - 新增 `_row_total()`：manifest 有 `table_counts` 就加總（手冊 769 = 370＋218＋4＋177），沒有才用 `counts["curated_rows"]`，其他三個來源數字不變。
   - 「目前限制」那行從「疾管署採檢手冊只收錄第 2 章的採檢與送驗規定；第 7 章送驗地點、檢驗方法與修訂對照表還沒收錄。」改成「疾管署採檢手冊整本收錄，只有卷末的修訂對照表沒有開查詢（留作建置稽核證據）。」
@@ -1540,7 +1540,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - Cloudflare tunnel 改架在 Grok VM 上（先前 2026-09-22 稍早的紀錄說「沒有搬用既有 WSL tunnel」，那是當時的狀態，今晚改成這台自己開一條新的）。
   - `cloudflared` 2026.9.1 重新安裝，雜湊三方比對：GitHub API 的 asset digest、release 說明裡的 SHA256 Checksums、實際下載檔，三者皆為 `03f1f25d…d68cc`。
   - 新通道 `taiwan-lab-mcp`，id `<tunnel id>`，設定檔 `cloudflared-config.yml` 指 `lab.masalulab.com → http://127.0.0.1:18083`，`ingress validate` 通過。
-  - DNS 以 `--overwrite-dns` 從舊的 WSL tunnel（`acc918d8`）改指新通道。WSL 那份設定檔裡仍留著一條 `lab.masalulab.com → localhost:8090`，已失效但沒清，之後整理 WSL 時再處理。
+  - DNS 以 `--overwrite-dns` 從舊的 WSL tunnel改指新通道。WSL 那份設定檔裡仍留著一條 `lab.masalulab.com → localhost:8090`，已失效但沒清，之後整理 WSL 時再處理。
   - `TAIWAN_LAB_HTTP_ALLOWED_HOSTS` 前面加上 `lab.masalulab.com` 與 `lab.masalulab.com:443`；舊的 ts.net 名稱保留，既有使用者不會斷。
   - 實測：`lab.masalulab.com` 200、ts.net 200、`evil.example.com` 421。真的 MCP client 連 `https://lab.masalulab.com/mcp` 拿到 24 個工具，查「糖化血色素」回 09006C 200 點。
 - 改 supervisor 腳本後只重啟 app 沒有用：跑著的 bash 迴圈讀的還是改檔前的內容，要連 tmux session 一起重啟才會吃到新的環境變數。

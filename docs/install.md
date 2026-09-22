@@ -11,6 +11,12 @@ Windows 與 macOS 各有對應指令，照你的電腦選一種做就好。全�
 
 > 這是個人維護的開源工具，**不是健保署、食藥署或疾管署的官方服務**，內容以三個機關的公告為準。查到的點數不能直接當成金額，也不能用來判斷個案可不可以申報；查到的許可證不能直接當作醫療器材廣告或效能宣傳素材；認可檢驗機構名冊查到的機構不保證當次收件。
 
+## 先確認你需不需要安裝
+
+有一個公開網址不用裝任何東西就能查：把支援 Streamable HTTP 的 MCP host 指向 `https://lab.masalulab.com/mcp` 就好。四份正式資料都在上面，每天自動對新版。
+
+那個公開端點**會記錄使用情形**，包含你送進去的查詢字句（見 [SECURITY.md](../SECURITY.md)）。想離線查、或不想讓別人看到你查什麼，就照這份說明裝在自己電腦上。本機這條路不經任何網路服務。
+
 ## 最快的做法：一鍵安裝腳本
 
 不想自己打指令的話，用這支腳本，它會把下面第 1 到第 5 步全部做完：下載、核對 SHA-256、安裝、
@@ -60,17 +66,21 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 第 2 步：安裝查詢工具
 
-到 [Releases 頁面](https://github.com/masalu0105-gif/taiwan-laboratory-mcp/releases) 看最上面那一版的標籤名稱（例如 `data-20260915`），把下面指令裡的 `<版本標籤>` 換成它。
+套件在 PyPI 上，不用去翻版本號。Windows 與 macOS 指令相同：
 
-Windows 與 macOS 指令相同：
+```bash
+uv tool install taiwan-laboratory-mcp
+```
+
+成功時會看到 `Installed 3 executables: taiwan-lab-data, taiwan-lab-mcp, taiwan-lab-mcp-http`。
+
+以前裝過舊版的人，把 `install` 後面加上 `--force` 再執行一次，程式才會換成新版。
+
+想裝某個特定版本，在名稱後面加版號，例如 `uv tool install taiwan-laboratory-mcp==0.1.2`。想直接裝 GitHub 上的某個標籤也可以：
 
 ```bash
 uv tool install https://github.com/masalu0105-gif/taiwan-laboratory-mcp/archive/refs/tags/<版本標籤>.zip
 ```
-
-成功時會看到 `Installed 2 executables: taiwan-lab-data, taiwan-lab-mcp`。
-
-以前裝過舊版的人，把 `install` 後面加上 `--force` 再執行一次，程式才會換成新版。
 
 工具的位置：
 
@@ -298,8 +308,14 @@ TAIWAN_LAB_DATA_MODE=official_snapshot TAIWAN_LAB_DATA_DIR=/srv/taiwan-lab-data 
 3. 限流與 request body 上限必須是正整數；錯字或 `0` 不會退回無限制模式。
 
 HTTP 回應固定帶 `Cache-Control: no-store`、`Referrer-Policy: no-referrer` 與
-`X-Content-Type-Options: nosniff`。正式執行檔關閉 uvicorn access log，不記錄查詢路徑或
-來源 IP；應用本身也不保存 request body。若需要私人端點，先產生一段長隨機 token，僅把它的
+`X-Content-Type-Options: nosniff`。uvicorn 內建的 access log 一律關閉。
+
+記錄預設是關的：沒有設 `TAIWAN_LAB_HTTP_USAGE_LOG` 就不寫任何請求。設了那個環境變數才會開始記
+時間、來源 IP、工具名稱與查詢參數（不含請求標頭，所以 bearer token 不會進去）。
+**維護者經營的 `https://lab.masalulab.com/mcp` 有開**；你自己架的預設沒有。細節見
+[SECURITY.md](../SECURITY.md)。
+
+若需要私人端點，先產生一段長隨機 token，僅把它的
 SHA-256 放進 `TAIWAN_LAB_HTTP_BEARER_TOKEN_SHA256`，token 本身交由 MCP client 的受控設定保存。
 
 推薦的做法是**只聽 `127.0.0.1`，再用 tunnel（例如 Cloudflare Tunnel）把它接到一個網域**。
