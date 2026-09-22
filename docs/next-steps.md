@@ -86,7 +86,7 @@ source 測試不會自動讀取 repo 裡可能過期的 `dist/`。先執行 `pyt
 
 ```
 uv build --wheel --out-dir <scratch>
-uv pip install --python "C:/Users/User/AppData/Roaming/uv/tools/taiwan-laboratory-mcp/Scripts/python.exe" --reinstall-package taiwan-laboratory-mcp <scratch>/taiwan_laboratory_mcp-0.1.2-py3-none-any.whl "pypdfium2==5.13.0"
+uv pip install --python "<uv tool 安裝目錄>/taiwan-laboratory-mcp/Scripts/python.exe" --reinstall-package taiwan-laboratory-mcp <scratch>/taiwan_laboratory_mcp-0.1.2-py3-none-any.whl "pypdfium2==5.13.0"
 ```
 
 公開網址的 Grok VM 使用獨立 venv，部署精確的 `0.1.2` wheel；公開 Release 也應包含同版 wheel、sdist 與四份資料資產，避免 installer 從 latest release 取到舊程式。

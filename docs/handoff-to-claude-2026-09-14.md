@@ -18,7 +18,7 @@ Claude Code 是後續 continuation implementer。請先讀本檔，再依序讀�
 
 ## Repo state
 
-- Repo：`C:\Users\User\Documents\ChatGPT\Clinical Lab Plateform`
+- Repo：`<repo>`
 - Remote：`https://github.com/masalu0105-gif/taiwan-laboratory-mcp.git`
 - Branch：`main`
 - Handoff 前 HEAD：`a144b264b71ca694bfc888ae425bc387102548d1`
