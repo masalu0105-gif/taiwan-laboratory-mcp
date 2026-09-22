@@ -38,7 +38,7 @@
 
 `https://lab.masalulab.com/mcp`
 
-不用裝程式、不用下載 600 MB 資料、不用申請金鑰。適合上課發給學生、臨時在別人電腦上示範，或先試試看。
+遠端連線即可使用，適合上課、示範或先試試看。
 
 這個端點在 2026-09-22 從外部以真正 MCP client 驗證過 24 個工具與四組可追溯的正式 snapshot。主機端有 supervisor 守著服務，異常會自動重啟；資料每天台北時間 10:30 自動比對最新 Release，每個檔案都核對 SHA-256，換版後自我檢查，服務不中斷。
 
@@ -96,7 +96,7 @@ Demo 會顯示 CDC 麻疹、NHI 糖化血色素及 TFDA HbA1c 的示範結果，
 
 連接後先請 host 呼叫 `get_data_status` 確認各 source 的狀態，再試「查詢 HbA1c 相關健保項目」。
 
-不需 API key，不呼叫外部模型，不自動抓官方資料。`TAIWAN_LAB_DATA_MODE=sample` 使用合成 fixture；`official_snapshot` 搭配 `TAIWAN_LAB_DATA_DIR` 使用正式資料，來源不可用時 fail closed，不會退回 sample。沒裝的資料回 `data_unavailable`，不影響其他資料。
+本機執行，資料全在本地。`TAIWAN_LAB_DATA_MODE=sample` 使用合成 fixture；`official_snapshot` 搭配 `TAIWAN_LAB_DATA_DIR` 使用正式資料，來源不可用時 fail closed，不會退回 sample。沒裝的資料回 `data_unavailable`，不影響其他資料。
 
 資料工作流程另提供 offline NHI candidate check（`taiwan-lab-data sync nhi_fee`），只讀取明確提供的 CSV、只產生 `review_pending` candidate，發布需獨立 review／publish gate。
 
