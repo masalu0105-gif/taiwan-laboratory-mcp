@@ -1401,7 +1401,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - 實機驗證（不是只有測試）：以 `TAIWAN_LAB_DATA_MODE=official_snapshot` 指向正式 data root、聽 127.0.0.1:8099，用真的 MCP client 連上去：24 個工具；`get_testing_location(登革熱)` 4 筆、`search_manual_procedure(不良檢體)` 2 筆、`get_points(09006C)` 1 筆，全部 `data_mode=official_snapshot`、`is_error=False`。
 - 尚未做／尚未決定：
   - 公開網址仍跑在 owner WSL；Grok Bot VM 只有 loopback、sample-only 的私人 pilot，沒有可給學生的公開網址。
-  - Grok Bot VM 的常駐 process、port、cloudflared 與外部 tunnel 都已實測。公開代管仍等 Cursor／SpaceXAI 書面確認；internal business、beta evaluation 與 public end-user hosting 的適用關係不能自行推定。
+  - Grok Bot VM 的常駐 process、port、cloudflared 與外部 tunnel 都已實測。資料庫與排程屬 owner 自有工作流程；條款不確定性只留在匿名公開端點是否屬 internal business purposes，不把它誤稱為第三方資料庫代管。
   - 沒有身分驗證與用量限制：拿到網址的人都查得到（查的是公開政府資料）。
   - 架主機的人會看得到查詢內容，要不要留紀錄與隱私聲明怎麼寫還沒決定。
 
@@ -1513,11 +1513,11 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 - user systemd session 顯示 offline；目前只證明跨 SSH 斷線可持續，尚未驗證 VM reboot 後自動啟動。
 - 私人 pilot 安裝在 `/home/box/taiwan-lab-mcp-pilot-20260922`：獨立 venv、`tmux` session `taiwan-lab-private-pilot`、loopback `127.0.0.1:18081`、`TAIWAN_LAB_DATA_MODE=sample`。安裝 wheel SHA-256 為 `9c3677c4ce327db0c4943306e0bbc6e5023f880a1a7b17a4a54b67bcdc61ddc2`。
 - VM 內 MCP client 與 Windows 經 SSH tunnel 各跑一次：24 tools、sample mode、沒有 official serving build；`apply_device_aliases("新冠")` 為「新型冠狀病毒」「sars-cov-2」「covid-19」。Windows tunnel 測完已關閉；VM 的 loopback pilot 保留運作。
-- 條款裁決：Cursor 一般條款提到 build／deploy／host，但 Grok Bot supplemental terms 限 internal business purposes，beta 條款又排除 production。官方文件把 production deployment 列為 `Ask first`，不等於授權公開 hosting。已起草供應商詢問；取得書面確認前，不搬正式網址、不接正式資料、不作公開 production host。
+- 當時的保守條款裁決是：Cursor 一般條款提到 build／deploy／host，但 Grok Bot supplemental terms 只明確寫 internal business purposes，因此先不搬正式網址。後續 owner 明確要求上線，且再次釐清資料庫、更新排程與 MCP 查詢服務均是 owner 自有工作流程；目前只保留匿名公開端點適用性的文字不確定性，不再把它列成資料庫或排程的 blocker。
 
 ### Grok Bot VM 公開正式主機（2026-09-22，owner 明確要求上線）
 
-- owner 後續明確要求「把 Grok VM 做成公開正式主機」，取代上一節「技術探測後停下」的執行決定；供應商條款風險仍保留為未解的 production gate，不能宣稱已獲 Cursor／SpaceXAI 核准。
+- owner 後續明確要求「把 Grok VM 做成公開正式主機」，取代上一節「技術探測後停下」的執行決定。資料庫與排程不是第三方代管；匿名公開端點是否落在 internal business purposes 仍未被條款直接說明，但這項文字不確定性不作為停站或資料排程 blocker，也不宣稱已取得供應商個案核准。
 - 正式部署位於 `/home/box/taiwan-lab-mcp-production-20260922`，獨立 venv、loopback `127.0.0.1:18083`、`TAIWAN_LAB_DATA_MODE=official_snapshot`、`tmux` app supervisor；既有 sample-only 私人 pilot 保留在 18081，兩者隔離。
 - 正式資料從受控的 repo 外 data root 搬入並逐檔核對：396 files、583,006,816 bytes；aggregate inventory SHA-256 `ffa1e13719808d178d4d06de62b667d263f5137cd37eaa5ba023c8eae72fae8c`。應用 wheel SHA-256 `9c3677c4ce327db0c4943306e0bbc6e5023f880a1a7b17a4a54b67bcdc61ddc2`。
 - 公開入口使用 Tailscale Funnel：`https://grok-bot-box.tail6cbb55.ts.net/mcp`。服務本身仍只聽 loopback，allowed hosts 明列 ts.net hostname；沒有搬用同時承載 LINE bot／media 的既有 WSL Cloudflare tunnel。

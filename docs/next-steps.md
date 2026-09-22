@@ -23,7 +23,7 @@ boot hook 已人工執行成功，但 Grok 控制台沒有 Restart 操作，容�
 
 程式與 `scripts/install-taiwan-lab-mcp.sh` 目前只有 GitHub 的自動測試驗過，**沒有人在真的 Mac 上走完一次安裝**。安裝說明的〈已知限制〉照實寫了這件事，驗過之後要一起改掉。
 
-### 3. Grok Bot 雲端 VM（公開 production 已啟用；供應商條款仍未確認）
+### 3. Grok Bot 雲端 VM（公開 production 已啟用；匿名端點的條款適用性未明）
 
 2026-09-22 已在該 VM 做最小、可回復的實測：
 
@@ -35,7 +35,7 @@ boot hook 已人工執行成功，但 Grok 控制台沒有 Restart 操作，容�
 
 owner 於 2026-09-22 明確要求改為公開正式主機。正式部署位於 `/home/box/taiwan-lab-mcp-production-20260922`，只聽 `127.0.0.1:18083`，使用 `official_snapshot` 與 Tailscale Funnel。外部驗證結果：24 tools、四個來源 available 且可追溯、TFDA 多關鍵字聯集 39 筆、NHI／CDC 查詢皆有 evidence-backed row。資料 396 個檔案、583,006,816 bytes，aggregate inventory SHA-256 為 `ffa1e13719808d178d4d06de62b667d263f5137cd37eaa5ba023c8eae72fae8c`。
 
-條款風險沒有因技術上線而消失：Cursor 一般條款雖把 build／deploy／host 列入 Service，但 Grok Bot 補充條款限 internal business purposes，beta 功能只供 evaluation；production deployment 的 `Ask first` 文件也沒有授予公開代管權。供應商書面確認仍是未完成的 owner／production gate，不能把目前公開可連線解讀成供應商已核准。
+資料庫、四來源資料更新排程與 MCP 查詢服務是 owner 自有工作流程，不是替第三方代管資料庫。Grok Bot 補充條款只明確寫 internal business purposes，沒有直接說明匿名公開 MCP 端點是否包含在內；因此只把這一點記為條款適用性未明，不據此判定違規、要求停站或阻擋既有資料排程。若未來用途改成替第三方保存非公開資料、收費代管或處理受限資料，需重新審查。
 
 ### 4. 公開服務 guard 已上線；匿名公開是 owner 既定範圍
 

@@ -318,7 +318,7 @@ SHA-256 放進 `TAIWAN_LAB_HTTP_BEARER_TOKEN_SHA256`，token 本身交由 MCP cl
 - 2026-09-22 已在 Grok Bot VM 架設公開正式端點：`https://grok-bot-box.tail6cbb55.ts.net/mcp`。Windows 外部 MCP client 已驗證 24 個工具、四個可用且可追溯來源，以及 NHI／TFDA／CDC 實際查詢。
 - 公開端點啟用每來源 IP 限流、request body 上限、安全回應標頭與無 access log 模式；可選的 bearer-token 驗證已實作，匿名公開端沒有啟用 token。
 - VM 的容器開機 self-heal hook、整機重啟與外部恢復證據記在[接手事項](next-steps.md)。
-- Grok Bot 條款只明確允許 internal business purposes；公開可連線不代表平台已核准公開代管。取得書面確認前，這仍是外部 production gate。
+- 資料庫、資料更新排程與 MCP 查詢服務是 owner 自有工作流程，不是替第三方代管資料庫。Grok Bot 條款只明確寫 internal business purposes；目前僅將匿名公開端點是否落在該用語內列為條款適用性未明，不據此判定違規、停站或阻擋資料排程。
 
 ## 遇到問題或有建議
 

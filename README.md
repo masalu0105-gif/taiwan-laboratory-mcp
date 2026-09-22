@@ -34,7 +34,7 @@ CDC 結果須保留條件與例外；NHI 支付點數不能直接當成新臺幣
 
 `https://grok-bot-box.tail6cbb55.ts.net/mcp`
 
-這個端點在 2026-09-22 從 VM 外部以真正 MCP client 驗證過 24 個工具與四組可追溯的正式 snapshot。匿名流量有每來源 IP 限流、256 KiB 請求上限、不快取回應及不記錄 HTTP access log；private deployment 另可要求 bearer token。公開端仍不應接收病人資料、院內資料、帳號密碼或其他機密內容。結果僅供公開資料查找，不能代替採檢、申報、採購或醫療決策。供應商條款只明確允許 Grok Bot 的內部業務用途，公開代管仍需供應商書面確認或搬到允許公開服務的主機，詳見[接手事項](docs/next-steps.md)。
+這個端點在 2026-09-22 從 VM 外部以真正 MCP client 驗證過 24 個工具與四組可追溯的正式 snapshot。匿名流量有每來源 IP 限流、256 KiB 請求上限、不快取回應及不記錄 HTTP access log；private deployment 另可要求 bearer token。公開端仍不應接收病人資料、院內資料、帳號密碼或其他機密內容。結果僅供公開資料查找，不能代替採檢、申報、採購或醫療決策。資料庫、排程與 MCP 查詢服務是 owner 自有工作流程；Grok Bot 條款只明確寫 internal business purposes，因此目前保留的條款不確定性只針對匿名公開端點是否落在該用語內，不把它誤寫成「代管資料庫」或已知違規，詳見[接手事項](docs/next-steps.md)。
 
 ## 五分鐘看示範資料（Windows PowerShell）
 
