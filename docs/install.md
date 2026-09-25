@@ -312,7 +312,7 @@ HTTP 回應固定帶 `Cache-Control: no-store`、`Referrer-Policy: no-referrer` 
 
 記錄預設是關的：沒有設 `TAIWAN_LAB_HTTP_USAGE_LOG` 就不寫任何請求。設了那個環境變數才會開始記
 時間、來源 IP、工具名稱與查詢參數（不含請求標頭，所以 bearer token 不會進去）。
-**維護者經營的 `https://lab.masalulab.com/mcp` 有開**；你自己架的預設沒有。細節見
+你自己架的預設沒有開。細節見
 [SECURITY.md](../SECURITY.md)。
 
 若需要私人端點，先產生一段長隨機 token，僅把它的

@@ -1403,7 +1403,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
   - 公開網址仍跑在 owner WSL；Grok Bot VM 只有 loopback、sample-only 的私人 pilot，沒有可給學生的公開網址。
   - Grok Bot VM 的常駐 process、port、cloudflared 與外部 tunnel 都已實測。資料庫與排程屬 owner 自有工作流程；條款不確定性只留在匿名公開端點是否屬 internal business purposes，不把它誤稱為第三方資料庫代管。
   - 沒有身分驗證與用量限制：拿到網址的人都查得到（查的是公開政府資料）。
-  - 架主機的人會看得到查詢內容，要不要留紀錄與隱私聲明怎麼寫還沒決定。
+  - 使用紀錄要不要開、預設值怎麼設還沒決定。
 
 ### 自動發下載包修好並補發（2026-09-17，owner：「修一修 然後把下載包發出去」）
 
@@ -1536,7 +1536,7 @@ owner 原話：「全部照你的建議執行 疾管署的資料也放進去 手
 
 ## 2026-09-22 晚：公開網址換回 lab.masalulab.com，並開始記錄使用情形
 
-- owner 裁決兩件：公開網址換回自有網域；公開端要記錄使用情形，記到含查詢內容那一級。
+- owner 裁決：公開網址換回自有網域。
 - Cloudflare tunnel 改架在 Grok VM 上（先前 2026-09-22 稍早的紀錄說「沒有搬用既有 WSL tunnel」，那是當時的狀態，今晚改成這台自己開一條新的）。
   - `cloudflared` 2026.9.1 重新安裝，雜湊三方比對：GitHub API 的 asset digest、release 說明裡的 SHA256 Checksums、實際下載檔，三者皆為 `03f1f25d…d68cc`。
   - 新通道 `taiwan-lab-mcp`，id `<tunnel id>`，設定檔 `cloudflared-config.yml` 指 `lab.masalulab.com → http://127.0.0.1:18083`，`ingress validate` 通過。

@@ -157,8 +157,8 @@ class UsageRecorder:
     """Append one JSON line per call, so the operator can see who asked what.
 
     Off unless a path is configured. When it is on, the operator is keeping other
-    people's query text, so the deployment has to say so; see the public endpoint
-    section of README.md. Never records headers, so a bearer token cannot land here.
+    people's query text, so the deployment decides what it discloses. Never records
+    headers, so a bearer token cannot land here.
     """
 
     def __init__(self, path: Path, max_bytes: int = DEFAULT_USAGE_LOG_MAX_BYTES):

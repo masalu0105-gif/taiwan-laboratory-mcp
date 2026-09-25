@@ -9,7 +9,7 @@
 - 24 個查詢工具，兩種接法：裝在自己電腦上（`taiwan-lab-mcp`）、連網址（`taiwan-lab-mcp-http`）。
 - 公開正式網址 `https://lab.masalulab.com/mcp`，跑在 Grok Bot VM，對外走 Tailscale Funnel；Windows 外部 MCP client 已完整驗證。
 - 每天 09:30 自動檢查四個官方來源，通過就換版並自動發 GitHub Release。
-- 程式版號 `0.1.2`；GitHub Actions run `35698168537` 在 Ubuntu、macOS、Windows 四組全綠。公開 Release 必須讓 tag、wheel、sdist 與四份資料資產維持同一組可安裝狀態。
+- 程式版號 `0.1.3`；GitHub Actions run `35698168537` 在 Ubuntu、macOS、Windows 四組全綠。公開 Release 必須讓 tag、wheel、sdist 與四份資料資產維持同一組可安裝狀態。
 
 ## 待辦
 
@@ -41,8 +41,7 @@ owner 於 2026-09-22 明確要求改為公開正式主機。正式部署位於 `
 
 - `0.1.2` 已加每來源每分鐘 240 次的記憶體內 sliding-window 限流、256 KiB request body 上限、`Cache-Control: no-store`、`Referrer-Policy: no-referrer` 與 `nosniff`。
 - Uvicorn 內建 access log 仍關閉；改由 `PublicHttpGuard` 自己記錄，格式受控且不含請求標頭。
-- **owner 2026-09-22 裁決：公開端要記錄使用情形（等級 3，含查詢內容）。** 環境變數 `TAIWAN_LAB_HTTP_USAGE_LOG` 指定檔案才會開，套件預設關閉。每筆記時間、來源 IP、工具名稱、查詢參數、狀態碼；被拒絕的（429／413／401）另記 `refused` 代碼。參數超過 2000 字會截斷，檔案超過 50 MB 會輪替。寫入失敗不影響回應。
-- README 原本寫「不記錄 HTTP access log」，已改寫成明講會記錄並看得到查詢內容。宣傳網站同步加註。
+- 使用紀錄功能：環境變數 `TAIWAN_LAB_HTTP_USAGE_LOG` 指定檔案才會開，套件預設關閉。每筆記時間、來源 IP、工具名稱、查詢參數、狀態碼；被拒絕的（429／413／401）另記 `refused` 代碼。參數超過 2000 字會截斷，檔案超過 50 MB 會輪替。寫入失敗不影響回應。
 - 報表：`scripts/ops/grok-production-usage-report.sh`，產出給人讀的摘要（幾個人在用、最常用哪個工具、實際查了什麼字、誰被擋）。
 - bearer token 驗證可選，設定只接受 SHA-256；目前公開 production 沒有開啟，維持 owner 要求的匿名公開。這是單機基本保護，不是 CDN／WAF 或分散式 DDoS 防護。
 
