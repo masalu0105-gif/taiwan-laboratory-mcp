@@ -12,6 +12,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -570,6 +571,27 @@ def test_usage_log_records_result_count_and_error(tmp_path):
     assert refused[-1]["refused"] == "rate_limit_exceeded"
 
 
+def _usage_report_bash_available() -> bool:
+    """Windows `bash` is the WSL stub and cannot run the usage-report script."""
+    if sys.platform == "win32":
+        return False
+    try:
+        completed = subprocess.run(
+            ["bash", "-c", "printf ok"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return completed.returncode == 0 and "ok" in completed.stdout
+
+
+@pytest.mark.skipif(
+    not _usage_report_bash_available(),
+    reason="usage report needs a real bash; Windows bash is the WSL stub",
+)
 def test_usage_report_lists_empty_and_failed_calls(tmp_path):
     log = tmp_path / "usage.jsonl"
     rows = [
