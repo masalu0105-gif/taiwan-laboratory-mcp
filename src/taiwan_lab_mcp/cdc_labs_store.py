@@ -224,9 +224,9 @@ def search_labs(
     so 「成大 傷寒」 searches 「成功大學 傷寒」 (owner 2026-09-17).
     """
 
-    from .rules.aliases import apply_lab_aliases
+    from .rules.synonyms import disease_words
 
-    words = apply_lab_aliases(tfda_search_normalize(query).split(" "))
+    words = disease_words(query)
     city_words = [word for word in words if word in _CITY_WORDS] if len(words) > 1 else []
     search_words = [word for word in words if word not in city_words]
     if not search_words:

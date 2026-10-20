@@ -232,6 +232,40 @@ def get_data_status() -> DataStatusResult:
     )
 
 
+def _install_argument_coercion() -> None:
+    """Rewrite obvious argument names before schema validation.
+
+    The published input schema stays exact. This only runs for MCP calls; a direct
+    adapter call is still strict, so a string where a bool is required stays invalid.
+    """
+
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    from .arguments import ArgumentCoercionError, coerce_tool_arguments
+
+    for tool in mcp._tool_manager._tools.values():
+        original = tool.run
+
+        async def _run(
+            arguments,
+            context,
+            convert_result=False,
+            *,
+            _tool_name=tool.name,
+            _original=original,
+        ):
+            try:
+                arguments = coerce_tool_arguments(_tool_name, arguments)
+            except ArgumentCoercionError as exc:
+                raise ToolError(f"Error executing tool {_tool_name}: {exc}") from exc
+            return await _original(arguments, context, convert_result=convert_result)
+
+        object.__setattr__(tool, "run", _run)
+
+
+_install_argument_coercion()
+
+
 def main() -> None:
     mcp.run()
 

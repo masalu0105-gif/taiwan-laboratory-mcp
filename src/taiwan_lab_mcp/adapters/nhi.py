@@ -105,6 +105,52 @@ def _valid_page(limit: Any, offset: Any) -> bool:
     )
 
 
+def _payment_needles(query: str) -> tuple[str, ...]:
+    """The typed fee term plus every spelling of the same analyte, typed term first."""
+
+    from ..rules.synonyms import analyte_needles
+
+    ordered: list[str] = []
+    original = search_normalize(query)
+    if original:
+        ordered.append(original)
+    for needle in analyte_needles(query):
+        normalized = search_normalize(needle)
+        if normalized and normalized not in ordered:
+            ordered.append(normalized)
+    return tuple(ordered)
+
+
+def _field_values(row: dict[str, Any], *, official: bool) -> list[tuple[str, str]]:
+    if official:
+        return [
+            ("code", row["code_normalized"]),
+            ("name_zh", row["name_zh_search"] or ""),
+            ("name_en", row["name_en_search"] or ""),
+            ("note", row["note_search"] or ""),
+        ]
+    return [
+        ("code", search_normalize(row.get("code"))),
+        ("name_zh", search_normalize(row.get("name_zh"))),
+        ("name_en", search_normalize(row.get("name_en"))),
+        ("note", search_normalize(row.get("note"))),
+    ]
+
+
+def _alias_matches(
+    row: dict[str, Any],
+    needle: str,
+    *,
+    official: bool,
+    aliases: dict[str, tuple[str, ...]] | None,
+) -> bool:
+    if not official:
+        return False
+    return any(
+        row["code_normalized"] == search_normalize(code) for code in (aliases or {}).get(needle, ())
+    )
+
+
 def _matched_by(
     row: dict[str, Any],
     query: str,
@@ -112,35 +158,39 @@ def _matched_by(
     official: bool,
     aliases: dict[str, tuple[str, ...]] | None = None,
 ) -> list[str]:
+    values = _field_values(row, official=official)
     normalized_query = search_normalize(query)
-    fields = (
-        ("code", row["code_normalized"])
-        if official
-        else ("code", search_normalize(row.get("code")))
-    )
-    values = [fields]
-    if official:
-        values.extend(
-            [
-                ("name_zh", row["name_zh_search"] or ""),
-                ("name_en", row["name_en_search"] or ""),
-                ("note", row["note_search"] or ""),
-            ]
-        )
-    else:
-        values.extend(
-            [
-                ("name_zh", search_normalize(row.get("name_zh"))),
-                ("name_en", search_normalize(row.get("name_en"))),
-                ("note", search_normalize(row.get("note"))),
-            ]
-        )
     matched = [name for name, value in values if normalized_query in value]
-    if official and any(
-        row["code_normalized"] == search_normalize(code)
-        for code in (aliases or {}).get(normalized_query, ())
-    ):
+    if _alias_matches(row, normalized_query, official=official, aliases=aliases):
         matched.append("alias")
+    # A row found only through another spelling still has to name the field that held it.
+    # When the typed word already matched, keep that report: 「糖化血色素」 stays an alias
+    # hit even though 「HbA1c」 is also on the same official row.
+    if matched:
+        return matched
+    for needle in _payment_needles(query):
+        if needle == normalized_query:
+            continue
+        for name, value in values:
+            if needle in value and name not in matched:
+                matched.append(name)
+        if (
+            _alias_matches(row, needle, official=official, aliases=aliases)
+            and "alias" not in matched
+        ):
+            matched.append("alias")
+    if not official and not matched:
+        for needle in _payment_needles(query):
+            folded = norm(needle)
+            raw_fields = (
+                ("code", row.get("code")),
+                ("name_zh", row.get("name_zh")),
+                ("name_en", row.get("name_en")),
+                ("note", row.get("note")),
+            )
+            for name, raw in raw_fields:
+                if folded and folded in norm(str(raw or "")) and name not in matched:
+                    matched.append(name)
     return matched
 
 
@@ -250,10 +300,14 @@ class NHIAdapter:
             return state_or_unavailable
         if self.context.mode == "sample":
             nq = norm(query)
+            needles = _payment_needles(query)
             rows = [
                 row
                 for row in self.fees
-                if contains_any(row, query, ["code", "name_zh", "name_en", "note"])
+                if any(
+                    contains_any(row, needle, ["code", "name_zh", "name_en", "note"])
+                    for needle in needles
+                )
             ]
             rows = sorted(
                 rows,
@@ -274,7 +328,10 @@ class NHIAdapter:
         assert isinstance(state_or_unavailable, OfficialState)
         state = state_or_unavailable
         nq = search_normalize(query)
-        alias_codes = {search_normalize(code) for code in self.aliases.get(nq, ())}
+        needles = _payment_needles(query)
+        alias_codes: set[str] = set()
+        for needle in needles:
+            alias_codes.update(search_normalize(code) for code in self.aliases.get(needle, ()))
 
         def rank(row: dict[str, Any]) -> tuple[int, str, str]:
             fields = [
@@ -282,9 +339,10 @@ class NHIAdapter:
                 row["name_zh_search"] or "",
                 row["name_en_search"] or "",
             ]
+            needle_in_name = any(needle in field for needle in needles for field in fields[1:])
             if nq == fields[0]:
                 priority = 0
-            elif nq in fields[1:] or row["code_normalized"] in alias_codes:
+            elif nq in fields[1:] or row["code_normalized"] in alias_codes or needle_in_name:
                 priority = 1
             elif any(field.startswith(nq) for field in fields):
                 priority = 2
@@ -296,7 +354,8 @@ class NHIAdapter:
             row
             for row in state.rows
             if any(
-                nq in (row[field] or "")
+                needle in (row[field] or "")
+                for needle in needles
                 for field in ("code_normalized", "name_zh_search", "name_en_search", "note_search")
             )
             or row["code_normalized"] in alias_codes

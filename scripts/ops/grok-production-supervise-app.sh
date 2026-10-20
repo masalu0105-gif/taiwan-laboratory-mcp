@@ -25,6 +25,7 @@ while true; do
     TAIWAN_LAB_HTTP_ALLOWED_HOSTS=grok-bot-box.tail6cbb55.ts.net,grok-bot-box.tail6cbb55.ts.net:443,127.0.0.1:18083,localhost:18083 \
     TAIWAN_LAB_HTTP_RATE_LIMIT_PER_MINUTE=240 \
     TAIWAN_LAB_HTTP_MAX_REQUEST_BYTES=262144 \
+    TAIWAN_LAB_HTTP_USAGE_LOG="${base}/usage.jsonl" \
     "${base}/.venv/bin/taiwan-lab-mcp-http" >>"$log" 2>&1
   exit_code=$?
   set -e

@@ -20,7 +20,21 @@ if [ ! -f "$usage_log" ]; then
   exit 0
 fi
 
-python3 - "$usage_log" "$days" <<'PY' | tee "$report_file"
+# GitHub's Windows runner has a python3 alias that only tells you to install Python.
+# The Linux host has python3. Use the first interpreter that can actually start.
+python_bin=""
+for candidate in python3 python; do
+  if "$candidate" -c "import sys" >/dev/null 2>&1; then
+    python_bin=$candidate
+    break
+  fi
+done
+if [ -z "$python_bin" ]; then
+  printf '找不到可用的 Python，無法產生使用報表。\n' >&2
+  exit 1
+fi
+
+"$python_bin" - "$usage_log" "$days" <<'PY' | tee "$report_file"
 import json, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -120,6 +134,42 @@ if queries:
         for term, count in counter.most_common(10):
             suffix = f" ×{count}" if count > 1 else ""
             print(f"      {term}{suffix}")
+
+def asked(row):
+    args = row.get("arguments") or ""
+    if not args:
+        return ""
+    try:
+        parsed = json.loads(args.replace("…(截斷)", ""))
+    except ValueError:
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    for key in ("query", "disease", "code", "keyword", "name", "license_no"):
+        value = parsed.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+# Lines written before result_count existed simply omit it, so they are not
+# treated as empty or failed.
+zero = [r for r in calls if r.get("result_count") == 0 and not r.get("error")]
+failed = [r for r in calls if r.get("error")]
+if zero or failed:
+    print("\n【沒問到或問失敗】")
+    if zero:
+        print(f"  查無資料 {len(zero)} 次")
+        shown = Counter((r.get("tool") or "?", asked(r)) for r in zero)
+        for (tool, term), count in shown.most_common(8):
+            label = f"  {term}" if term else ""
+            print(f"    {count} 次  {tool}{label}")
+    if failed:
+        print(f"  錯誤 {len(failed)} 次（HTTP 狀態仍可能是 200）")
+        shown = Counter((r.get("tool") or "?", r.get("result_status") or "", asked(r)) for r in failed)
+        for (tool, status_name, term), count in shown.most_common(8):
+            label = f"  {term}" if term else ""
+            status_label = f"（{status_name}）" if status_name else ""
+            print(f"    {count} 次  {tool}{status_label}{label}")
 
 by_day = Counter(r["_at"].astimezone(TAIPEI).strftime("%m-%d") for r in rows)
 if len(by_day) > 1:

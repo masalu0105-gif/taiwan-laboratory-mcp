@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import quote
 
 from .canonical import sha256_bytes
@@ -26,7 +27,7 @@ from .stores import (
     _status_from_descriptor,
     open_data_attribution_text,
 )
-from .util import tfda_search_normalize
+from .util import norm, tfda_search_normalize
 
 TFDA_INTERNAL_SOURCE_ID = "tfda_devices"
 # data.gov.tw declares dataset 9576 as updated every 7 days. The NHI two-cycle overdue rule
@@ -307,66 +308,100 @@ class SearchRequest:
     limit: int = 20
     offset: int = 0
     queries: tuple[str, ...] = field(init=False)
+    original_query: str = field(init=False)
+
+    report_queries: tuple[str, ...] = field(init=False)
 
     def __post_init__(self) -> None:
-        from .rules.aliases import apply_device_aliases
+        original = tfda_search_normalize(self.query)
+        reported = _expand_term(original, self.fields, analytes=False)
+        variants = _expand_term(original, self.fields)
+        object.__setattr__(self, "original_query", original)
+        object.__setattr__(self, "query", variants[0])
+        object.__setattr__(self, "queries", variants)
+        object.__setattr__(self, "report_queries", reported)
 
-        resolved = apply_device_aliases(tfda_search_normalize(self.query), fields=self.fields)
-        object.__setattr__(self, "query", resolved[0])
-        object.__setattr__(self, "queries", resolved)
+
+class SearchHit(NamedTuple):
+    total: int
+    rows: list[dict[str, Any]]
+    fallback: bool
+    queries: tuple[str, ...]
+    report_queries: tuple[str, ...]
 
 
-def search_rows(
-    connection: sqlite3.Connection, request: SearchRequest
-) -> tuple[int, list[dict[str, Any]]]:
-    """Return (total_matches, one page) in the fixed order; no score ever leaves SQLite.
+# A phrase of many tokens is not split: the intersection is a fallback, not a tokenizer.
+_MAX_FALLBACK_TERMS = 8
+_TERM_SEPARATORS = re.compile(r"[\s,，、;；/|]+")
+_MIXED_TOKEN = re.compile(r"[a-z0-9][a-z0-9.+-]*|[^a-z0-9.+-]+", re.IGNORECASE)
+_FALLBACK_FIELDS = tuple(name for name, _column in SEARCH_FIELDS)
 
-    Substring matching uses instr() so two-character queries match, which an FTS5 trigram
-    index would not do.
-    """
 
-    columns = dict(SEARCH_FIELDS)
-    queries = tuple(tfda_search_normalize(query) for query in request.queries)
-    params: dict[str, Any] = {
-        "limit": request.limit,
-        "offset": request.offset,
-    }
-    query_conditions = []
-    tier_expressions = []
-    for index, query in enumerate(queries):
-        params[f"q_{index}"] = query
-        params[f"q_length_{index}"] = len(query)
-        query_conditions.extend(
-            f"instr({columns[name]}, :q_{index}) > 0" for name in request.fields
-        )
-        if request.rank_by_manufacturer:
-            tier_expressions.append(
-                f"CASE WHEN manufacturer_name_search = :q_{index} THEN 0 "
-                f"WHEN substr(manufacturer_name_search, 1, :q_length_{index}) = :q_{index} "
-                "THEN 1 ELSE 2 END"
-            )
-        else:
-            tier_expressions.append(
-                f"CASE WHEN license_no_search = :q_{index} THEN 0 "
-                f"WHEN name_zh_search = :q_{index} OR name_en_search = :q_{index} THEN 1 "
-                f"WHEN substr(name_zh_search, 1, :q_length_{index}) = :q_{index} "
-                f"OR substr(name_en_search, 1, :q_length_{index}) = :q_{index} THEN 2 "
-                f"WHEN instr(name_zh_search, :q_{index}) > 0 "
-                f"OR instr(name_en_search, :q_{index}) > 0 THEN 3 ELSE 4 END"
-            )
-    conditions = ["(" + " OR ".join(query_conditions) + ")"]
+def _expand_term(
+    term: str, fields: tuple[str, ...], *, maker_alias: bool = False, analytes: bool = True
+) -> tuple[str, ...]:
+    """Spoken term plus analyte and disease synonyms. The typed term is kept."""
+
+    from .rules.aliases import MANUFACTURER_FIELDS, apply_device_aliases
+    from .rules.synonyms import analyte_needles, resolve_disease_query
+
+    original = tfda_search_normalize(term)
+    ordered: list[str] = []
+
+    def add(value: str) -> None:
+        normalized = tfda_search_normalize(value)
+        if normalized and normalized not in ordered:
+            ordered.append(normalized)
+
+    for variant in apply_device_aliases(original, fields=fields):
+        add(variant)
+    add(original)
+    if analytes:
+        for variant in analyte_needles(original):
+            add(variant)
+    disease = resolve_disease_query(original)
+    if disease:
+        add(disease)
+    if maker_alias and fields != MANUFACTURER_FIELDS:
+        # A brand typed next to a product word is often only in the maker column.
+        for variant in apply_device_aliases(original, fields=MANUFACTURER_FIELDS):
+            add(variant)
+    return tuple(ordered)
+
+
+def _split_terms(normalized: str) -> list[str]:
+    """Whitespace and the boundary between a Latin token and Chinese, not each character."""
+
+    terms: list[str] = []
+    for piece in _TERM_SEPARATORS.split(normalized.strip()):
+        if not piece:
+            continue
+        chunks = [chunk for chunk in _MIXED_TOKEN.findall(piece) if norm(chunk)]
+        if len(chunks) >= 2:
+            terms.extend(chunks)
+        elif norm(piece):
+            terms.append(piece)
+    return terms
+
+
+def _filter_clauses(request: SearchRequest, params: dict[str, Any]) -> list[str]:
+    clauses: list[str] = []
     if request.ivd_scopes is not None:
         placeholders = []
         for index, scope in enumerate(request.ivd_scopes):
             params[f"scope_{index}"] = scope
             placeholders.append(f":scope_{index}")
-        conditions.append(f"ivd_scope IN ({', '.join(placeholders)})")
+        clauses.append(f"ivd_scope IN ({', '.join(placeholders)})")
     if request.main_category is not None:
         params["main_category"] = request.main_category
-        conditions.append("instr(main_category_letters, :main_category) > 0")
+        clauses.append("instr(main_category_letters, :main_category) > 0")
     if request.manufacturer is not None:
         params["manufacturer"] = tfda_search_normalize(request.manufacturer)
-        conditions.append("instr(manufacturer_name_search, :manufacturer) > 0")
+        clauses.append("instr(manufacturer_name_search, :manufacturer) > 0")
+    return clauses
+
+
+def _preference_order(request: SearchRequest, params: dict[str, Any]) -> list[str]:
     # A preference only reorders rows inside one match tier; it never adds or removes rows.
     misses = []
     if request.prefer_ivd:
@@ -378,10 +413,34 @@ def search_rows(
     if misses:
         order.append(" + ".join(misses))
     order.extend(["cancellation_raw_nonempty", "license_no_raw", "source_row_number"])
-    tier = (
-        tier_expressions[0] if len(tier_expressions) == 1 else f"min({', '.join(tier_expressions)})"
+    return order
+
+
+def _tier_sql(key: str, length_key: str, *, rank_by_manufacturer: bool) -> str:
+    if rank_by_manufacturer:
+        return (
+            f"CASE WHEN manufacturer_name_search = :{key} THEN 0 "
+            f"WHEN substr(manufacturer_name_search, 1, :{length_key}) = :{key} "
+            "THEN 1 ELSE 2 END"
+        )
+    return (
+        f"CASE WHEN license_no_search = :{key} THEN 0 "
+        f"WHEN name_zh_search = :{key} OR name_en_search = :{key} THEN 1 "
+        f"WHEN substr(name_zh_search, 1, :{length_key}) = :{key} "
+        f"OR substr(name_en_search, 1, :{length_key}) = :{key} THEN 2 "
+        f"WHEN instr(name_zh_search, :{key}) > 0 OR instr(name_en_search, :{key}) > 0 "
+        "THEN 3 ELSE 4 END"
     )
-    where = " AND ".join(conditions)
+
+
+def _page(
+    connection: sqlite3.Connection,
+    *,
+    where: str,
+    tier: str,
+    order: list[str],
+    params: dict[str, Any],
+) -> tuple[int, list[dict[str, Any]]]:
     rows = [
         dict(row)
         for row in connection.execute(
@@ -395,6 +454,106 @@ def search_rows(
         return rows[0]["total_matches"], rows
     total = connection.execute(f"SELECT COUNT(*) FROM tfda_source_row WHERE {where}", params)
     return total.fetchone()[0], rows
+
+
+def _term_match_sql(
+    variants: tuple[str, ...],
+    fields: tuple[str, ...],
+    params: dict[str, Any],
+    prefix: str,
+) -> tuple[str, str]:
+    """OR of one term's spellings across fields, and the best tier among those spellings."""
+
+    columns = dict(SEARCH_FIELDS)
+    conditions: list[str] = []
+    tiers: list[str] = []
+    for index, variant in enumerate(variants):
+        key = f"{prefix}_{index}"
+        params[key] = variant
+        params[f"{key}_length"] = len(variant)
+        conditions.extend(f"instr({columns[name]}, :{key}) > 0" for name in fields)
+        tiers.append(_tier_sql(key, f"{key}_length", rank_by_manufacturer=False))
+    match = "(" + " OR ".join(conditions) + ")"
+    tier = tiers[0] if len(tiers) == 1 else f"min({', '.join(tiers)})"
+    return match, tier
+
+
+def search_rows(connection: sqlite3.Connection, request: SearchRequest) -> SearchHit:
+    """Return one page in the fixed order; no score ever leaves SQLite.
+
+    Substring matching uses instr() so two-character queries match, which an FTS5 trigram
+    index would not do. A multi-word phrase that matches nothing is tried again as an
+    intersection: every word (and its synonyms) must appear somewhere on the same row.
+    """
+
+    params: dict[str, Any] = {"limit": request.limit, "offset": request.offset}
+    filters = _filter_clauses(request, params)
+    match, tier = _term_match_sql(request.queries, request.fields, params, "q")
+    if request.rank_by_manufacturer:
+        # Manufacturer ranking is a different tier than the product one _term_match_sql built.
+        tiers = []
+        for index in range(len(request.queries)):
+            tiers.append(_tier_sql(f"q_{index}", f"q_{index}_length", rank_by_manufacturer=True))
+        tier = tiers[0] if len(tiers) == 1 else f"min({', '.join(tiers)})"
+    where = " AND ".join([match, *filters])
+    total, rows = _page(
+        connection,
+        where=where,
+        tier=tier,
+        order=_preference_order(request, params),
+        params=params,
+    )
+    if total:
+        return SearchHit(total, rows, False, request.queries, request.report_queries)
+    # Manufacturer search never reads the applicant or the product name. A fallback across
+    # every column would let 「Sample Taiwan Applicant」 match the maker column's other words.
+    if request.rank_by_manufacturer or request.fields == ("manufacturer",):
+        return SearchHit(0, [], False, request.queries, request.report_queries)
+    return _intersection_fallback(connection, request)
+
+
+def _intersection_fallback(connection: sqlite3.Connection, request: SearchRequest) -> SearchHit:
+    terms = _split_terms(request.original_query)
+    if not 2 <= len(terms) <= _MAX_FALLBACK_TERMS:
+        return SearchHit(0, [], False, request.queries, request.report_queries)
+    groups = tuple(_expand_term(term, request.fields, maker_alias=True) for term in terms)
+    for index, variants in enumerate(groups):
+        probe: dict[str, Any] = {}
+        probe_filters = _filter_clauses(request, probe)
+        match, _tier = _term_match_sql(variants, _FALLBACK_FIELDS, probe, f"probe{index}")
+        found = connection.execute(
+            f"SELECT 1 FROM tfda_source_row WHERE {match}"
+            + (f" AND {' AND '.join(probe_filters)}" if probe_filters else "")
+            + " LIMIT 1",
+            probe,
+        ).fetchone()
+        if found is None:
+            # One word matches nothing, so the intersection is empty (「ARKRAY 咖啡機」).
+            return SearchHit(0, [], False, request.queries, request.report_queries)
+    params: dict[str, Any] = {"limit": request.limit, "offset": request.offset}
+    page_filters = _filter_clauses(request, params)
+    matches: list[str] = []
+    tiers: list[str] = []
+    flat: list[str] = []
+    for index, variants in enumerate(groups):
+        match, tier = _term_match_sql(variants, _FALLBACK_FIELDS, params, f"t{index}")
+        matches.append(match)
+        tiers.append(tier)
+        for variant in variants:
+            if variant not in flat:
+                flat.append(variant)
+    tier = tiers[0] if len(tiers) == 1 else f"max({', '.join(tiers)})"
+    where = " AND ".join([*matches, *page_filters])
+    total, rows = _page(
+        connection,
+        where=where,
+        tier=tier,
+        order=_preference_order(request, params),
+        params=params,
+    )
+    if not total:
+        return SearchHit(0, [], False, tuple(flat), tuple(flat))
+    return SearchHit(total, rows, True, tuple(flat), tuple(flat))
 
 
 def license_rows(
