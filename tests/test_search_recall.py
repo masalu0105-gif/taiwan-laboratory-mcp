@@ -14,6 +14,7 @@ import sqlite3
 import subprocess
 import zipfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx2
 import pytest
@@ -124,9 +125,7 @@ def arkray(tmp_path):
     build_tfda_snapshot(_zip_bytes(_arkray_rows()), tmp_path)
     when = datetime(2026, 9, 14, 17, 0, tzinfo=timezone.utc)
     adapter = TFDAAdapter(DataContext(mode="official_snapshot", data_root=tmp_path))
-    adapter.context = DataContext(
-        mode="official_snapshot", data_root=tmp_path, clock=lambda: when
-    )
+    adapter.context = DataContext(mode="official_snapshot", data_root=tmp_path, clock=lambda: when)
     return adapter
 
 
@@ -163,7 +162,8 @@ def test_multi_term_ivd_query_intersects_and_keeps_citations(arkray):
 
     direct = next(item for item in phrase.items if item.record.license_no_raw == LICENSES[0])
     fallback = next(
-        item for item in found["list_matching_license_records"].items
+        item
+        for item in found["list_matching_license_records"].items
         if item.record.license_no_raw == LICENSES[0]
     )
     assert fallback.record.name_zh_raw == direct.record.name_zh_raw == "糖化血色素分析儀 HA-8380V"
@@ -172,7 +172,10 @@ def test_multi_term_ivd_query_intersects_and_keeps_citations(arkray):
     assert fallback.evidence[0].model_dump() == direct.evidence[0].model_dump()
     assert fallback.evidence[0].artifact_id
     assert len(fallback.evidence[0].source_row_sha256) == 64
-    assert fallback.evidence[0].locator.source_row_number == direct.evidence[0].locator.source_row_number
+    assert (
+        fallback.evidence[0].locator.source_row_number
+        == direct.evidence[0].locator.source_row_number
+    )
     assert found["search_ivd"].provenance.model_dump() == phrase.provenance.model_dump()
 
     page = arkray.list_matching_license_records("ARKRAY 糖化血色素", limit=2, offset=0)
@@ -220,9 +223,7 @@ def test_nine_terms_are_not_split_but_eight_still_intersect(tmp_path):
     build_tfda_snapshot(_zip_bytes(rows), tmp_path)
     when = datetime(2026, 9, 14, 17, 0, tzinfo=timezone.utc)
     adapter = TFDAAdapter(DataContext(mode="official_snapshot", data_root=tmp_path))
-    adapter.context = DataContext(
-        mode="official_snapshot", data_root=tmp_path, clock=lambda: when
-    )
+    adapter.context = DataContext(mode="official_snapshot", data_root=tmp_path, clock=lambda: when)
 
     eight = adapter.list_matching_license_records(" ".join(words[:8]))
     assert eight.total_matches == 1
@@ -254,7 +255,9 @@ def test_disease_synonyms_cover_labs_and_sample_fixtures():
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
     column_sql = ", ".join(
-        f"{column} INTEGER NOT NULL" if column == "expanded_row_number" else f"{column} TEXT NOT NULL"
+        f"{column} INTEGER NOT NULL"
+        if column == "expanded_row_number"
+        else f"{column} TEXT NOT NULL"
         for column in CDC_LABS_ROW_COLUMNS
     )
     connection.execute(f"CREATE TABLE {CDC_LABS_TABLE} ({column_sql})")
@@ -369,7 +372,9 @@ def test_hba1c_finds_a_chinese_only_fee_without_rewriting_it(tmp_path):
 
 
 def _tool_payload(result):
-    structured = getattr(result, "structured_content", None) or getattr(result, "structuredContent", None)
+    structured = getattr(result, "structured_content", None) or getattr(
+        result, "structuredContent", None
+    )
     if isinstance(structured, dict) and structured:
         return structured
     return json.loads(result.content[0].text)
@@ -400,17 +405,25 @@ def test_published_schema_stays_exact_while_obvious_names_are_accepted():
         specimen = await mcp.call_tool("get_specimen_requirement", {"query": "麻疹"})
         maker = await mcp.call_tool("find_manufacturer", {"query": "Sample Manufacturer"})
         points = await mcp.call_tool("get_points", {"query": "SAMPLE001"})
-        blank_city = await mcp.call_tool(
-            "find_authorized_lab", {"query": "麻疹", "city": ""}
-        )
-        paged = await mcp.call_tool(
-            "search_payment_items", {"query": "糖化血色素", "limit": "5"}
-        )
+        blank_city = await mcp.call_tool("find_authorized_lab", {"query": "麻疹", "city": ""})
+        paged = await mcp.call_tool("search_payment_items", {"query": "糖化血色素", "limit": "5"})
         scoped = await mcp.call_tool(
             "list_matching_license_records",
             {"query": "HbA1c", "limit": 1, "ivd_scope": " Included ", "prefer_ivd": "true"},
         )
-        return dengue, disease_alias, same, license_row, camel, specimen, maker, points, blank_city, paged, scoped
+        return (
+            dengue,
+            disease_alias,
+            same,
+            license_row,
+            camel,
+            specimen,
+            maker,
+            points,
+            blank_city,
+            paged,
+            scoped,
+        )
 
     (
         dengue,
@@ -425,7 +438,18 @@ def test_published_schema_stays_exact_while_obvious_names_are_accepted():
         paged,
         scoped,
     ) = asyncio.run(exercise())
-    for result in (dengue, disease_alias, same, license_row, camel, specimen, maker, points, blank_city, paged):
+    for result in (
+        dengue,
+        disease_alias,
+        same,
+        license_row,
+        camel,
+        specimen,
+        maker,
+        points,
+        blank_city,
+        paged,
+    ):
         payload = _tool_payload(result)
         assert payload["result_status"] == "ok"
     assert _tool_payload(dengue)["items"][0]["record"]["disease"] == "登革熱"
@@ -454,7 +478,9 @@ def test_usage_log_records_result_count_and_error(tmp_path):
     ).encode()
     noted = summarize_response(sse, http_status=200)
     assert noted == {"result_count": 0, "error": False, "result_status": "not_found"}
-    failed = summarize_response(b'{"jsonrpc":"2.0","id":1,"error":{"code":-32600}}', http_status=200)
+    failed = summarize_response(
+        b'{"jsonrpc":"2.0","id":1,"error":{"code":-32600}}', http_status=200
+    )
     assert failed["error"] is True and failed["result_count"] is None
 
     log = tmp_path / "usage.jsonl"
@@ -536,7 +562,9 @@ def test_usage_log_records_result_count_and_error(tmp_path):
                     )
 
     asyncio.run(flood())
-    refused = [json.loads(line) for line in limited.read_text("utf-8").splitlines() if '"refused"' in line]
+    refused = [
+        json.loads(line) for line in limited.read_text("utf-8").splitlines() if '"refused"' in line
+    ]
     assert refused[-1]["error"] is True
     assert refused[-1]["result_count"] is None
     assert refused[-1]["refused"] == "rate_limit_exceeded"
@@ -573,10 +601,13 @@ def test_usage_report_lists_empty_and_failed_calls(tmp_path):
             "result_status": None,
         },
     ]
-    log.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    log.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
+    )
     env = {**os.environ, "TAIWAN_LAB_PRODUCTION_BASE": str(tmp_path)}
+    script = Path(__file__).resolve().parents[1] / "scripts/ops/grok-production-usage-report.sh"
     completed = subprocess.run(
-        ["bash", "scripts/ops/grok-production-usage-report.sh", "all"],
+        ["bash", str(script), "all"],
         check=False,
         env=env,
         capture_output=True,

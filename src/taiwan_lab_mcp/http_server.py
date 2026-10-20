@@ -457,7 +457,9 @@ class PublicHttpGuard:
         if self.recorder is None:
             return
         try:
-            outcome = summarize_response(body, http_status=status if isinstance(status, int) else None)
+            outcome = summarize_response(
+                body, http_status=status if isinstance(status, int) else None
+            )
         except Exception:
             outcome = {
                 "result_count": None,

@@ -86,7 +86,9 @@ def coerce_tool_arguments(tool_name: str, arguments: Any) -> Any:
     if arguments is None:
         arguments = {}
     if not isinstance(arguments, dict):
-        raise ArgumentCoercionError(f"{tool_name} 的參數必須是物件，收到的是 {type(arguments).__name__}。")
+        raise ArgumentCoercionError(
+            f"{tool_name} 的參數必須是物件，收到的是 {type(arguments).__name__}。"
+        )
     try:
         spec = operation_spec(tool_name)
     except KeyError:
@@ -103,9 +105,7 @@ def coerce_tool_arguments(tool_name: str, arguments: Any) -> Any:
         target = assigned if key in by_name else leftovers
         current = target.get(key, _MISSING)
         if current is not _MISSING and current != value:
-            raise ArgumentCoercionError(
-                f"{tool_name} 的參數 {key} 收到兩個不同的值（{raw_key}）。"
-            )
+            raise ArgumentCoercionError(f"{tool_name} 的參數 {key} 收到兩個不同的值（{raw_key}）。")
         target[key] = value
 
     for parameter in parameters:
