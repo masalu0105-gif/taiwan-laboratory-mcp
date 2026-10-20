@@ -1,0 +1,35 @@
+{
+  "rule_version": "search-synonyms-v1",
+  "note": "Search-time only. A term is expanded into the other words in its group; stored rows, locators and official wording are not rewritten. Disease aliases already reviewed for the specimen manual stay in cdc_disease_alias and are still consulted first. This file adds phrases that table does not list, and analyte names used by licence and fee search.",
+  "diseases": [
+    {"canonical": "登革熱", "aliases": ["dengue", "dengue fever", "登革病毒"]},
+    {"canonical": "麻疹", "aliases": ["measles", "rubeola"]},
+    {"canonical": "流感", "aliases": ["influenza", "flu"]},
+    {"canonical": "結核病", "aliases": ["tuberculosis", "tb"]},
+    {"canonical": "傷寒", "aliases": ["typhoid"]},
+    {"canonical": "瘧疾", "aliases": ["malaria"]},
+    {"canonical": "霍亂", "aliases": ["cholera"]},
+    {"canonical": "肝炎", "aliases": ["hepatitis"]},
+    {"canonical": "日本腦炎", "aliases": ["japanese encephalitis"]},
+    {"canonical": "腸病毒", "aliases": ["enterovirus"]},
+    {"canonical": "梅毒", "aliases": ["syphilis"]},
+    {"canonical": "淋病", "aliases": ["gonorrhea", "gonorrhoea"]},
+    {"canonical": "人類免疫缺乏病毒", "aliases": ["hiv", "aids"]},
+    {"canonical": "新冠", "aliases": ["covid-19", "covid", "sars-cov-2"]},
+    {"canonical": "M痘", "aliases": ["mpox", "monkeypox"]},
+    {"canonical": "狂犬病", "aliases": ["rabies"]},
+    {"canonical": "茲卡", "aliases": ["zika"]}
+  ],
+  "analytes": [
+    {
+      "terms": [
+        "hba1c",
+        "糖化血色素",
+        "醣化血紅素",
+        "糖化血紅素",
+        "glycated hemoglobin",
+        "glycated haemoglobin"
+      ]
+    }
+  ]
+}

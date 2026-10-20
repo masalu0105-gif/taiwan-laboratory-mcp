@@ -311,7 +311,9 @@ HTTP 回應固定帶 `Cache-Control: no-store`、`Referrer-Policy: no-referrer` 
 `X-Content-Type-Options: nosniff`。uvicorn 內建的 access log 一律關閉。
 
 記錄預設是關的：沒有設 `TAIWAN_LAB_HTTP_USAGE_LOG` 就不寫任何請求。設了那個環境變數才會開始記
-時間、來源 IP、工具名稱與查詢參數（不含請求標頭，所以 bearer token 不會進去）。
+時間、來源 IP、工具名稱、查詢參數、命中筆數（`result_count`）以及這次是否失敗（`error`）。
+回應本文不入檔。不含請求標頭，所以 bearer token 不會進去。`error` 在 HTTP 200 也會是 true，
+例如參數不合法或資料不可用；查無資料則 `result_count` 為 0、`error` 為 false。
 你自己架的預設沒有開。細節見
 [SECURITY.md](../SECURITY.md)。
 

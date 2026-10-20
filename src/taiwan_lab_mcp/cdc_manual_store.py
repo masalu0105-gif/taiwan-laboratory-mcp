@@ -181,10 +181,9 @@ def search_specimen_rows(connection: sqlite3.Connection, *, query: str) -> list[
     manual's own wording through the packaged alias table (OD-16).
     """
 
-    from .importers.cdc_manual import load_cdc_disease_aliases
+    from .rules.synonyms import resolve_disease_query
 
-    term = norm(query)
-    term = load_cdc_disease_aliases().get(term, term)
+    term = resolve_disease_query(query) or norm(query)
     return [dict(row) for row in connection.execute(_SEARCH_SQL, {"query": term})]
 
 
@@ -195,7 +194,9 @@ def search_clause_rows(connection: sqlite3.Connection, *, query: str) -> list[di
     and the steps under it, so a number matches the clause itself and everything below it.
     """
 
-    term = norm(query)
+    from .rules.synonyms import resolve_disease_query
+
+    term = resolve_disease_query(query) or norm(query)
     if not term:
         return []
     if _CLAUSE_NUMBER_QUERY.fullmatch(term):
@@ -224,10 +225,9 @@ def search_testing_location_rows(
     in the database: the join happens here and each contact keeps its own stored row.
     """
 
-    from .importers.cdc_manual import load_cdc_disease_aliases
+    from .rules.synonyms import resolve_disease_query
 
-    term = norm(query)
-    term = load_cdc_disease_aliases().get(term, term)
+    term = resolve_disease_query(query) or norm(query)
     rows = [dict(row) for row in connection.execute(_TESTING_LOCATION_SQL, {"query": term})]
     if not rows:
         return rows

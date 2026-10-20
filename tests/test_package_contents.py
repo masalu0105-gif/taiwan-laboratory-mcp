@@ -39,6 +39,7 @@ REQUIRED_FILES = {
     "taiwan_lab_mcp/rules/cdc_disease_alias/v1.json",
     "taiwan_lab_mcp/rules/cdc_lab_alias/v1.json",
     "taiwan_lab_mcp/rules/nhi_aliases/v1.json",
+    "taiwan_lab_mcp/rules/search_synonyms/v1.json",
     "taiwan_lab_mcp/rules/tfda_term_alias/v1.json",
     "taiwan_lab_mcp/rules/tfda_term_alias/v2.json",
     "taiwan_lab_mcp/rules/nhi_lab_scope/v1.json",

@@ -41,7 +41,7 @@ owner 於 2026-09-22 明確要求改為公開正式主機。正式部署位於 `
 
 - `0.1.2` 已加每來源每分鐘 240 次的記憶體內 sliding-window 限流、256 KiB request body 上限、`Cache-Control: no-store`、`Referrer-Policy: no-referrer` 與 `nosniff`。
 - Uvicorn 內建 access log 仍關閉；改由 `PublicHttpGuard` 自己記錄，格式受控且不含請求標頭。
-- 使用紀錄功能：環境變數 `TAIWAN_LAB_HTTP_USAGE_LOG` 指定檔案才會開，套件預設關閉。每筆記時間、來源 IP、工具名稱、查詢參數、狀態碼；被拒絕的（429／413／401）另記 `refused` 代碼。參數超過 2000 字會截斷，檔案超過 50 MB 會輪替。寫入失敗不影響回應。
+- 使用紀錄功能：環境變數 `TAIWAN_LAB_HTTP_USAGE_LOG` 指定檔案才會開，套件預設關閉。每筆記時間、來源 IP、工具名稱、查詢參數、狀態碼、命中筆數 `result_count`、`error` 與 `result_status`。HTTP 200 的參數錯誤與資料不可用會讓 `error` 為 true；查無資料是筆數 0 且 `error` 為 false。回應本文不入檔。被拒絕的（429／413／401）另記 `refused` 代碼且 `error` 為 true。參數超過 2000 字會截斷，檔案超過 50 MB 會輪替。寫入失敗不影響回應。正式 supervisor 會把紀錄寫到 `${base}/usage.jsonl`。
 - 報表：`scripts/ops/grok-production-usage-report.sh`，產出給人讀的摘要（幾個人在用、最常用哪個工具、實際查了什麼字、誰被擋）。
 - bearer token 驗證可選，設定只接受 SHA-256；目前公開 production 沒有開啟，維持 owner 要求的匿名公開。這是單機基本保護，不是 CDN／WAF 或分散式 DDoS 防護。
 

@@ -197,7 +197,9 @@ class CDCAdapter:
             )
         if self.context.mode == "official_snapshot":
             return self._official_specimens(query, request)
-        nq = norm(query)
+        from ..rules.synonyms import disease_search_text
+
+        nq = norm(disease_search_text(query))
         rows = [
             row
             for row in self.specimens
@@ -234,7 +236,9 @@ class CDCAdapter:
                 note="disease 必須是非空字串。",
             )
         if self.context.mode == "sample":
-            nq = norm(disease)
+            from ..rules.synonyms import disease_search_text
+
+            nq = norm(disease_search_text(disease))
             rows = [row for row in self.testing_locations if nq in norm(row["disease"])]
             return result_from_rows(
                 operation="get_testing_location",
@@ -282,7 +286,9 @@ class CDCAdapter:
                 note="query 必須是非空字串。",
             )
         if self.context.mode == "sample":
-            nq = norm(query)
+            from ..rules.synonyms import disease_search_text
+
+            nq = norm(disease_search_text(query))
             rows = [row for row in self.clauses if nq in norm(row["text"])]
             return result_from_rows(
                 operation="search_manual_procedure",
@@ -330,7 +336,10 @@ class CDCAdapter:
                 note=_LAB_SEARCH_NOTE,
             )
         if self.context.mode == "sample":
-            rows = [row for row in self.labs if contains_any(row, query, ["name", "scope"])]
+            from ..rules.synonyms import disease_search_text
+
+            text = disease_search_text(query)
+            rows = [row for row in self.labs if contains_any(row, text, ["name", "scope"])]
             if city is not None:
                 rows = [row for row in rows if norm(city) in norm(row.get("city"))]
             return result_from_rows(

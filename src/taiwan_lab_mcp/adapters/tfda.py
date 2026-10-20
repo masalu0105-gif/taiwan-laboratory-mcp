@@ -28,7 +28,9 @@ from ..models import (
 from ..rules.tfda import TemporalEvaluation, load_ivd_registry
 from ..sources import TFDA_DEVICE
 from ..tfda_store import (
+    SEARCH_FIELDS,
     TAIPEI,
+    SearchHit,
     SearchRequest,
     connect_readonly,
     evaluate_row,
@@ -59,6 +61,12 @@ _ALL_FIELDS = (
 _IVD_FIELDS = ("license_no", "name_zh", "name_en", "effect", "classification")
 _SAMPLE_CLASSIFICATION = ("B 血液學及病理學", "B.9225 示範品項")
 _SEARCH_NOTE = "query 與 manufacturer 必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0。"
+TERM_INTERSECTION_NOTE = (
+    "整句沒有命中。這是拆開詞語後的後備交集：每一筆都同時含有查詢裡的每個詞（或同義詞），"
+    "而不是整句出現在同一欄。許可證欄位、來源、版本與定位仍是官方原文。"
+)
+TERM_INTERSECTION_WARNING = "term_intersection_fallback"
+_ALL_SEARCH_FIELDS = tuple(name for name, _column in SEARCH_FIELDS)
 _LIST_NOTE = (
     "query 必須是非空字串；limit 為 1–5 的整數，offset 不得小於 0；prefer_ivd 為布林值；"
     "prefer_main_category 與 main_category 為 A–P 單一大寫字母或 null；"
@@ -113,6 +121,31 @@ def _full_record(row: dict[str, Any], evaluation: TemporalEvaluation) -> TFDARec
         cancellation_recorded_in_source=evaluation.cancellation_recorded_in_source,
         within_validity_period_as_of=evaluation.within_validity_period_as_of,
     )
+
+
+def _matched(row: dict[str, Any], hit: SearchHit, search: SearchRequest) -> list[str]:
+    fields = _ALL_SEARCH_FIELDS if hit.fallback else search.fields
+    if not hit.fallback:
+        # Analyte synonyms can find a row, but a field is reported for the typed word
+        # (and its device aliases) when that word is actually in the row.
+        reported = matched_fields(row, hit.report_queries, fields)
+        if reported:
+            return reported
+    return matched_fields(row, hit.queries, fields)
+
+
+def _with_fallback_note(notes: list[str] | None, hit: SearchHit) -> list[str] | None:
+    merged = list(notes or [])
+    if hit.fallback:
+        merged.insert(0, TERM_INTERSECTION_NOTE)
+    return merged or None
+
+
+def _with_fallback_warning(warnings: list[str] | None, hit: SearchHit) -> list[str] | None:
+    merged = list(warnings or [])
+    if hit.fallback and TERM_INTERSECTION_WARNING not in merged:
+        merged.append(TERM_INTERSECTION_WARNING)
+    return merged or None
 
 
 def _summary_record(
@@ -255,18 +288,18 @@ class TFDAAdapter:
         if isinstance(source, ToolResult):
             return source
         with closing(source.connect()) as connection:
-            total, rows = search_rows(connection, search)
+            hit = search_rows(connection, search)
         return self._respond(
             operation,
             request,
             source,
-            total,
-            rows,
-            lambda row, evaluation: _summary_record(
-                row, matched_fields(row, search.queries, search.fields), evaluation
-            ),
+            hit.total,
+            hit.rows,
+            lambda row, evaluation: _summary_record(row, _matched(row, hit, search), evaluation),
             limit=search.limit,
             offset=search.offset,
+            notes=_with_fallback_note(extra.pop("notes", None), hit),
+            warnings=_with_fallback_warning(extra.pop("warnings", None), hit),
             **extra,
         )
 
@@ -301,19 +334,17 @@ class TFDAAdapter:
             offset=offset,
         )
         with closing(source.connect()) as connection:
-            total, rows = search_rows(connection, search)
+            hit = search_rows(connection, search)
             candidates = 0
-            if reviewed and total == 0:
-                candidates, _ = search_rows(
+            if reviewed and hit.total == 0:
+                candidates = search_rows(
                     connection, replace(search, ivd_scopes=_CANDIDATE_SCOPES, limit=1, offset=0)
-                )
+                ).total
 
         def summary(row: dict[str, Any], evaluation: TemporalEvaluation) -> TFDASearchRecord:
-            # search.query, not query: a common word may have been replaced by the wording the
-            # licences use, and the rows were found by that wording.
-            return _summary_record(
-                row, matched_fields(row, search.queries, _IVD_FIELDS), evaluation
-            )
+            # The rows were found by the resolved wording, which may be a synonym or, when the
+            # phrase itself missed, by each word of that phrase.
+            return _summary_record(row, _matched(row, hit, search), evaluation)
 
         if candidates:
             return self._respond(
@@ -342,12 +373,13 @@ class TFDAAdapter:
             operation,
             request,
             source,
-            total,
-            rows,
+            hit.total,
+            hit.rows,
             summary,
             limit=limit,
             offset=offset,
-            notes=[note],
+            notes=_with_fallback_note([note], hit),
+            warnings=_with_fallback_warning(None, hit),
             coverage_detail=None if reviewed else source.coverage_detail,
         )
 

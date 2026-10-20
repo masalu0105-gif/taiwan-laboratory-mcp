@@ -167,7 +167,8 @@ class UsageRecorder:
 
     def record(self, entry: dict) -> None:
         # Recording is a side errand. A broken disk must never turn a working
-        # answer into an error for the person who asked.
+        # answer into an error for the person who asked. The response body is not
+        # stored; result_count and error are the only fields taken from it.
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._rotate_if_large()
@@ -220,6 +221,108 @@ def describe_call(body: bytes) -> dict:
         "tool": tool if isinstance(tool, str) else "",
         "arguments": rendered,
     }
+
+
+# HTTP 200 still wraps these: the tool ran, but the caller got no data or a refusal.
+_USAGE_ERROR_STATUSES = frozenset({"invalid_request", "data_unavailable"})
+
+
+def summarize_response(body: bytes, *, http_status: int | None) -> dict:
+    """Pull result_count, result_status and error out of one HTTP response.
+
+    Never raises. A body that is not a tool answer leaves result_count empty.
+    The body itself is not returned.
+    """
+
+    summary: dict = {
+        "result_count": None,
+        "error": bool(http_status is not None and int(http_status) >= 400),
+        "result_status": None,
+    }
+    try:
+        for payload in _response_payloads(body):
+            if not isinstance(payload, dict):
+                continue
+            if payload.get("error") is not None and "result" not in payload:
+                summary["error"] = True
+                continue
+            result = payload.get("result")
+            if not isinstance(result, dict):
+                continue
+            if result.get("isError") is True:
+                summary["error"] = True
+            tool_body = _tool_body(result)
+            if not isinstance(tool_body, dict):
+                continue
+            status = tool_body.get("result_status")
+            if isinstance(status, str):
+                summary["result_status"] = status
+                if status in _USAGE_ERROR_STATUSES:
+                    summary["error"] = True
+            count = tool_body.get("total_matches")
+            if not isinstance(count, int):
+                count = tool_body.get("returned_count")
+            if isinstance(count, int):
+                summary["result_count"] = count
+    except Exception:
+        return summary
+    if http_status is not None and int(http_status) >= 400:
+        summary["error"] = True
+    return summary
+
+
+def _response_payloads(body: bytes) -> list:
+    text = body.decode("utf-8", errors="replace")
+    payloads: list = []
+    data_lines: list[str] = []
+    saw_sse = False
+
+    def take() -> None:
+        raw = "\n".join(data_lines).strip()
+        data_lines.clear()
+        if not raw:
+            return
+        try:
+            payloads.append(json.loads(raw))
+        except ValueError:
+            return
+
+    for line in text.splitlines():
+        if line.startswith("data:"):
+            saw_sse = True
+            data_lines.append(line[5:].lstrip())
+        elif saw_sse and line == "":
+            take()
+    if data_lines:
+        take()
+    if payloads or saw_sse:
+        return payloads
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return []
+    return parsed if isinstance(parsed, list) else [parsed]
+
+
+def _tool_body(result: dict) -> dict | None:
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict) and (
+        "result_status" in structured or "total_matches" in structured or "data_mode" in structured
+    ):
+        return structured
+    content = result.get("content")
+    if not isinstance(content, list):
+        return None
+    for item in content:
+        if not isinstance(item, dict) or not isinstance(item.get("text"), str):
+            continue
+        try:
+            parsed = json.loads(item["text"])
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return None
 
 
 class PublicHttpGuard:
@@ -309,20 +412,14 @@ class PublicHttpGuard:
         if self.recorder is not None:
             call = describe_call(b"".join(m.get("body", b"") for m in body_messages))
 
+        response_status = None
+        response_body = bytearray()
+        recorded = False
+
         async def secure_send(message):
+            nonlocal response_status, recorded
             if message["type"] == "http.response.start":
-                if self.recorder is not None and call is not None:
-                    self.recorder.record(
-                        {
-                            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                            "client": client_key,
-                            "method": call["method"],
-                            "tool": call["tool"],
-                            "arguments": call["arguments"],
-                            "status": message.get("status"),
-                            "ms": round((self.clock() - started) * 1000),
-                        }
-                    )
+                response_status = message.get("status")
                 secured_names = {b"cache-control", b"referrer-policy", b"x-content-type-options"}
                 response_headers = [
                     pair
@@ -337,9 +434,53 @@ class PublicHttpGuard:
                     ]
                 )
                 message = {**message, "headers": response_headers}
+            elif (
+                message["type"] == "http.response.body"
+                and self.recorder is not None
+                and call is not None
+                and not recorded
+            ):
+                chunk = message.get("body") or b""
+                if isinstance(chunk, str):
+                    chunk = chunk.encode("utf-8", errors="replace")
+                response_body.extend(chunk)
+                if not message.get("more_body", False):
+                    recorded = True
+                    self._record_completed(
+                        call, client_key, response_status, started, bytes(response_body)
+                    )
             await send(message)
 
         await self.app(scope, replay_receive, secure_send)
+
+    def _record_completed(self, call, client_key: str, status, started: float, body: bytes) -> None:
+        if self.recorder is None:
+            return
+        try:
+            outcome = summarize_response(body, http_status=status if isinstance(status, int) else None)
+        except Exception:
+            outcome = {
+                "result_count": None,
+                "error": isinstance(status, int) and status >= 400,
+                "result_status": None,
+            }
+        try:
+            self.recorder.record(
+                {
+                    "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "client": client_key,
+                    "method": call["method"],
+                    "tool": call["tool"],
+                    "arguments": call["arguments"],
+                    "status": status,
+                    "ms": round((self.clock() - started) * 1000),
+                    "result_count": outcome["result_count"],
+                    "error": outcome["error"],
+                    "result_status": outcome["result_status"],
+                }
+            )
+        except Exception:
+            return
 
     def _client_key(self, scope, headers: dict[str, str]) -> str:
         client = scope.get("client") or ("unknown", 0)
@@ -374,6 +515,9 @@ class PublicHttpGuard:
                     "arguments": "",
                     "status": status,
                     "refused": code,
+                    "result_count": None,
+                    "error": True,
+                    "result_status": None,
                 }
             )
         await self._reject(send, status, code, retry_after=retry_after)

@@ -36,12 +36,14 @@ MCP host 與模型提供者可能有自己的資料傳輸設定，使用者應�
 會記下來的：
 
 - 呼叫時間、來源 IP、JSON-RPC method、工具名稱、**送進來的查詢參數原文**、HTTP 狀態碼、處理毫秒數
-- 被限流或擋下來的請求，另記原因代碼
+- 命中筆數 `result_count`（沒有筆數的呼叫，例如列出工具，記 null）與 `error`
+- `result_status`。`invalid_request` 與 `data_unavailable` 使 `error` 為 true，即使 HTTP 是 200；查無資料是 `result_count: 0` 且 `error: false`
+- 被限流或擋下來的請求，另記原因代碼，`error` 為 true
 
 不會記下來的：
 
 - 請求標頭。bearer token 在標頭裡，所以不會進紀錄
-- 回應內容
+- 回應本文。只從中取出筆數與錯誤旗標，不保存整份回答
 
 保護措施：單筆查詢參數超過 2,000 字截斷；檔案超過 50 MB 輪替成 `.1`；寫入失敗直接放棄，不影響查詢結果。
 
