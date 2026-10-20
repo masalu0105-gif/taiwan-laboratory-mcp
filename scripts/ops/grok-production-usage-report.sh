@@ -20,7 +20,21 @@ if [ ! -f "$usage_log" ]; then
   exit 0
 fi
 
-python3 - "$usage_log" "$days" <<'PY' | tee "$report_file"
+# GitHub's Windows runner has a python3 alias that only tells you to install Python.
+# The Linux host has python3. Use the first interpreter that can actually start.
+python_bin=""
+for candidate in python3 python; do
+  if "$candidate" -c "import sys" >/dev/null 2>&1; then
+    python_bin=$candidate
+    break
+  fi
+done
+if [ -z "$python_bin" ]; then
+  printf '找不到可用的 Python，無法產生使用報表。\n' >&2
+  exit 1
+fi
+
+"$python_bin" - "$usage_log" "$days" <<'PY' | tee "$report_file"
 import json, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
