@@ -7,11 +7,12 @@ answer: callers still return the dataset's own disease name, fee name or licence
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from importlib.resources import files
 from typing import Any
 
-from ..util import norm, tfda_search_normalize
+from ..util import edit_distance, norm, tfda_search_normalize, typo_limit
 
 SYNONYM_RULE = "search_synonyms"
 SYNONYM_RULE_VERSION = "search-synonyms-v1"
@@ -87,7 +88,41 @@ def resolve_disease_query(text: str) -> str | None:
     mapped = load_cdc_disease_aliases().get(key)
     if mapped:
         return mapped
-    return _indexes()[0].get(key)
+    exact = _indexes()[0].get(key)
+    if exact:
+        return exact
+    return _english_typo(key, load_cdc_disease_aliases())
+
+
+_LATIN = re.compile(r"[a-z][a-z0-9'.-]*")
+
+
+def _english_typo(key: str, reviewed: dict[str, str]) -> str | None:
+    """「dengeu」 or 「tuberculsis」: an English disease name with a typo or two.
+
+    Only Latin-letter words of five letters or more are tried, the allowed distance grows with
+    length (1 below eight letters, 2 from eight), the first letter must agree (so 「fever」 does
+    not turn into 「q fever」), and the match must point at exactly one disease. Both the reviewed
+    specimen-manual aliases and this file are candidates. Chinese text, short codes such as
+    「tb」 and ambiguous spellings are left alone.
+    """
+
+    limit = typo_limit(key)
+    if not limit or not _LATIN.fullmatch(key):
+        return None
+    best: dict[str, int] = {}
+    candidates = {**_indexes()[0], **reviewed}
+    for alias, canonical in candidates.items():
+        if not _LATIN.fullmatch(alias) or not typo_limit(alias) or alias[0] != key[0]:
+            continue
+        distance = edit_distance(key, alias, limit)
+        if distance <= limit:
+            best[canonical] = min(distance, best.get(canonical, distance))
+    if not best:
+        return None
+    top = min(best.values())
+    winners = [canonical for canonical, distance in best.items() if distance == top]
+    return winners[0] if len(winners) == 1 else None
 
 
 def disease_words(query: str) -> list[str]:
