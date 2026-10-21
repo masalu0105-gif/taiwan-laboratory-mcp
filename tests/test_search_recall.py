@@ -640,3 +640,67 @@ def test_usage_report_lists_empty_and_failed_calls(tmp_path):
     assert "ARKRAY 咖啡機" in completed.stdout
     assert "錯誤 1 次" in completed.stdout
     assert "舊查詢" in completed.stdout
+
+
+# --- 2026-10-21: English disease names with typos, more English names, misspelt parameter names
+
+from taiwan_lab_mcp.arguments import ArgumentCoercionError, coerce_tool_arguments  # noqa: E402
+from taiwan_lab_mcp.rules.synonyms import resolve_disease_query  # noqa: E402
+
+
+def test_english_disease_typos_resolve_to_one_disease():
+    assert resolve_disease_query("dengeu") == "登革熱"
+    assert resolve_disease_query("dengu") == "登革熱"
+    assert resolve_disease_query("Dengue Fevr") == "登革熱"
+    assert resolve_disease_query("tuberculsis") == "結核病"
+    assert resolve_disease_query("malria") == "瘧疾"
+    assert resolve_disease_query("chikungunia") == "屈公病"
+    assert resolve_disease_query("leptospirosys") == "鉤端螺旋體"  # reviewed manual alias
+
+
+def test_typo_tolerance_leaves_other_words_alone():
+    assert resolve_disease_query("coffee") is None
+    assert resolve_disease_query("tbb") is None  # short words need an exact match
+    assert resolve_disease_query("fever") is None
+
+
+def test_more_english_disease_names():
+    for english, chinese in [
+        ("german measles", "德國麻疹"),
+        ("Legionnaires' disease", "退伍軍人病"),
+        ("legionellosis", "退伍軍人病"),
+        ("west nile fever", "西尼羅熱"),
+        ("amebiasis", "阿米巴性痢疾"),
+        ("SARS", "嚴重急性呼吸道症候群"),
+        ("MERS-CoV", "中東呼吸症候群"),
+        ("meningococcal meningitis", "流行性腦脊髓膜炎"),
+    ]:
+        assert resolve_disease_query(english) == chinese, english
+
+
+def test_misspelt_parameter_names_are_folded():
+    assert coerce_tool_arguments("search_disease", {"qeury": "dengue"}) == {"query": "dengue"}
+    assert coerce_tool_arguments("search_disease", {"qury": "dengue"}) == {"query": "dengue"}
+    assert coerce_tool_arguments("search_disease", {"Querry": "dengue"}) == {"query": "dengue"}
+    assert coerce_tool_arguments("get_license", {"lisence_no": "x"}) == {"license_no": "x"}
+    assert coerce_tool_arguments("get_license", {"licnese_no": "x"}) == {"license_no": "x"}
+
+
+def test_misspelt_parameter_does_not_override_or_guess():
+    # Far from every name: still the short missing-parameter error.
+    with pytest.raises(ArgumentCoercionError):
+        coerce_tool_arguments("search_disease", {"zzzzzz": "dengue"})
+    # The real name was sent too: the typo never overwrites it.
+    out = coerce_tool_arguments("search_disease", {"query": "dengue", "qeury": "malaria"})
+    assert out["query"] == "dengue"
+
+
+def test_typos_reach_rows_end_to_end():
+    from taiwan_lab_mcp.adapters.cdc import CDCAdapter
+
+    sample = CDCAdapter()
+    assert sample.search_disease("dengeu").items[0].record.disease == "登革熱"
+    assert sample.search_disease("meazles").items[0].record.disease == "麻疹"
+    assert sample.find_authorized_lab("dengeu fever", "高雄").total_matches == 1
+    query = coerce_tool_arguments("search_disease", {"qeury": "dengeu"})["query"]
+    assert sample.search_disease(query).items[0].record.disease == "登革熱"

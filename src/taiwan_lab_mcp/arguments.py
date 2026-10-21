@@ -13,6 +13,7 @@ import re
 from typing import Any
 
 from .contracts import operation_spec
+from .util import edit_distance
 
 # Extra names for a canonical parameter. Only used when that parameter was not sent.
 _ALIASES: dict[str, tuple[str, ...]] = {
@@ -108,6 +109,8 @@ def coerce_tool_arguments(tool_name: str, arguments: Any) -> Any:
             raise ArgumentCoercionError(f"{tool_name} 的參數 {key} 收到兩個不同的值（{raw_key}）。")
         target[key] = value
 
+    _fold_typos(leftovers, assigned, by_name)
+
     for parameter in parameters:
         name = parameter["name"]
         choices = [alias for alias in _ALIASES.get(name, ()) if alias in leftovers]
@@ -156,3 +159,36 @@ def coerce_tool_arguments(tool_name: str, arguments: Any) -> Any:
 
 
 _MISSING = object()
+
+
+def _fold_typos(
+    leftovers: dict[str, Any], assigned: dict[str, Any], by_name: dict[str, Any]
+) -> None:
+    """Rename a misspelt key (「qeury」, 「lisence_no」) to the one parameter it is close to.
+
+    Every published name and its aliases are candidates. A key is renamed only when its closest
+    candidates all belong to one parameter that the call did not already send; otherwise it is
+    left for the usual missing-parameter error.
+    """
+
+    for key in list(leftovers):
+        if any(key in _ALIASES.get(name, ()) for name in by_name):
+            continue
+        letters = len(key.replace("_", ""))
+        if letters < 4:
+            continue
+        limit = 1 if letters < 8 else 2
+        scores: dict[str, int] = {}
+        for name in by_name:
+            for candidate in (name, *_ALIASES.get(name, ())):
+                if len(candidate.replace("_", "")) < 4:
+                    continue
+                distance = edit_distance(key, candidate, limit)
+                if distance <= limit:
+                    scores[name] = min(distance, scores.get(name, distance))
+        if not scores:
+            continue
+        top = min(scores.values())
+        names = [name for name, distance in scores.items() if distance == top]
+        if len(names) == 1 and names[0] not in assigned and names[0] not in leftovers:
+            assigned[names[0]] = leftovers.pop(key)

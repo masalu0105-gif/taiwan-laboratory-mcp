@@ -18,7 +18,19 @@
     {"canonical": "新冠", "aliases": ["covid-19", "covid", "sars-cov-2"]},
     {"canonical": "M痘", "aliases": ["mpox", "monkeypox"]},
     {"canonical": "狂犬病", "aliases": ["rabies"]},
-    {"canonical": "茲卡", "aliases": ["zika"]}
+    {"canonical": "茲卡", "aliases": ["zika"]},
+    {"canonical": "恙蟲病", "aliases": ["tsutsugamushi"]},
+    {"canonical": "德國麻疹", "aliases": ["german measles"]},
+    {"canonical": "退伍軍人病", "aliases": ["legionellosis", "legionnaires' disease"]},
+    {"canonical": "萊姆病", "aliases": ["lyme"]},
+    {"canonical": "西尼羅熱", "aliases": ["west nile fever"]},
+    {"canonical": "李斯特菌症", "aliases": ["listeria"]},
+    {"canonical": "阿米巴性痢疾", "aliases": ["amoebic dysentery", "amebiasis"]},
+    {"canonical": "庫賈氏病", "aliases": ["creutzfeldt-jakob disease"]},
+    {"canonical": "漢生病", "aliases": ["hansen's disease", "hansen disease"]},
+    {"canonical": "中東呼吸症候群", "aliases": ["mers-cov"]},
+    {"canonical": "嚴重急性呼吸道症候群", "aliases": ["sars"]},
+    {"canonical": "流行性腦脊髓膜炎", "aliases": ["meningococcal disease", "meningococcal meningitis"]}
   ],
   "analytes": [
     {
